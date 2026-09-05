@@ -93,7 +93,10 @@ function InspectorBody({ type, id, onClose }: { type: InspectorType; id: string;
   const allNotes = useNoteStore((s) => s.items)
   const projTasks = allTasks.filter((t) => t.projectId === id)
   const projNotes = allNotes.filter((n) => n.projectId === id)
-  const projIntel = useIntelligenceStore((s) => s.items.filter((x) => x.projectId === id))
+  // zustand v5 走 useSyncExternalStore：selector 必须返回稳定引用，
+  // 在 selector 里 .filter() 会每次生成新数组 → 无限重渲染（React #185）
+  const allIntel = useIntelligenceStore((s) => s.items)
+  const projIntel = allIntel.filter((x) => x.projectId === id)
 
   if (type === 'task' && task) {
     return (

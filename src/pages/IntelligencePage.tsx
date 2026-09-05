@@ -4,7 +4,7 @@
  * 每条：标题 / 摘要 / 来源 / 分类 / 时间 / 标签；操作仅保留 收藏·稍后·更多，其余进 Inspector
  */
 import { useMemo, useState } from 'react'
-import { Bookmark, Clock, Languages, MoreHorizontal, RefreshCw, Rss, Sparkles } from 'lucide-react'
+import { Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, Sparkles, Trash2 } from 'lucide-react'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useSourceStore } from '../stores/useSourceStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -20,8 +20,7 @@ import { IntelTidy } from '../components/intelligence/IntelTidy'
 import type { IntelligenceItem, SourceType } from '../types/entities'
 import { diffDays, formatHM, friendlyDate } from '../utils/id'
 import { cn } from '../utils/cn'
-import { Badge, Button, EmptyState, Input, Select, Tooltip, useToast } from '../components/ui'
-
+import { Badge, Button, Dialog, EmptyState, Input, Select, Tooltip, useToast } from '../components/ui'
 const SOURCE_OPTIONS: { value: SourceType | 'all'; label: string }[] = [
   { value: 'all', label: '全部来源' },
   { value: 'github', label: 'GitHub' },
@@ -261,6 +260,21 @@ export function IntelligencePage() {
   const [aiQuery, setAiQuery] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiAnswer, setAiAnswer] = useState<{ answer: string; sources: string[] } | null>(null)
+  /** 分类管理弹层：分类在使用的页签处就地增删（不再放设置页） */
+  const [catMgrOpen, setCatMgrOpen] = useState(false)
+  const [catDraft, setCatDraft] = useState('')
+
+  const addCategory = () => {
+    const t = catDraft.trim()
+    if (!t) return
+    useSettingsStore.getState().addIntelCategory(t)
+    setCatDraft('')
+  }
+  const removeCategory = (name: string) => {
+    useSettingsStore.getState().removeIntelCategory(name)
+    // 被删的正是当前页签时回到「全部」，避免停留在一个已消失的筛选上
+    if (tab === name) setTab('全部')
+  }
 
   /** AI 问情报：基于近期情报用中文回答用户问题 */
   const askAI = async () => {
@@ -382,8 +396,8 @@ export function IntelligencePage() {
         </div>
       </div>
 
-      {/* 聚合页签 */}
-      <div className="no-scrollbar -mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1">
+      {/* 聚合页签（行尾 + 号就地管理分类） */}
+      <div className="no-scrollbar -mx-1 mb-3 flex items-center gap-1 overflow-x-auto px-1 pb-1">
         {feedTabs.map((t) => (
           <button
             key={t}
@@ -396,6 +410,15 @@ export function IntelligencePage() {
             {t}
           </button>
         ))}
+        <Tooltip label="管理分类">
+          <button
+            onClick={() => setCatMgrOpen(true)}
+            className="shrink-0 rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
+            aria-label="管理分类"
+          >
+            <Plus size={14} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* 筛选条 */}
@@ -518,6 +541,58 @@ export function IntelligencePage() {
           />
         </div>
       )}
+
+      {/* 分类管理：就地增删（移除不影响已有情报，仅收起页签） */}
+      <Dialog open={catMgrOpen} onClose={() => setCatMgrOpen(false)} title="管理情报分类">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {intelCategories.map((c) => (
+              <span
+                key={c}
+                className="inline-flex items-center gap-1 rounded-control border border-line bg-raised px-2 py-1 text-xs text-ink-soft"
+              >
+                {c}
+                <button
+                  onClick={() => removeCategory(c)}
+                  className="text-ink-faint transition-colors hover:text-cinnabar"
+                  aria-label={`移除 ${c}`}
+                >
+                  <Trash2 size={11} />
+                </button>
+              </span>
+            ))}
+            {intelCategories.length === 0 && (
+              <span className="text-xs text-ink-faint">暂无自定义分类，情报将全部归入「其他」</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              autoFocus
+              value={catDraft}
+              onChange={(e) => setCatDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+              placeholder="新增分类名…"
+              className="max-w-[200px]"
+            />
+            <Button size="sm" variant="secondary" onClick={addCategory} disabled={!catDraft.trim()}>
+              <Plus size={13} /> 添加
+            </Button>
+          </div>
+          <div className="flex items-center justify-between border-t border-line pt-3">
+            <p className="text-[11px] text-ink-faint">新增后可作为情报源的分类与筛选页签</p>
+            <Button
+              size="sm"
+              variant="tertiary"
+              onClick={() => {
+                useSettingsStore.getState().resetIntelCategories()
+                setTab('全部')
+              }}
+            >
+              <Settings2 size={13} /> 恢复默认
+            </Button>
+          </div>
+        </div>
+      </Dialog>
 
       {/* 来源快捷入口 */}
       {sources.length > 0 && (

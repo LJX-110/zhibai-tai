@@ -2,7 +2,7 @@
  * 系统 —— 设置 / 布局模式 / 目标 / 数据管理 / 同步
  */
 import { useRef, useState } from 'react'
-import { Download, Monitor, Moon, Plus, RefreshCw, Sun, Trash2, Upload, Zap } from 'lucide-react'
+import { Download, Monitor, Moon, RefreshCw, Sun, Trash2, Upload, Zap } from 'lucide-react'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import type { ThemeMode } from '../stores/useSettingsStore'
 import { useSyncStore } from '../stores/useSyncStore'
@@ -43,71 +43,8 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string; icon: type
   { value: 'system', label: '跟随系统', desc: '随设备自动切换', icon: Monitor },
 ]
 
-/** 分类编辑器 —— 藏阁 / 情报分类自定义（移除不删数据） */
-function CategoryEditor({
-  title,
-  items,
-  onAdd,
-  onRemove,
-  onReset,
-}: {
-  title: string
-  items: string[]
-  onAdd: (name: string) => void
-  onRemove: (name: string) => void
-  onReset: () => void
-}) {
-  const [draft, setDraft] = useState('')
-  const submit = () => {
-    onAdd(draft)
-    setDraft('')
-  }
-  return (
-    <div className="mb-2 last:mb-0">
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-sm text-ink-soft">{title}</span>
-        <button
-          onClick={onReset}
-          className="rounded-control px-1.5 py-0.5 text-[11px] text-ink-faint transition-colors hover:text-cinnabar"
-        >
-          恢复默认
-        </button>
-      </div>
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        {items.map((c) => (
-          <span
-            key={c}
-            className="inline-flex items-center gap-1 rounded-control border border-line bg-raised px-2 py-1 text-xs text-ink-soft"
-          >
-            {c}
-            <button
-              onClick={() => onRemove(c)}
-              className="text-ink-faint transition-colors hover:text-cinnabar"
-              aria-label={`移除 ${c}`}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        {items.length === 0 && (
-          <span className="text-xs text-ink-faint">暂无分类，可在下方添加</span>
-        )}
-      </div>
-      <div className="flex gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="新增分类名…"
-          className="max-w-[200px]"
-        />
-        <Button size="sm" variant="secondary" onClick={submit}>
-          <Plus size={13} /> 添加
-        </Button>
-      </div>
-    </div>
-  )
-}
+/** 分类管理已内联到使用处：情报分类在「情」页页签行尾 + 号管理；
+ *  藏阁仅保留「类型」一套体系，不再有独立分类编辑。 */
 
 export function SettingsPage() {
   const settings = useSettingsStore()
@@ -552,30 +489,6 @@ export function SettingsPage() {
             className="max-w-[160px]"
           />
           <span className="text-xs text-ink-faint">分钟</span>
-        </div>
-      </Section>
-
-      <Section title="分类自定义" hint="藏阁 / 情报分类自由增删 · 移除不影响已有数据">
-        {/* 分栏卡片：两组分类并排，边界清晰不再混作一团 */}
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <div className="rounded-tile border border-line bg-panel/60 p-3">
-            <CategoryEditor
-              title="藏阁分类"
-              items={settings.collectionCategories}
-              onAdd={(n) => settings.addCategory('collection', n)}
-              onRemove={(n) => settings.removeCategory('collection', n)}
-              onReset={() => settings.resetCategories('collection')}
-            />
-          </div>
-          <div className="rounded-tile border border-line bg-panel/60 p-3">
-            <CategoryEditor
-              title="情报分类"
-              items={settings.intelCategories}
-              onAdd={(n) => settings.addCategory('intel', n)}
-              onRemove={(n) => settings.removeCategory('intel', n)}
-              onReset={() => settings.resetCategories('intel')}
-            />
-          </div>
         </div>
       </Section>
 

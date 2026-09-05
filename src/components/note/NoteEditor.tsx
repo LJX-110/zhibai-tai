@@ -1,7 +1,7 @@
 /**
  * NoteEditor —— 笔记/灵感 新增编辑（Sheet，移动端友好）
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Note } from '../../types/entities'
 import { createId } from '../../utils/id'
 import { Button } from '../ui/Button'
@@ -22,15 +22,23 @@ export function NoteEditor({ open, onClose, note, defaultKind = 'note', onSave }
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [tagsText, setTagsText] = useState('')
-
-  useEffect(() => {
-    if (open) {
-      setKind(note?.kind ?? defaultKind)
-      setTitle(note?.title ?? '')
-      setBody(note?.body ?? '')
-      setTagsText((note?.tags ?? []).join(' '))
-    }
-  }, [open, note, defaultKind])
+  /** 打开瞬间以渲染期守卫重置表单（替代 effect：少一次级联渲染） */
+  const [seeded, setSeeded] = useState<{ open: boolean; key: Note | null | undefined; kind: Note['kind'] }>({
+    open: false,
+    key: undefined,
+    kind: defaultKind,
+  })
+  const seedKey = note ?? null
+  if (open && !(seeded.open && seeded.key === seedKey && seeded.kind === defaultKind)) {
+    setSeeded({ open: true, key: seedKey, kind: defaultKind })
+    setKind(note?.kind ?? defaultKind)
+    setTitle(note?.title ?? '')
+    setBody(note?.body ?? '')
+    setTagsText((note?.tags ?? []).join(' '))
+  }
+  if (!open && seeded.open) {
+    setSeeded({ open: false, key: seedKey, kind: defaultKind })
+  }
 
   const submit = () => {
     const now = new Date().toISOString()

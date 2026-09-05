@@ -1,11 +1,11 @@
 /**
  * 藏 —— 统一个人收藏系统
- * 类型：小说/动漫/游戏/影视/书籍/GitHub/项目/UI参考/灵感/自定义
+ * 分类只有一套「类型」（小说/动漫/游戏/…，items 上的 type 字段），
+ * 旧数据里的 category 字段仅作展示，不再提供编辑入口。
  */
 import { useMemo, useState } from 'react'
 import { Plus, Search, Star, Pencil, Trash2, ExternalLink, Sparkles } from 'lucide-react'
 import { useCollectionStore } from '../stores/useCollectionStore'
-import { useSettingsStore } from '../stores/useSettingsStore'
 import { ProjectList } from '../components/project/ProjectList'
 import { aiService } from '../services/ai/ai-service'
 import { recordActivity } from '../services/activity'
@@ -56,7 +56,6 @@ const TYPE_ORDER: CollectionType[] = [
 interface FormState {
   title: string
   type: CollectionType
-  category: string
   tags: string
   url: string
   description: string
@@ -68,7 +67,6 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   title: '',
   type: 'novel',
-  category: '',
   tags: '',
   url: '',
   description: '',
@@ -79,7 +77,6 @@ const EMPTY_FORM: FormState = {
 
 export function CollectionPage() {
   const items = useCollectionStore((s) => s.items)
-  const collectionCategories = useSettingsStore((s) => s.collectionCategories)
   const toast = useToast().toast
   const [view, setView] = useState<'items' | 'projects'>('items')
   const [typeFilter, setTypeFilter] = useState<CollectionType | 'all'>('all')
@@ -118,7 +115,6 @@ export function CollectionPage() {
     setForm({
       title: it.title,
       type: it.type,
-      category: it.category ?? '',
       tags: it.tags.join(' '),
       url: it.url ?? '',
       description: it.description ?? '',
@@ -136,7 +132,7 @@ export function CollectionPage() {
       id: editing?.id ?? createId(),
       title: form.title.trim(),
       type: form.type,
-      category: form.category.trim() || undefined,
+      category: editing?.category,
       tags: form.tags.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean),
       url: form.url.trim() || undefined,
       description: form.description.trim() || undefined,
@@ -187,7 +183,6 @@ export function CollectionPage() {
     if (!tidy || !detail) return
     const patch: Partial<CollectionItem> = {}
     if (tidy.description && tidy.description !== detail.description) patch.description = tidy.description
-    if (tidy.category && tidy.category !== (detail.category ?? '')) patch.category = tidy.category
     const mergedTags = [...new Set([...detail.tags, ...tidy.tags])]
     if (mergedTags.join('|') !== detail.tags.join('|')) patch.tags = mergedTags
     if (Object.keys(patch).length > 0) {
@@ -377,19 +372,13 @@ export function CollectionPage() {
                 <option key={t} value={t}>{TYPE_LABEL[t]}</option>
               ))}
             </Select>
-            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} aria-label="分类">
-              <option value="">不分类</option>
-              {collectionCategories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </Select>
+            <Input placeholder="#标签" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Input placeholder="#标签" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
             <Input placeholder="评分 0-5" type="number" min={0} max={5} step={0.5} value={form.rating} onChange={(e) => setForm({ ...form, rating: e.target.value })} />
+            <Input placeholder="状态（如：在读/追更/已完）" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
           </div>
           <Input placeholder="URL（可选）" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
-          <Input placeholder="状态（如：在读/追更/已完）" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
           <Textarea placeholder="简介（可选）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <Textarea placeholder="备注（可选）" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
@@ -470,15 +459,9 @@ export function CollectionPage() {
               <div className="mb-1 text-[11px] text-ink-faint">简介</div>
               <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink-soft">{tidy.description}</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="mb-1 text-[11px] text-ink-faint">分类</div>
-                <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink">{tidy.category}</p>
-              </div>
-              <div>
-                <div className="mb-1 text-[11px] text-ink-faint">标签</div>
-                <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink">{tidy.tags.join('、')}</p>
-              </div>
+            <div>
+              <div className="mb-1 text-[11px] text-ink-faint">标签</div>
+              <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink">{tidy.tags.join('、')}</p>
             </div>
             <div>
               <div className="mb-1 text-[11px] text-ink-faint">收藏原因</div>

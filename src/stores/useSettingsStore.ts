@@ -5,7 +5,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutMode } from './useAppStore'
-import { COLLECTION_CATEGORIES } from '../services/collection'
 import { INTELLIGENCE_CATEGORIES } from '../services/intelligence/providers/index'
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
@@ -62,13 +61,15 @@ interface SettingsState {
   /** 情报定时自动抓取（默认关） */
   intelAutoFetch: boolean
   intelFetchMinutes: number
+  /** 自建 CORS 代理（如 Cloudflare Worker）。配置后情报抓取优先经它转发，
+   *  彻底摆脱公共代理的可用性波动；留空则走 直连 → 公共代理 兜底链 */
+  corsProxyUrl?: string
 
-  /** 自定义分类：藏阁（收藏）与情报（自由增删，移除不删数据） */
-  collectionCategories: string[]
+  /** 情报分类（在情报页页签处内联增删；藏阁不再有第二套分类——藏阁仅按「类型」筛选） */
   intelCategories: string[]
-  addCategory: (scope: 'collection' | 'intel', name: string) => void
-  removeCategory: (scope: 'collection' | 'intel', name: string) => void
-  resetCategories: (scope: 'collection' | 'intel') => void
+  addIntelCategory: (name: string) => void
+  removeIntelCategory: (name: string) => void
+  resetIntelCategories: () => void
 
   set: (patch: Partial<SettingsState>) => void
 }
@@ -106,28 +107,17 @@ export const useSettingsStore = create<SettingsState>()(
       aiKeyEnc: false,
       intelAutoFetch: false,
       intelFetchMinutes: 60,
-      collectionCategories: [...COLLECTION_CATEGORIES],
       intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义'),
-      addCategory: (scope, name) =>
+      addIntelCategory: (name) =>
         set((s) => {
           const t = name.trim()
-          if (!t) return {}
-          return scope === 'collection'
-            ? { collectionCategories: s.collectionCategories.includes(t) ? s.collectionCategories : [...s.collectionCategories, t] }
-            : { intelCategories: s.intelCategories.includes(t) ? s.intelCategories : [...s.intelCategories, t] }
+          if (!t || s.intelCategories.includes(t)) return {}
+          return { intelCategories: [...s.intelCategories, t] }
         }),
-      removeCategory: (scope, name) =>
-        set((s) =>
-          scope === 'collection'
-            ? { collectionCategories: s.collectionCategories.filter((c) => c !== name) }
-            : { intelCategories: s.intelCategories.filter((c) => c !== name) },
-        ),
-      resetCategories: (scope) =>
-        set(
-          scope === 'collection'
-            ? { collectionCategories: [...COLLECTION_CATEGORIES] }
-            : { intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义') },
-        ),
+      removeIntelCategory: (name) =>
+        set((s) => ({ intelCategories: s.intelCategories.filter((c) => c !== name) })),
+      resetIntelCategories: () =>
+        set({ intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义') }),
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },

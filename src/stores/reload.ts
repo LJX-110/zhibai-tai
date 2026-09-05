@@ -4,6 +4,7 @@
 import { useAIResourceStore } from './useAIStore'
 import { useBodyMetricLogStore, useBodyMetricStore } from './useBodyStore'
 import { useCollectionStore } from './useCollectionStore'
+import { useConflictStore } from './useConflictStore'
 import { useDivinationStore } from './useDivinationStore'
 import { useBudgetStore, useFinanceStore, usePurchaseStore } from './useFinanceStore'
 import { useHabitLogStore, useHabitStore } from './useHabitStore'
@@ -44,5 +45,8 @@ export async function reloadAllStores(): Promise<void> {
     useSourceStore.getState().load(),
     useActivityStore.getState().load(),
     useFollowStore.getState().load(),
+    // 冲突记录非业务表（不在 BUSINESS_TABLES），但同样是内存态：
+    // 同步/导入后不重载的话，设置页要重启才能看到新产生的冲突
+    useConflictStore.getState().load(),
   ])
 }

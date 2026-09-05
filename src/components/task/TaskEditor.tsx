@@ -1,7 +1,7 @@
 /**
  * TaskEditor —— 待办新增/编辑表单（Dialog）
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Priority, Repeat, Task } from '../../types/entities'
 import { createId, todayISO } from '../../utils/id'
 import { useCourseStore } from '../../stores/useStudyStore'
@@ -34,22 +34,29 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
   const courses = useCourseStore((s) => s.items)
   const projects = useProjectStore((s) => s.items)
   const [form, setForm] = useState({ ...EMPTY })
-
-  useEffect(() => {
-    if (open) {
-      setForm({
-        title: task?.title ?? '',
-        description: task?.description ?? '',
-        priority: task?.priority ?? 'mid',
-        dueDate: task?.dueDate ?? '',
-        repeat: task?.repeat ?? 'none',
-        monthlyDay: task?.monthlyDay ?? null,
-        tagsText: (task?.tags ?? []).join(' '),
-        projectId: task?.projectId ?? '',
-        courseId: task?.courseId ?? '',
-      })
-    }
-  }, [open, task])
+  /** 打开瞬间以渲染期守卫重置表单（替代 effect：少一次级联渲染） */
+  const [seeded, setSeeded] = useState<{ open: boolean; key: Task | null }>({
+    open: false,
+    key: null,
+  })
+  const seedKey = task ?? null
+  if (open && !(seeded.open && seeded.key === seedKey)) {
+    setSeeded({ open: true, key: seedKey })
+    setForm({
+      title: task?.title ?? '',
+      description: task?.description ?? '',
+      priority: task?.priority ?? 'mid',
+      dueDate: task?.dueDate ?? '',
+      repeat: task?.repeat ?? 'none',
+      monthlyDay: task?.monthlyDay ?? null,
+      tagsText: (task?.tags ?? []).join(' '),
+      projectId: task?.projectId ?? '',
+      courseId: task?.courseId ?? '',
+    })
+  }
+  if (!open && seeded.open) {
+    setSeeded({ open: false, key: seedKey })
+  }
 
   const submit = () => {
     if (!form.title.trim()) return

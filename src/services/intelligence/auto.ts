@@ -18,7 +18,8 @@ async function runFetch(): Promise<number> {
   const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
   const added = fresh.filter((x) => !known.has(dedupeKey(x)))
   if (added.length > 0) {
-    useIntelligenceStore.setState({ items: [...added, ...useIntelligenceStore.getState().items] })
+    // 必须经 store 落库：直接 setState 只改内存，刷新即丢、也不会触发自动同步
+    await useIntelligenceStore.getState().saveMany(added)
   }
   return added.length
 }

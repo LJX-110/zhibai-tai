@@ -24,9 +24,10 @@
 ## 核心特性
 
 - **本地优先**：全部数据存于 IndexedDB，离线可用，任何时候数据都在自己手里
-- **多设备同步**：快照经 AES-GCM + PBKDF2 加密后存入 GitHub 仓库；LWW 合并 + 冲突检测 + 墓碑删除，跨设备不丢数据
-- **PWA**：可安装到主屏幕、离线可用
-- **按页分包**：路由懒加载，首屏轻量
+- **多设备同步**：快照经 AES-GCM + PBKDF2 加密后存入 GitHub 仓库（Git Data API，支持大快照与原子提交）；LWW 合并 + 冲突检测 + 墓碑删除，跨设备不丢数据
+- **URL 深链接**：导航与 hash 双向同步，刷新/分享链接直达对应板块，前进后退可用
+- **PWA**：可安装到主屏幕、离线可用（宣纸印章图标）
+- **按页分包**：路由懒加载，首屏轻量；书法字体按常用字子集化（4.7MB → 2.7MB）
 - **双向数据出口**：一键导出全量备份、一键清空（清单统一，不会漏表）
 
 ## 技术栈
@@ -55,8 +56,14 @@ npm run build      # 生产构建（输出 dist/）
 ## 数据与同步
 
 - 数据 100% 在本地，浏览器 IndexedDB（共 23 张业务表）。
-- 同步原理：将全量数据加密为快照文件写入指定 GitHub 仓库，任意设备拉取后解密合并；合并采用 Last-Write-Wins，冲突记录保存在本地可查。
+- 同步原理：将全量数据加密为快照文件写入指定 GitHub 仓库（Git Data API：blob → tree → commit → ref，支持大快照、原子提交、并发冲突自动重跑），任意设备拉取后解密合并；合并采用 Last-Write-Wins，冲突记录保存在本地可查，删除经墓碑跨设备传播。
 - 安全：同步密文由你的 **Sync Password** 经 PBKDF2 推导密钥加密，仓库中的快照无密钥不可读；GitHub Token 亦由本地密钥加密存储。
+
+## 情报抓取与自建代理
+
+纯前端应用抓 RSS 会被浏览器 CORS 拦截。抓取链路为：**自建代理 → 直连 → 公共代理兜底**。
+强烈建议部署自建代理（免费额度足够个人）：见 [`cloudflare-worker/`](cloudflare-worker/README.md)，
+部署后把 Worker 地址填入「系统 · 情报源 · 自建代理」即可。
 
 ## 目录结构
 
@@ -64,13 +71,15 @@ npm run build      # 生产构建（输出 dist/）
 src/
 ├── db/           # IndexedDB 表清单（单一事实源）与建库
 ├── types/        # 领域实体（单一事实源）
-├── repositories/ # 通用 CRUD 数据访问层
-├── stores/       # Zustand 状态
+├── repositories/ # 通用 CRUD 数据访问层（删除写墓碑、写入补时间戳）
+├── stores/       # Zustand 状态（hash 路由在 useAppStore）
 ├── services/     # 业务逻辑（占卜算法 / 情报抓取 / AI 等）
-├── sync/         # 多设备同步（加密 / 合并 / 冲突 / 墓碑）
+├── sync/         # 多设备同步（加密 / 合并 / 冲突 / 墓碑 / GitHub Provider）
 ├── components/   # UI 组件
 ├── pages/        # 各板块页面
 └── layouts/      # 桌面侧栏 / 移动底栏布局
+cloudflare-worker/  # 自建 CORS 代理（情报抓取用，见其 README）
+scripts/            # subset_fonts.py 书法字体子集化（完整字体在 src/assets/fonts/full/）
 ```
 
 ## 目录（应用名）小贴士

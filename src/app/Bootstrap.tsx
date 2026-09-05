@@ -13,7 +13,7 @@ import { reloadAllStores } from '../stores/reload'
 import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import { useSourceStore } from '../stores/useSourceStore'
-import { defaultSources, duplicateSourceIds } from '../services/intelligence/providers/registry'
+import { defaultSources, duplicateSourceIds, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
 import { resolveAIProvider } from '../services/ai/ai-service'
 import { initIntelAutoFetch } from '../services/intelligence/auto'
 import { initAutoSync } from '../sync/auto'
@@ -21,7 +21,7 @@ import { initAutoSync } from '../sync/auto'
 /** 种子标记：避免 dev StrictMode 双跑导致重复播种 */
 let sourcesSeeded = false
 
-/** 情报源：修复历史重复（按 name 去重）+ 幂等播种默认源 */
+/** 情报源：修复历史重复（按 name 去重）+ 幂等播种默认源 + 补启用历史停用的默认源 */
 async function seedSources(): Promise<void> {
   if (sourcesSeeded) return
   sourcesSeeded = true
@@ -37,6 +37,13 @@ async function seedSources(): Promise<void> {
       names.add(s.name)
     }
   }
+  const { revived, removed } = await reviveDisabledDefaults(useSourceStore.getState().items)
+  if (revived.length > 0) await useSourceStore.getState().load()
+  // 已下线的默认源（机器之心）：remove 走墓碑，删除会随同步传播到其他设备
+  for (const id of removed) {
+    await useSourceStore.getState().remove(id)
+  }
+  if (removed.length > 0) await useSourceStore.getState().load()
 }
 
 /** 启动就绪状态：App 据此决定显示启动屏还是工作台 */

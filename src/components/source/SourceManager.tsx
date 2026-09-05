@@ -74,6 +74,7 @@ export function SourceManager() {
   const intelAuto = useSettingsStore((s) => s.intelAutoFetch)
   const intelMinutes = useSettingsStore((s) => s.intelFetchMinutes)
   const intelCategories = useSettingsStore((s) => s.intelCategories)
+  const corsProxyUrl = useSettingsStore((s) => s.corsProxyUrl)
   const toast = useToast().toast
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<IntelligenceSource | null>(null)
@@ -152,20 +153,22 @@ export function SourceManager() {
       setTesting(null)
     }
   }
-  /** 立即抓取并并入情报流 */
+  /** 立即抓取并并入情报流（经 saveMany 落库并触发同步；失败透出真实原因） */
   const fetchNow = async (s: IntelligenceSource) => {
     setTesting(s.id)
     try {
       const fresh = await fetchFromSource(s)
       const existing = useIntelligenceStore.getState().items
       const known = new Set(existing.map((x) => dedupeKey(x)))
-      const merged = [...fresh.filter((x) => !known.has(dedupeKey(x))), ...existing]
-      useIntelligenceStore.setState({ items: merged })
-      toast(`抓取 ${s.name}：新增 ${fresh.length} 条`, 'success')
-    } catch {
-      toast('抓取失败', 'danger')
+      const added = fresh.filter((x) => !known.has(dedupeKey(x)))
+      await useIntelligenceStore.getState().saveMany(added)
+      toast(`抓取 ${s.name}：新增 ${added.length} 条`, added.length > 0 ? 'success' : 'info')
+    } catch (e) {
+      toast(`抓取失败：${e instanceof Error ? e.message : '网络不可达'}`, 'danger')
     } finally {
       setTesting(null)
+      // fetchFromSource 直写 db 记录统计，刷新内存让卡片上的时间/错误即时可见
+      void useSourceStore.getState().load()
     }
   }
 
@@ -221,6 +224,19 @@ export function SourceManager() {
         </span>
       </div>
 
+      {/* 自建 CORS 代理：治本情报抓取的可用性（部署见仓库 cloudflare-worker/） */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-panel px-3 py-2">
+        <span className="text-sm text-ink">自建代理</span>
+        <Input
+          placeholder="https://你的-worker.workers.dev（可选）"
+          value={corsProxyUrl ?? ''}
+          onChange={(e) => useSettingsStore.getState().set({ corsProxyUrl: e.target.value.trim() || undefined })}
+          className="min-w-[220px] flex-1 !py-1 font-mono !text-xs"
+          aria-label="自建 CORS 代理地址"
+        />
+        <span className="text-[11px] text-ink-faint">配置后优先经它转发 · 部署见 cloudflare-worker/</span>
+      </div>
+
       {sources.length > 0 ? (
         <div>
           {sources.map((s) => (
@@ -245,7 +261,7 @@ export function SourceManager() {
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-ink-faint">
                   {s.url && <span className="truncate">{s.url}</span>}
                   {s.lastFetchedAt && <span className="tabular">抓取于 {s.lastFetchedAt.slice(0, 16).replace('T', ' ')}</span>}
-                  {s.lastError && <span className="text-cinnabar">上次失败</span>}
+                  {s.lastError && <span className="text-cinnabar" title={s.lastError}>失败：{s.lastError.slice(0, 40)}</span>}
                 </div>
               </div>
               <Button size="sm" variant="tertiary" onClick={() => fetchNow(s)} disabled={testing === s.id} className="!px-2">

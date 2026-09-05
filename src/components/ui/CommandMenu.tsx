@@ -26,6 +26,7 @@ import { useCourseStore } from '../../stores/useStudyStore'
 import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useSourceStore } from '../../stores/useSourceStore'
 import { saveDailySignRecord } from '../../stores/useDivinationStore'
+import { dedupeKey } from '../../components/source/SourceManager'
 import { fetchAllFromSources } from '../../services/intelligence/providers/registry'
 import { runSync } from '../../sync/SyncService'
 import { createId, todayISO } from '../../utils/id'
@@ -209,10 +210,12 @@ export function CommandMenu() {
         run: async () => {
           const sources = useSourceStore.getState().items
           const fresh = await fetchAllFromSources(sources)
-          const known = new Set(useIntelligenceStore.getState().items.map((x) => x.url))
-          const merged = [...fresh.filter((x) => !x.url || !known.has(x.url)), ...useIntelligenceStore.getState().items]
-          useIntelligenceStore.setState({ items: merged })
-          toast(`已拉取 ${fresh.length} 条情报`, 'success')
+          // 与情报页同一去重口径（dedupeKey），且必须经 saveMany 落库：
+          // 直接 setState 只改内存，刷新即丢、也不会触发自动同步
+          const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
+          const added = fresh.filter((x) => !known.has(dedupeKey(x)))
+          await useIntelligenceStore.getState().saveMany(added)
+          toast(`已拉取 ${fresh.length} 条情报（新增 ${added.length}）`, 'success')
           setOpen(false)
         },
       },
@@ -287,9 +290,7 @@ export function CommandMenu() {
     return [...map.entries()]
   }, [results])
 
-  useEffect(() => {
-    setCursor(0)
-  }, [query, tab])
+  // 光标重置已在改动 query/tab 的事件处同步完成，不再需要 effect 二次渲染
 
   useEffect(() => {
     const el = listRef.current?.querySelector('[data-active="true"]')
@@ -332,7 +333,10 @@ export function CommandMenu() {
             autoFocus
             aria-label={tab === 'search' ? '全局搜索' : '命令搜索'}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setCursor(0)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') {
                 e.preventDefault()
@@ -358,6 +362,7 @@ export function CommandMenu() {
                 onClick={() => {
                   setTab(t.key)
                   setQuery('')
+                  setCursor(0)
                 }}
                 className={cn(
                   'rounded-control px-2 py-0.5 text-[11px] transition-colors',

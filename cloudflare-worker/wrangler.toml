@@ -1,0 +1,12 @@
+name = "zhibaitai-proxy"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# 可选安全配置（去掉注释并按需修改）：
+#
+# 主机白名单：仅转发这些主机（强烈建议配置，防止代理被滥用为公开跳板）
+# [vars]
+# ALLOWED_HOSTS = "rsshub.app,www.qbitai.com,api.allorigins.win"
+#
+# 来源白名单：仅允许你的应用部署地址跨域调用
+# ALLOWED_ORIGINS = "https://<你的用户名>.github.io,http://localhost:5173"

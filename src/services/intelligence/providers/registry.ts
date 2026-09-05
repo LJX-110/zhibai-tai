@@ -50,13 +50,13 @@ export const PROVIDER_CATALOG: {
   { provider: 'mock', name: '示例情报', desc: '离线示例数据', category: '科技' },
 ]
 
-/** 拉取单个源（记录 lastFetchedAt / lastError） */
+/** 拉取单个源（记录 lastFetchedAt / lastError；失败向上抛出，由调用方决定提示方式） */
 export async function fetchFromSource(
   source: IntelligenceSource,
   signal?: AbortSignal,
 ): Promise<IntelligenceItem[]> {
   const provider = PROVIDERS[source.provider]
-  if (!provider) return []
+  if (!provider) throw new Error('未知 Provider')
   const now = new Date().toISOString()
   try {
     const items = await provider.fetch(source, signal)
@@ -68,7 +68,7 @@ export async function fetchFromSource(
       lastError: e instanceof Error ? e.message : '拉取失败',
     })
     console.warn(`[intel:${source.provider}] ${source.name} 拉取失败`, e)
-    return []
+    throw e
   }
 }
 
@@ -103,10 +103,17 @@ export async function fetchAllFromSources(
   return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
 }
 
-/** 首次启动的默认源 —— 按用户兴趣精选（宁少勿杂）：
- *  默认仅启用 3 个直连源（GitHub / 机器之心 / Jikan，无需中转）；
- *  兴趣类（鸣潮/战双/国产单机/国漫/网文）走 RSSHub 的 B站关键词路由，
- *  公共实例可能限流，故默认停用——在情报源管理里「测试」通过后再启用。 */
+/** 首次启动的默认源 —— 按用户兴趣精选（宁少勿杂）。
+ *  兴趣类（鸣潮/战双/国产单机/国漫/网文）走 RSSHub 的 B站关键词路由。
+ *  曾默认停用这些源（担心 rsshub.app 公共实例限流），但「静默停用」让用户
+ *  误以为功能坏了——现默认全部启用：抓取失败会在源卡片上显示 lastError，
+ *  由用户自行决定换镜像或删除；抓取链路本身直连+多代理兜底（见 rss.ts）。 */
+/** 机器之心 RSS 端点已下线（302 跳产品页），从默认源移除；老数据由 revive 移除。
+ *  AI 资讯可用「新增源」自行接入（如量子位 https://www.qbitai.com/feed）。 */
+const RETIRED_DEFAULTS = [
+  { name: 'AI 资讯 · 机器之心', url: 'https://www.jiqizhixin.com/rss' },
+]
+
 export function defaultSources(): IntelligenceSource[] {
   const now = new Date().toISOString()
   const base = (p: Partial<IntelligenceSource> & { name: string; provider: IntelligenceProviderId; category: string }): IntelligenceSource => ({
@@ -134,12 +141,6 @@ export function defaultSources(): IntelligenceSource[] {
       }),
     }),
     base({
-      name: 'AI 资讯 · 机器之心',
-      provider: 'rss',
-      category: 'AI',
-      url: 'https://www.jiqizhixin.com/rss',
-    }),
-    base({
       name: '日漫新番',
       provider: 'jikan',
       category: '动漫',
@@ -150,37 +151,60 @@ export function defaultSources(): IntelligenceSource[] {
       provider: 'rss',
       category: '游戏',
       url: rsshubBiliKeyword('鸣潮'),
-      enabled: false,
     }),
     base({
       name: '战双帕弥什 · B站动态',
       provider: 'rss',
       category: '游戏',
       url: rsshubBiliKeyword('战双帕弥什'),
-      enabled: false,
     }),
     base({
       name: '国产单机 · B站动态',
       provider: 'rss',
       category: '游戏',
       url: rsshubBiliKeyword('国产单机游戏'),
-      enabled: false,
     }),
     base({
       name: '国漫 · B站动态',
       provider: 'rss',
       category: '动漫',
       url: rsshubBiliKeyword('国产动画'),
-      enabled: false,
     }),
     base({
       name: '网文圈 · B站动态',
       provider: 'rss',
       category: '小说',
       url: rsshubBiliKeyword('网文'),
-      enabled: false,
     }),
   ]
+}
+
+/** 修复迁移：
+ *  1) v0.3 将 B站默认源播种为停用，老数据里它们仍是 enabled:false ——
+ *     只补「从未成功抓取过」的源（lastFetchedAt 为空说明用户没在用），
+ *     用户主动停用且用过的源不动。
+ *  2) 机器之心官方 RSS 已下线，仍指向死地址的默认源直接移除（走墓碑）；
+ *     用户改过 URL 的说明已自行换源，保留。
+ *  @returns 需要从内存与库中移除的源 id */
+export async function reviveDisabledDefaults(
+  sources: IntelligenceSource[],
+): Promise<{ revived: string[]; removed: string[] }> {
+  const defaults = defaultSources()
+  const revived: string[] = []
+  const removed: string[] = []
+  for (const s of sources) {
+    const retired = RETIRED_DEFAULTS.some((r) => r.name === s.name && r.url === s.url)
+    if (retired) {
+      removed.push(s.id)
+      continue
+    }
+    if (s.enabled) continue
+    const isDefault = defaults.some((d) => d.name === s.name && d.url === s.url)
+    if (!isDefault || s.lastFetchedAt) continue
+    await db.intelligenceSources.update(s.id, { enabled: true, updatedAt: new Date().toISOString() })
+    revived.push(s.id)
+  }
+  return { revived, removed }
 }
 
 /** 按 name 去重：保留「启用且最早」的一条，返回应删除的 id（修复重复播种） */

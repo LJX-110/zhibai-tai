@@ -295,6 +295,7 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     }
     await provider.writeSyncFile(syncFile)
 
+    const pushedRows = Object.values(merged).reduce((s, a) => s + a.length, 0)
     const now = new Date().toISOString()
     await syncMetaRepo.put({
       id: 'meta',
@@ -311,7 +312,7 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     return {
       ok: true,
       pulled: remote ? Object.values(remote).reduce((s, a) => s + a.length, 0) : 0,
-      pushed: (meta.version ?? 0) + 1,
+      pushed: pushedRows,
       conflicts: conflicts.length,
       message: remote ? '已合并远端并推送' : '首次同步完成',
     }

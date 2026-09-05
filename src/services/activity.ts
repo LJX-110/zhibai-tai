@@ -3,6 +3,8 @@
  * 上限控制：仅保留最近 600 条，避免无限增长
  */
 import { db } from '../db/db'
+import { activityRepo } from '../repositories/activity-repo'
+import { markTombstones } from '../repositories/repo'
 import { createId } from '../utils/id'
 import type { ActivityType } from '../types/entities'
 
@@ -27,19 +29,27 @@ export async function recordActivity(input: RecordActivityInput): Promise<void> 
     const lastTs = new Date(last.timestamp).getTime()
     if (now.getTime() - lastTs < 60_000) return
   }
-  await db.activityItems.add({
+  // 必须经 repo 落库：补 createdAt/updatedAt（LWW 依据，项目硬性约定），
+  // 此前直写表导致活动记录无时间戳、同步合并行为不可预期
+  await activityRepo.put({
     id: createId(),
     entityType: input.entityType,
     entityId: input.entityId,
     timestamp: now.toISOString(),
     title: input.title,
     metadata: input.metadata,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
   })
-  // 裁剪
+  // 裁剪：删除须写墓碑，否则下次同步会被远端快照原样加回（上限失效）
   const count = await db.activityItems.count()
   if (count > MAX_ITEMS) {
     const oldest = await db.activityItems.orderBy('timestamp').limit(count - MAX_ITEMS).toArray()
-    await db.activityItems.bulkDelete(oldest.map((o) => o.id))
+    const ids = oldest.map((o) => o.id)
+    await db.transaction('rw', db.activityItems, db.tombstones, async () => {
+      await markTombstones('activityItems', ids)
+      await db.activityItems.bulkDelete(ids)
+    })
   }
 }
 
