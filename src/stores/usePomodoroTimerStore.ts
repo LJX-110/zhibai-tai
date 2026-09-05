@@ -55,6 +55,33 @@ export const usePomodoroTimerStore = create<PomodoroTimerState>((set, get) => ({
   },
 
   reset() {
+    // 中断半程记录：专注中重置视为放弃，已专注 ≥5 分钟落一条"中断"Session，
+    // 否则长专注被随手清零、数据失真（暂停后再重置同样算放弃）
+    const st = get()
+    if (st.mode === 'focus' && st.focusStart) {
+      const elapsedMin = Math.floor((Date.now() - new Date(st.focusStart).getTime()) / 60_000)
+      if (elapsedMin >= 5) {
+        const tag =
+          st.assoc === 'task'
+            ? '任务'
+            : st.assoc === 'course'
+              ? '课程'
+              : st.assoc === 'project'
+                ? '项目'
+                : '普通'
+        void usePomodoroStore.getState().add({
+          id: createId(),
+          startAt: st.focusStart,
+          endAt: new Date().toISOString(),
+          durationMin: elapsedMin,
+          type: 'focus',
+          courseId: st.assoc === 'course' ? st.assocId || null : null,
+          taskId: st.assoc === 'task' ? st.assocId || null : null,
+          projectId: st.assoc === 'project' ? st.assocId || null : null,
+          tags: [`${tag}·中断`],
+        })
+      }
+    }
     set({ running: false, seconds: durationSec(get().mode), focusStart: null })
   },
 

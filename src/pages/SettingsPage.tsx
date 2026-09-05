@@ -43,6 +43,24 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string; icon: type
   { value: 'system', label: '跟随系统', desc: '随设备自动切换', icon: Monitor },
 ]
 
+/** AI Provider 预设：一键填 baseUrl+model（OpenAI 兼容协议），
+ *  拿到 Agnes API 信息后点预设 → 填 Key → 测试连接即可用 */
+const AI_PRESETS: { name: string; baseUrl: string; model: string }[] = [
+  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash' },
+  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
+  { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+]
+
+type SettingsGroup = 'appearance' | 'ai' | 'data' | 'sync'
+/** 设置分组：四组语义导航，替代 15+ 区块长滚动 */
+const SETTINGS_GROUPS: { key: SettingsGroup; label: string }[] = [
+  { key: 'appearance', label: '外观 · 目标' },
+  { key: 'ai', label: '智能' },
+  { key: 'data', label: '数据' },
+  { key: 'sync', label: '同步' },
+]
+
 /** 分类管理已内联到使用处：情报分类在「情」页页签行尾 + 号管理；
  *  藏阁仅保留「类型」一套体系，不再有独立分类编辑。 */
 
@@ -184,10 +202,27 @@ export function SettingsPage() {
   }
 
   const connected = Boolean(settings.githubRepo && settings.githubTokenEnc)
+  const [group, setGroup] = useState<SettingsGroup>('appearance')
 
   return (
     <div className="mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="大象无形" title="系统 · 配置" />
+      {/* 分组导航：一次点击定位任一设置 */}
+      <div className="mb-5 flex w-fit gap-1 rounded-tile bg-nested/50 p-0.5">
+        {SETTINGS_GROUPS.map((g) => (
+          <button
+            key={g.key}
+            onClick={() => setGroup(g.key)}
+            className={cn(
+              'rounded-control px-3.5 py-1.5 text-sm transition-colors',
+              group === g.key ? 'bg-paper text-ink shadow-soft' : 'text-ink-muted hover:text-ink',
+            )}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+      {group === 'appearance' && (<>
       <Section title="个人">
         <div className="row">
           <span className="w-20 shrink-0 text-sm text-ink-muted">称呼</span>
@@ -229,7 +264,12 @@ export function SettingsPage() {
               <button
                 role="switch"
                 aria-checked={settings.soundEnabled}
-                onClick={() => settings.set({ soundEnabled: !settings.soundEnabled })}
+                onClick={() => {
+                  const next = !settings.soundEnabled
+                  settings.set({ soundEnabled: next })
+                  // 开启瞬间播一声确认：既是反馈也是"音效已可用"的自证
+                  if (next) playSound('ui-confirm')
+                }}
                 className={cn(
                   'relative h-5 w-9 rounded-full transition-colors',
                   settings.soundEnabled ? 'bg-teal' : 'bg-nested',
@@ -261,7 +301,7 @@ export function SettingsPage() {
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {(['seal', 'paper', 'compass', 'qimen'] as const).map((k) => (
-                <Button key={k} size="sm" variant="tertiary" onClick={() => playSound(k)} className="!px-2">
+                <Button key={k} size="sm" variant="tertiary" silent onClick={() => playSound(k)} className="!px-2">
                   {k}
                 </Button>
               ))}
@@ -350,6 +390,128 @@ export function SettingsPage() {
         </div>
       </Section>
 
+
+      <Section title="布局模式" hint={`当前：${resolved === 'desktop' ? '桌面工作台' : '移动终端'}`}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {LAYOUT_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => settings.set({ layoutMode: o.value })}
+              className={cn(
+                'rounded-paper border p-4 text-left transition-colors',
+                settings.layoutMode === o.value
+                  ? 'border-cinnabar/50 bg-cinnabar/5'
+                  : 'border-line hover:border-line-strong',
+              )}
+            >
+              <div className="display text-sm font-semibold text-ink">{o.label}</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-ink-muted">{o.desc}</div>
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="目标">
+        <div className="row">
+          <span className="w-28 shrink-0 text-sm text-ink-muted">每日饮水目标</span>
+          <Input
+            type="number"
+            min={0}
+            step={100}
+            value={settings.waterGoalMl}
+            onChange={(e) => settings.set({ waterGoalMl: Number(e.target.value) || 0 })}
+            className="max-w-[160px]"
+          />
+          <span className="text-xs text-ink-faint">ml</span>
+        </div>
+        <div className="row">
+          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 专注</span>
+          <Input
+            type="number"
+            min={1}
+            value={settings.pomodoroFocusMin}
+            onChange={(e) => settings.set({ pomodoroFocusMin: Number(e.target.value) || 25 })}
+            className="max-w-[160px]"
+          />
+          <span className="text-xs text-ink-faint">分钟</span>
+        </div>
+        <div className="row">
+          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 休整</span>
+          <Input
+            type="number"
+            min={1}
+            value={settings.pomodoroBreakMin}
+            onChange={(e) => settings.set({ pomodoroBreakMin: Number(e.target.value) || 5 })}
+            className="max-w-[160px]"
+          />
+          <span className="text-xs text-ink-faint">分钟</span>
+        </div>
+      </Section>
+
+      </>
+      )}
+      {group === 'data' && (
+      <Section
+        title="数据"
+        hint="Local-first · 存于本机 IndexedDB"
+        action={
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={exportData}>
+              <Download size={13} /> 导出备份
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => importInputRef.current?.click()}>
+              <Upload size={13} /> 导入恢复
+            </Button>
+            <Button size="sm" variant="danger" onClick={() => setClearOpen(true)}>
+              <Trash2 size={13} /> 清空数据
+            </Button>
+          </div>
+        }
+      >
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void onImportFile(file)
+            e.target.value = ''
+          }}
+        />
+        {/* 导入确认：展示各表行数，明确覆盖语义 */}
+        <Dialog
+          open={pendingImport !== null}
+          onClose={() => setPendingImport(null)}
+          title="导入恢复"
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => setPendingImport(null)}>取消</Button>
+              <Button variant="primary" onClick={confirmImport}>确认恢复</Button>
+            </>
+          }
+        >
+          <p className="mb-3 text-sm text-ink-muted">
+            恢复将<strong className="text-cinnabar">覆盖</strong>下列各表现有数据；确认前会自动导出当前数据作为安全备份。
+          </p>
+          <div className="max-h-56 overflow-y-auto rounded-tile border border-line p-2">
+            {pendingImport?.summary.map((s) => (
+              <div key={s.key} className="flex items-center justify-between px-1 py-0.5 text-[13px]">
+                <span className="text-ink">{s.label}</span>
+                <span className="tabular text-ink-muted">
+                  {s.count >= 0 ? `${s.count} 条` : '备份中无此表'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Dialog>
+        <p className="mt-2 text-[11px] text-ink-faint">
+          数据存本机 IndexedDB；多端同步通过 GitHub 私有仓库快照（见下方「GitHub 同步」）。
+        </p>
+      </Section>
+      )}
+
+      {group === 'ai' && (<>
       <Section title="AI Core" hint="OpenAI 兼容 Provider（Agnes / DeepSeek / Kimi…）">
         <div className="max-w-xl space-y-3">
           <div className="flex items-center gap-3">
@@ -375,6 +537,25 @@ export function SettingsPage() {
               ))}
             </div>
             <span className="text-[11px] text-ink-faint">远程需配置 Key（加密存储，绝不硬编码）</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="w-20 shrink-0 text-sm text-ink-muted">预设</span>
+            <div className="flex flex-wrap gap-1">
+              {AI_PRESETS.map((p) => (
+                <Button
+                  key={p.name}
+                  size="sm"
+                  variant={settings.aiBaseUrl === p.baseUrl ? 'primary' : 'tertiary'}
+                  onClick={() => {
+                    settings.set({ aiBaseUrl: p.baseUrl, aiModel: p.model })
+                    toast(`已填入 ${p.name} 预设，填 Key 后点「测试连接」`, 'info')
+                  }}
+                  className="!px-2"
+                >
+                  {p.name}
+                </Button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-sm text-ink-muted">Base URL</span>
@@ -434,125 +615,11 @@ export function SettingsPage() {
           </div>
         </div>
       </Section>
-
-      <Section title="布局模式" hint={`当前：${resolved === 'desktop' ? '桌面工作台' : '移动终端'}`}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {LAYOUT_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => settings.set({ layoutMode: o.value })}
-              className={cn(
-                'rounded-paper border p-4 text-left transition-colors',
-                settings.layoutMode === o.value
-                  ? 'border-cinnabar/50 bg-cinnabar/5'
-                  : 'border-line hover:border-line-strong',
-              )}
-            >
-              <div className="display text-sm font-semibold text-ink">{o.label}</div>
-              <div className="mt-1 text-[11px] leading-relaxed text-ink-muted">{o.desc}</div>
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="目标">
-        <div className="row">
-          <span className="w-28 shrink-0 text-sm text-ink-muted">每日饮水目标</span>
-          <Input
-            type="number"
-            min={0}
-            step={100}
-            value={settings.waterGoalMl}
-            onChange={(e) => settings.set({ waterGoalMl: Number(e.target.value) || 0 })}
-            className="max-w-[160px]"
-          />
-          <span className="text-xs text-ink-faint">ml</span>
-        </div>
-        <div className="row">
-          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 专注</span>
-          <Input
-            type="number"
-            min={1}
-            value={settings.pomodoroFocusMin}
-            onChange={(e) => settings.set({ pomodoroFocusMin: Number(e.target.value) || 25 })}
-            className="max-w-[160px]"
-          />
-          <span className="text-xs text-ink-faint">分钟</span>
-        </div>
-        <div className="row">
-          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 休整</span>
-          <Input
-            type="number"
-            min={1}
-            value={settings.pomodoroBreakMin}
-            onChange={(e) => settings.set({ pomodoroBreakMin: Number(e.target.value) || 5 })}
-            className="max-w-[160px]"
-          />
-          <span className="text-xs text-ink-faint">分钟</span>
-        </div>
-      </Section>
-
-      <Section
-        title="数据"
-        hint="Local-first · 存于本机 IndexedDB"
-        action={
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={exportData}>
-              <Download size={13} /> 导出备份
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => importInputRef.current?.click()}>
-              <Upload size={13} /> 导入恢复
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setClearOpen(true)}>
-              <Trash2 size={13} /> 清空数据
-            </Button>
-          </div>
-        }
-      >
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".json,application/json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) void onImportFile(file)
-            e.target.value = ''
-          }}
-        />
-        {/* 导入确认：展示各表行数，明确覆盖语义 */}
-        <Dialog
-          open={pendingImport !== null}
-          onClose={() => setPendingImport(null)}
-          title="导入恢复"
-          footer={
-            <>
-              <Button variant="tertiary" onClick={() => setPendingImport(null)}>取消</Button>
-              <Button variant="primary" onClick={confirmImport}>确认恢复</Button>
-            </>
-          }
-        >
-          <p className="mb-3 text-sm text-ink-muted">
-            恢复将<strong className="text-cinnabar">覆盖</strong>下列各表现有数据；确认前会自动导出当前数据作为安全备份。
-          </p>
-          <div className="max-h-56 overflow-y-auto rounded-tile border border-line p-2">
-            {pendingImport?.summary.map((s) => (
-              <div key={s.key} className="flex items-center justify-between px-1 py-0.5 text-[13px]">
-                <span className="text-ink">{s.label}</span>
-                <span className="tabular text-ink-muted">
-                  {s.count >= 0 ? `${s.count} 条` : '备份中无此表'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Dialog>
-        <p className="mt-2 text-[11px] text-ink-faint">
-          数据存本机 IndexedDB；多端同步通过 GitHub 私有仓库快照（见下方「GitHub 同步」）。
-        </p>
-      </Section>
-
       <SourceManager />
+      </>
+      )}
 
+      {group === 'sync' && (
       <Section
         title="GitHub 同步"
         hint={settings.lastSyncedAt ? `上次同步 ${settings.lastSyncedAt}` : '尚未同步'}
@@ -721,6 +788,7 @@ export function SettingsPage() {
           )}
         </div>
       </Section>
+      )}
 
       <p className="py-6 text-center text-[11px] tracking-[0.3em] text-ink-faint">
         知白台 V1.6 · Local-first

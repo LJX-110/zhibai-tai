@@ -2,9 +2,13 @@
  * Button —— 统一按钮体系
  * 变体：primary(朱砂) / secondary / tertiary / danger / ritual(铜金·仪式)
  * 规则：无 Success 变体；铜金仅用于仪式/焦点操作
+ *
+ * 点击音：所有按钮统一 ui-click（音量随设置），silent 可关——
+ * 用于本身有专属音效或高频连点的场景，避免音效重叠。
  */
 import { forwardRef, type ButtonHTMLAttributes } from 'react'
 import { cn } from '../../utils/cn'
+import { sfx } from '../../services/sound'
 
 type Variant = 'primary' | 'secondary' | 'tertiary' | 'danger' | 'ritual'
 type Size = 'sm' | 'md' | 'lg'
@@ -12,6 +16,8 @@ type Size = 'sm' | 'md' | 'lg'
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
   size?: Size
+  /** 不播放点击音（按钮本身有专属音效/高频场景用） */
+  silent?: boolean
 }
 
 const variantClass: Record<Variant, string> = {
@@ -29,7 +35,7 @@ const sizeClass: Record<Size, string> = {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'secondary', size = 'md', ...props }, ref) => (
+  ({ className, variant = 'secondary', size = 'md', silent, onClick, ...props }, ref) => (
     <button
       ref={ref}
       className={cn(
@@ -38,6 +44,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         sizeClass[size],
         className,
       )}
+      onClick={(e) => {
+        if (!silent) sfx.click()
+        onClick?.(e)
+      }}
       {...props}
     />
   ),

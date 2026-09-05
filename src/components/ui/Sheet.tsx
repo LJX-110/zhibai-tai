@@ -5,6 +5,7 @@ import { X } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../utils/cn'
+import { playSound } from '../../services/sound'
 import { Button } from './Button'
 
 export interface SheetProps {
@@ -19,6 +20,14 @@ export interface SheetProps {
 }
 
 export function Sheet({ open, onClose, title, children, footer, className, tone = 'paper' }: SheetProps) {
+  // 开合伴音（与 Dialog 同语言）
+  useEffect(() => {
+    if (open) playSound('ui-open')
+    return () => {
+      if (open) playSound('ui-close')
+    }
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -33,7 +42,7 @@ export function Sheet({ open, onClose, title, children, footer, className, tone 
   return createPortal(
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_ease]"
+        className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_var(--ease-standard)]"
         onClick={onClose}
       />
       <div

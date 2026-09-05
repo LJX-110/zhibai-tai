@@ -18,6 +18,7 @@ import { useDivinationStore } from '../../stores/useDivinationStore'
 import { useNoteStore } from '../../stores/useNoteStore'
 import { useFollowStore } from '../../stores/useLifeStores'
 import { localAIService } from '../../services/ai/ai-service'
+import { toggleTaskCore } from '../../hooks/useTaskActions'
 import { recordActivity } from '../../services/activity'
 import { useToast } from '../ui/Toast'
 import { Badge, Button } from '../ui'
@@ -68,7 +69,7 @@ export function Inspector() {
   }
 
   return (
-    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-30 w-[360px] overflow-y-auto border-l border-line bg-panel p-6 animate-[page-fade_160ms_ease]">
+    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-30 w-[360px] overflow-y-auto border-l border-line bg-panel p-6 animate-[page-fade_160ms_var(--ease-standard)]">
       {content}
     </aside>
   )
@@ -115,7 +116,12 @@ function InspectorBody({ type, id, onClose }: { type: InspectorType; id: string;
           <Button
             variant={task.done ? 'secondary' : 'primary'}
             onClick={async () => {
-              await useTaskStore.getState().update(task.id, { done: !task.done, completedAt: task.done ? null : new Date().toISOString() })
+              // 与待办列表共用同一完成核心：重复任务完成时同样生成下一次
+              const { done, createdNext } = await toggleTaskCore(task)
+              toast(
+                done ? (createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 道行有进') : '已标记未完成',
+                done ? 'success' : undefined,
+              )
             }}
           >
             {task.done ? '标记未完成' : '标记完成'}

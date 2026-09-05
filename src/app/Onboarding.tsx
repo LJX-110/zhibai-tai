@@ -66,7 +66,7 @@ export function Onboarding() {
 
         <div className="text-center">
           {step === 0 && (
-            <div className="animate-[page-fade_240ms_ease]">
+            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-ink">
                 <Palette size={28} className="text-bronze" />
               </div>
@@ -81,7 +81,7 @@ export function Onboarding() {
           )}
 
           {step === 1 && (
-            <div className="animate-[page-fade_240ms_ease]">
+            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
               <h2 className="display text-xl font-semibold text-ink">选择主题</h2>
               <div className="mt-5 grid grid-cols-3 gap-3">
                 {THEMES.map((t) => (
@@ -105,7 +105,7 @@ export function Onboarding() {
           )}
 
           {step === 2 && (
-            <div className="animate-[page-fade_240ms_ease]">
+            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
               <h2 className="display text-xl font-semibold text-ink">选择布局</h2>
               <div className="mt-5 grid grid-cols-3 gap-3">
                 {LAYOUTS.map((l) => (
@@ -129,7 +129,7 @@ export function Onboarding() {
           )}
 
           {step === 3 && (
-            <div className="animate-[page-fade_240ms_ease]">
+            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal/10">
                 <Droplet size={24} className="text-teal" />
               </div>
@@ -151,11 +151,27 @@ export function Onboarding() {
           )}
 
           {step === 4 && (
-            <div className="animate-[page-fade_240ms_ease]">
+            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
               <div className="display text-4xl font-semibold text-ink">入席</div>
               <p className="mt-3 text-sm text-ink-muted">
                 案台已备，笔墨已研。从今天开始，安顿你的日常。
               </p>
+              {/* 快捷键卡：命令面板是效率核心，不做引导几乎无人发现 */}
+              <div className="mx-auto mt-6 max-w-[300px] rounded-paper border border-line bg-raised p-3 text-left">
+                <div className="mb-2 text-[11px] tracking-[0.2em] text-ink-faint">键盘快捷方式</div>
+                {([
+                  ['Ctrl + K', '呼出命令面板：新建 / 跳转 / 抓取'],
+                  ['/', '任意页面快速全局搜索'],
+                  ['Esc', '关闭弹层与面板'],
+                ] as const).map(([k, d]) => (
+                  <div key={k} className="flex items-center gap-3 py-1 text-xs">
+                    <kbd className="min-w-[64px] rounded-control border border-line bg-paper px-1.5 py-0.5 text-center font-mono text-[11px] text-ink-soft">
+                      {k}
+                    </kbd>
+                    <span className="text-ink-muted">{d}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

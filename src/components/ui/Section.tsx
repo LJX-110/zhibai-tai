@@ -14,7 +14,8 @@ export interface SectionProps {
 
 export function Section({ title, hint, action, className, children }: SectionProps) {
   return (
-    <section className={cn('py-4 first:pt-0', className)}>
+    // 分区间距走 --section-gap 令牌（tokens.css），替代各页手写 margin
+    <section className={cn('pb-[var(--section-gap)] first:pt-0', className)}>
       <div className="section-title">
         <span>{title}</span>
         {hint && <span className="hint">{hint}</span>}

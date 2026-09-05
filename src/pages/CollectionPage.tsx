@@ -6,6 +6,7 @@
 import { useMemo, useState } from 'react'
 import { Plus, Search, Star, Pencil, Trash2, ExternalLink, Sparkles } from 'lucide-react'
 import { useCollectionStore } from '../stores/useCollectionStore'
+import { useSettingsStore } from '../stores/useSettingsStore'
 import { ProjectList } from '../components/project/ProjectList'
 import { aiService } from '../services/ai/ai-service'
 import { recordActivity } from '../services/activity'
@@ -24,6 +25,7 @@ import {
   Select,
   Textarea,
   Sheet,
+  Tooltip,
   useToast,
 } from '../components/ui'
 
@@ -77,6 +79,7 @@ const EMPTY_FORM: FormState = {
 
 export function CollectionPage() {
   const items = useCollectionStore((s) => s.items)
+  const hiddenTypes = useSettingsStore((s) => s.collectionHiddenTypes)
   const toast = useToast().toast
   const [view, setView] = useState<'items' | 'projects'>('items')
   const [typeFilter, setTypeFilter] = useState<CollectionType | 'all'>('all')
@@ -88,6 +91,19 @@ export function CollectionPage() {
   const [tidy, setTidy] = useState<{ description: string; tags: string[]; category: string; reason: string } | null>(null)
   const [tidyBusy, setTidyBusy] = useState(false)
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM })
+  /** 分类管理弹层：类型为固定枚举，管理 = 显隐（与情页管理入口一致） */
+  const [typeMgrOpen, setTypeMgrOpen] = useState(false)
+
+  const visibleTypes = useMemo(
+    () => TYPE_ORDER.filter((t) => !hiddenTypes.includes(t)),
+    [hiddenTypes],
+  )
+
+  const toggleTypeVisible = (t: CollectionType) => {
+    useSettingsStore.getState().toggleCollectionType(t)
+    // 被隐藏的正是当前筛选时回到「全部」，避免停留在一个看不见的筛选上
+    if (typeFilter === t) setTypeFilter('all')
+  }
 
   const list = useMemo(() => {
     return items
@@ -222,7 +238,7 @@ export function CollectionPage() {
         <ProjectList />
       ) : (
         <>
-      {/* 筛选条 */}
+      {/* 筛选条（行尾 + 号管理类型显隐，与情页入口一致） */}
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <div className="flex flex-1 flex-wrap items-center gap-1">
           <button
@@ -234,7 +250,7 @@ export function CollectionPage() {
           >
             全部 <span className="tabular text-xs opacity-60">{items.length}</span>
           </button>
-          {TYPE_ORDER.map((t) => (
+          {visibleTypes.map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(t)}
@@ -246,6 +262,15 @@ export function CollectionPage() {
               {TYPE_LABEL[t]}
             </button>
           ))}
+          <Tooltip label="管理分类">
+            <button
+              onClick={() => setTypeMgrOpen(true)}
+              className="rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
+              aria-label="管理分类"
+            >
+              <Plus size={14} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -284,7 +309,7 @@ export function CollectionPage() {
               <div
                 key={it.id}
                 onClick={() => setDetail(it)}
-                className="group relative flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-tile border border-line bg-raised transition-all duration-fast hover:-translate-y-0.5 hover:shadow-soft"
+                className="group relative flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-tile border border-line bg-raised transition-all duration-fast hover:-translate-y-0.5 hover:shadow-soft active:scale-[0.98]"
               >
                 {/* 左侧类型签条（与记事本同语言） */}
                 <span
@@ -470,6 +495,42 @@ export function CollectionPage() {
             <p className="text-[11px] text-ink-faint">写入前请确认：AI 仅生成建议，可自行修改。</p>
           </div>
         )}
+      </Dialog>
+      {/* 类型管理：固定枚举不可增删，显隐即管理（隐藏不影响已有藏品） */}
+      <Dialog open={typeMgrOpen} onClose={() => setTypeMgrOpen(false)} title="管理藏阁分类">
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {TYPE_ORDER.map((t) => {
+              const visible = !hiddenTypes.includes(t)
+              return (
+                <button
+                  key={t}
+                  onClick={() => toggleTypeVisible(t)}
+                  aria-pressed={visible}
+                  className={cn(
+                    'rounded-control border px-2.5 py-1 text-xs transition-colors',
+                    visible
+                      ? 'border-ink/40 bg-ink text-on-dark'
+                      : 'border-dashed border-line text-ink-faint hover:text-ink',
+                  )}
+                >
+                  {TYPE_LABEL[t]}
+                  {!visible && '（已隐藏）'}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-between border-t border-line pt-3">
+            <p className="text-[11px] text-ink-faint">点击切换显隐 · 隐藏只收起筛选页签，已有藏品不受影响</p>
+            <Button
+              size="sm"
+              variant="tertiary"
+              onClick={() => useSettingsStore.getState().resetCollectionTypes()}
+            >
+              恢复默认
+            </Button>
+          </div>
+        </div>
       </Dialog>
         </>
       )}

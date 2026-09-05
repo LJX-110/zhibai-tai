@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import { useSyncStore } from '../stores/useSyncStore'
 import { Taiji } from '../components/ui/Taiji'
 import { NAV_SECTIONS, SYSTEM_SECTION, type SectionId } from '../app/navigation'
+import { playSound } from '../services/sound'
 import { cn } from '../utils/cn'
 
 function NavButton({
@@ -70,6 +71,11 @@ export function DesktopSidebar() {
   const syncStatus = useSettingsStore((s) => s.syncStatus)
   const pending = useSyncStore((s) => s.pending)
 
+  const go = (id: SectionId) => {
+    if (id !== section) playSound('ui-click')
+    setSection(id)
+  }
+
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-[var(--nav-w)] flex-col bg-sidebar text-on-sidebar">
       {/* 品牌 */}
@@ -101,7 +107,7 @@ export function DesktopSidebar() {
             label={s.label}
             sub={s.sub}
             active={section === s.id}
-            onClick={() => setSection(s.id)}
+            onClick={() => go(s.id)}
           />
         ))}
       </nav>
@@ -114,12 +120,12 @@ export function DesktopSidebar() {
           label={SYSTEM_SECTION.label}
           sub={SYSTEM_SECTION.sub}
           active={section === SYSTEM_SECTION.id}
-          onClick={() => setSection(SYSTEM_SECTION.id)}
+          onClick={() => go(SYSTEM_SECTION.id)}
         />
         {/* 同步状态：点击直达系统页（状态前置，P1） */}
         <button
           type="button"
-          onClick={() => setSection(SYSTEM_SECTION.id)}
+          onClick={() => go(SYSTEM_SECTION.id)}
           title={lastSyncedAt ? `上次同步 ${new Date(lastSyncedAt).toLocaleString('zh-CN')}` : '尚未同步 · 点击配置'}
           className="mt-2 flex w-full cursor-pointer items-center gap-1.5 rounded-control px-3 py-1 text-[10px] text-on-sidebar-muted transition-colors hover:bg-white/10 hover:text-on-sidebar"
         >

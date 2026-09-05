@@ -3,6 +3,7 @@
  */
 import { useMemo, useState } from 'react'
 import { Pause, Play, Plus, RotateCcw, Trash2, Pencil, Eye } from 'lucide-react'
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useCourseStore, useExamStore, useHomeworkStore } from '../stores/useStudyStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
 import { usePomodoroTimerStore } from '../stores/usePomodoroTimerStore'
@@ -896,6 +897,23 @@ function StudyStatsTab() {
       .reduce((sum, s) => sum + s.durationMin, 0)
   }, [sessions])
 
+  // 近 30 天专注趋势（与财务页月度趋势同一图表语言）
+  const trend30 = useMemo(() => {
+    const out: { label: string; minutes: number }[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      out.push({
+        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        minutes: sessions
+          .filter((s) => s.type === 'focus' && s.startAt.startsWith(key))
+          .reduce((a, s) => a + s.durationMin, 0),
+      })
+    }
+    return out
+  }, [sessions])
+
   return (
     <Section title="学习统计">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -903,6 +921,23 @@ function StudyStatsTab() {
         <StatBox label="今日专注" value={`${todayFocus}`} unit="分钟" />
         <StatBox label="本周专注" value={`${weekFocus}`} unit="分钟" />
         <StatBox label="未交作业" value={`${undone}`} unit="项" />
+      </div>
+
+      <div className="mt-5">
+        <div className="section-title text-sm">
+          <span className="display">近 30 天专注</span>
+          <span className="hint">分钟 / 日</span>
+        </div>
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={trend30} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
+              <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--color-ink-faint)' }} axisLine={{ stroke: 'var(--color-line)' }} tickLine={false} interval={4} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--color-ink-faint)' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip contentStyle={{ background: 'var(--color-paper)', border: '1px solid var(--color-line-strong)', borderRadius: 8, fontSize: 12 }} />
+              <Bar dataKey="minutes" name="专注分钟" fill="var(--color-teal)" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="mt-5">

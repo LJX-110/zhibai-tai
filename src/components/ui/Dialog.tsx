@@ -11,6 +11,7 @@ import { X } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../utils/cn'
+import { playSound } from '../../services/sound'
 import { Button } from './Button'
 
 export interface DialogProps {
@@ -37,9 +38,10 @@ export function Dialog({
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // 焦点进出：打开时移入弹窗，关闭时归还触发元素
+  // 焦点进出：打开时移入弹窗，关闭时归还触发元素；开合伴音
   useEffect(() => {
     if (!open) return
+    playSound('ui-open')
     const previous = document.activeElement as HTMLElement | null
     // createPortal 挂载后下一帧才有真实 DOM
     const raf = requestAnimationFrame(() => {
@@ -49,6 +51,7 @@ export function Dialog({
     return () => {
       cancelAnimationFrame(raf)
       previous?.focus?.()
+      playSound('ui-close')
     }
   }, [open])
 
@@ -89,7 +92,7 @@ export function Dialog({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_ease]"
+        className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_var(--ease-standard)]"
         onClick={onClose}
       />
       <div

@@ -15,6 +15,7 @@ import {
   type SectionId,
 } from '../app/navigation'
 import { todayISO } from '../utils/id'
+import { playSound } from '../services/sound'
 import { Sheet, ThemeToggle } from '../components/ui'
 import { cn } from '../utils/cn'
 
@@ -61,6 +62,7 @@ export function MobileNav() {
   const navRef = useRef<HTMLElement>(null)
 
   const go = (id: SectionId) => {
+    if (id !== section) playSound('ui-click')
     setSection(id)
     setMoreOpen(false)
   }
@@ -78,7 +80,10 @@ export function MobileNav() {
             return (
               <button
                 key={s.id}
-                onClick={() => setSection(s.id)}
+                onClick={() => {
+                  if (!active) playSound('ui-click')
+                  setSection(s.id)
+                }}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors',

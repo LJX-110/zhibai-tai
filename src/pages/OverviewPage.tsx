@@ -16,6 +16,7 @@ import { useActivityStore, useFollowStore } from '../stores/useLifeStores'
 import { useTodayStats } from '../hooks/useTodayStats'
 import { useCultivation } from '../hooks/useCultivation'
 import { useTaskActions } from '../hooks/useTaskActions'
+import { useInspectorStore } from '../components/inspector/Inspector'
 import { aiService } from '../services/ai/ai-service'
 import { playSound } from '../services/sound'
 import { TaskItem } from '../components/task/TaskItem'
@@ -340,6 +341,11 @@ export function OverviewPage() {
 
   const urgent = [...stats.todayDue, ...stats.upcoming].slice(0, 5)
 
+  // 下一件事：今天下一节课 / 最近到期任务（打开首页即获行动指令）
+  const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const nextClass = todayClasses.find((c) => c.start > nowHMStr)
+  const nextDue = stats.todayDue[0]
+
   // 四维炁象
   const qiDims: QiDim[] = useMemo(() => {
     const todayFocus = stats.focusMinutes
@@ -381,8 +387,47 @@ export function OverviewPage() {
         <h1 className="scribal-title mt-1 text-3xl text-ink-bright">
           {greeting(now.getHours())}
         </h1>
-        <p className="scribal mt-1.5 text-base text-ink-muted">道法自然，观照当下</p>
+        <div className="mt-1.5 flex items-center gap-3">
+          <p className="scribal text-base text-ink-muted">道法自然，观照当下</p>
+          {/* 快捷键常驻提示：命令面板不做引导几乎无人发现；点击直接呼出 */}
+          <button
+            onClick={() =>
+              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true }))
+            }
+            className="flex items-center gap-1.5 rounded-control border border-line bg-raised px-2 py-0.5 text-[11px] text-ink-faint transition-colors hover:border-line-strong hover:text-ink"
+            title="呼出命令面板"
+          >
+            <kbd className="font-mono">Ctrl K</kbd> 命令面板
+          </button>
+        </div>
       </div>
+
+      {/* 下一件事：时序感的第一入口 */}
+      {(nextClass || nextDue) && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-tile border border-line bg-raised px-3.5 py-2 text-sm">
+          <span className="mono-meta text-ink-faint">下一件事</span>
+          {nextClass ? (
+            <span className="text-ink">
+              <span className="tabular font-medium text-cinnabar">{nextClass.start}</span>
+              {' '}
+              {nextClass.name}
+              {nextClass.room ? <span className="text-ink-muted"> · {nextClass.room}</span> : null}
+            </span>
+          ) : (
+            <span className="text-ink-faint">今日课程已结束</span>
+          )}
+          {nextDue && (
+            <button
+              onClick={() => useInspectorStore.getState().open('task', nextDue.id)}
+              className="min-w-0 truncate text-left text-ink-muted transition-colors hover:text-ink"
+              title="查看详情"
+            >
+              · 最近到期：<span className="text-ink">{nextDue.title.slice(0, 20)}</span>
+              {nextDue.dueDate && <span className="tabular text-ink-faint">（{nextDue.dueDate}）</span>}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 今日炁象：四象罗盘 */}
       <section className="relative overflow-hidden rounded-paper border border-line bg-panel px-6 py-6">

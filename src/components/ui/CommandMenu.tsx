@@ -16,6 +16,7 @@ import {
 import { createPortal } from 'react-dom'
 import { ALL_SECTIONS, type SectionId } from '../../app/navigation'
 import { useAppStore } from '../../stores/useAppStore'
+import { useInspectorStore, type InspectorType } from '../inspector/Inspector'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { useNoteStore } from '../../stores/useNoteStore'
 import { useWaterStore } from '../../stores/useWaterStore'
@@ -47,6 +48,9 @@ interface SearchResult {
   title: string
   sub?: string
   section: SectionId
+  /** 支持直达详情的条目带实体 id 与 Inspector 类型（笔记暂无详情面板，仅跳板块） */
+  entityId?: string
+  inspector?: InspectorType
 }
 
 export function CommandMenu() {
@@ -261,24 +265,36 @@ export function CommandMenu() {
     if (!q) return []
     const matches = (s: string) => s.toLowerCase().includes(q)
     const out: SearchResult[] = []
-    const push = (g: string, section: SectionId, items: { id: string; title: string; sub?: string }[]) => {
+    const push = (
+      g: string,
+      section: SectionId,
+      items: { id: string; title: string; sub?: string; inspector?: SearchResult['inspector'] }[],
+    ) => {
       for (const it of items) {
         if (matches(it.title) || matches(it.sub ?? '')) {
-          out.push({ id: `${g}-${it.id}`, group: g, title: it.title, sub: it.sub, section })
+          out.push({ id: `${g}-${it.id}`, group: g, title: it.title, sub: it.sub, section, entityId: it.id, inspector: it.inspector })
         }
       }
     }
 
-    push('任务', 'action', useTaskStore.getState().items.map((t) => ({ id: t.id, title: t.title, sub: t.done ? '已完成' : '未完成' })))
+    push('任务', 'action', useTaskStore.getState().items.map((t) => ({ id: t.id, title: t.title, sub: t.done ? '已完成' : '未完成', inspector: 'task' as const })))
     push('笔记', 'action', useNoteStore.getState().items.map((n) => ({ id: n.id, title: n.title || '（无题）', sub: n.kind === 'inspiration' ? '灵感' : '笔记' })))
-    push('收藏', 'collection', useCollectionStore.getState().items.map((c) => ({ id: c.id, title: c.title, sub: c.category })))
-    push('项目', 'collection', useProjectStore.getState().items.map((p) => ({ id: p.id, title: p.name, sub: p.status })))
-    push('情报', 'intelligence', useIntelligenceStore.getState().items.map((i) => ({ id: i.id, title: i.title, sub: i.source })))
-    push('课程', 'study', useCourseStore.getState().items.map((c) => ({ id: c.id, title: c.name, sub: c.teacher })))
-    push('消费', 'finance', useFinanceStore.getState().items.map((f) => ({ id: f.id, title: f.merchant || f.note || '流水', sub: `${f.kind === 'income' ? '+' : '-'}${f.amount}` })))
+    push('收藏', 'collection', useCollectionStore.getState().items.map((c) => ({ id: c.id, title: c.title, sub: c.category, inspector: 'collection' as const })))
+    push('项目', 'collection', useProjectStore.getState().items.map((p) => ({ id: p.id, title: p.name, sub: p.status, inspector: 'project' as const })))
+    push('情报', 'intelligence', useIntelligenceStore.getState().items.map((i) => ({ id: i.id, title: i.title, sub: i.source, inspector: 'intelligence' as const })))
+    push('课程', 'study', useCourseStore.getState().items.map((c) => ({ id: c.id, title: c.name, sub: c.teacher, inspector: 'course' as const })))
+    push('消费', 'finance', useFinanceStore.getState().items.map((f) => ({ id: f.id, title: f.merchant || f.note || '流水', sub: `${f.kind === 'income' ? '+' : '-'}${f.amount}`, inspector: 'finance' as const })))
 
     return out.slice(0, 30)
   }, [query])
+
+  /** 搜索结果处理：有详情面板的直达条目，否则跳板块 */
+  const openResult = useCallback((r: SearchResult) => {
+    go(r.section)
+    if (r.inspector && r.entityId) {
+      useInspectorStore.getState().open(r.inspector, r.entityId)
+    }
+  }, [go])
 
   const grouped = useMemo(() => {
     const map = new Map<string, SearchResult[]>()
@@ -300,7 +316,7 @@ export function CommandMenu() {
   const onEnter = () => {
     if (tab === 'search') {
       const flat = results
-      if (flat[cursor]) go(flat[cursor].section)
+      if (flat[cursor]) openResult(flat[cursor])
     } else {
       const flat = commands
       if (flat[cursor]) {
@@ -320,7 +336,7 @@ export function CommandMenu() {
         role="dialog"
         aria-modal="true"
         aria-label="命令面板"
-        className="relative w-full max-w-lg rounded-sheet bg-paper shadow-overlay animate-[page-fade_120ms_ease]"
+        className="relative w-full max-w-lg rounded-sheet bg-paper shadow-overlay animate-[page-fade_120ms_var(--ease-standard)]"
       >
         {/* 输入 + 模式切换 */}
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -394,7 +410,7 @@ export function CommandMenu() {
                   <div key={group}>
                     <div className="px-3 py-1 text-[10px] tracking-widest text-ink-faint">{group}</div>
                     {items.map((r) => (
-                      <CommandRow key={r.id} active={cursor === results.indexOf(r)} icon={groupIcon(r.group)} label={r.title} hint={r.sub} onClick={() => go(r.section)} />
+                      <CommandRow key={r.id} active={cursor === results.indexOf(r)} icon={groupIcon(r.group)} label={r.title} hint={r.sub} onClick={() => openResult(r)} />
                     ))}
                   </div>
                 ))}

@@ -98,7 +98,7 @@ function FeedMediaRow({
       role="button"
       tabIndex={0}
       className={cn(
-        'group flex cursor-pointer items-start gap-3 rounded-tile border border-line bg-panel/60 px-3 py-3 transition-colors hover:border-line-strong',
+        'group flex cursor-pointer items-start gap-3 rounded-tile border border-line bg-panel/60 px-3 py-3 transition-colors hover:border-line-strong active:bg-nested',
         it.read && 'opacity-60',
       )}
     >
@@ -151,7 +151,7 @@ function FeedRow({
       role="button"
       tabIndex={0}
       className={cn(
-        'group cursor-pointer items-start rounded-control px-3 py-2.5 transition-colors hover:bg-raised',
+        'group cursor-pointer items-start rounded-control px-3 py-2.5 transition-colors hover:bg-raised active:bg-nested',
         it.read && 'opacity-60',
       )}
     >
@@ -263,6 +263,8 @@ export function IntelligencePage() {
   /** 分类管理弹层：分类在使用的页签处就地增删（不再放设置页） */
   const [catMgrOpen, setCatMgrOpen] = useState(false)
   const [catDraft, setCatDraft] = useState('')
+  /** AI 问答默认收起：信息密度让位给信息流本身，入口保留 */
+  const [aiOpen, setAiOpen] = useState(false)
 
   const addCategory = () => {
     const t = catDraft.trim()
@@ -378,6 +380,15 @@ export function IntelligencePage() {
   }
 
   const mediaCount = list.filter((it) => it.image).length
+  /** 任一筛选生效即视为"有明确意图"：来源入口让位 */
+  const filtersActive =
+    tab !== '全部' ||
+    sourceType !== 'all' ||
+    category !== '全部' ||
+    time !== 'all' ||
+    onlyFav ||
+    onlyUnread ||
+    query.trim() !== ''
 
   return (
     <div className="mx-auto max-w-[var(--content-max-w)]">
@@ -471,31 +482,54 @@ export function IntelligencePage() {
         </span>
       </div>
 
-      {/* AI 问情报 */}
+      {/* AI 问情报：默认收起（可发现性靠入口行，信息密度让位给信息流） */}
       <div className="mb-4">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Sparkles size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-bronze" />
-            <Input
-              placeholder="用 AI 问情报，例如：最近有什么 AI 模型新进展？"
-              value={aiQuery}
-              onChange={(e) => setAiQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && askAI()}
-              className="!pl-8"
-            />
-          </div>
-          <Button variant="ritual" size="md" onClick={askAI} disabled={aiLoading || !aiQuery.trim()}>
-            {aiLoading ? '思考中…' : '问 AI'}
-          </Button>
-        </div>
-        {aiAnswer && (
-          <div className="mt-2 rounded-tile border border-teal/25 bg-teal/5 p-3">
-            <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-              {aiAnswer.answer}
-            </pre>
-            {aiAnswer.sources.length > 0 && (
-              <div className="mt-2 border-t border-line/60 pt-2 text-[11px] text-ink-faint">
-                来源：{aiAnswer.sources.join(' · ')}
+        <button
+          onClick={() => setAiOpen((v) => !v)}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-tile border px-3 py-2 text-sm transition-colors',
+            aiOpen ? 'border-teal/30 bg-teal/5 text-ink' : 'border-line bg-raised text-ink-muted hover:text-ink',
+          )}
+          aria-expanded={aiOpen}
+        >
+          <Sparkles size={14} className="text-bronze" />
+          AI 问情报 · 用中文问近期动态
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-ink-faint">
+            {items.filter((it) => !it.read).length > 0 && (
+              <span className="rounded-full bg-cinnabar/10 px-1.5 py-0.5 tabular text-cinnabar">
+                {items.filter((it) => !it.read).length} 条未读
+              </span>
+            )}
+            {aiOpen ? '收起' : '展开'}
+          </span>
+        </button>
+        {aiOpen && (
+          <div className="mt-2">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Sparkles size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-bronze" />
+                <Input
+                  placeholder="用 AI 问情报，例如：最近有什么 AI 模型新进展？"
+                  value={aiQuery}
+                  onChange={(e) => setAiQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && askAI()}
+                  className="!pl-8"
+                />
+              </div>
+              <Button variant="ritual" size="md" onClick={askAI} disabled={aiLoading || !aiQuery.trim()}>
+                {aiLoading ? '思考中…' : '问 AI'}
+              </Button>
+            </div>
+            {aiAnswer && (
+              <div className="mt-2 rounded-tile border border-teal/25 bg-teal/5 p-3">
+                <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
+                  {aiAnswer.answer}
+                </pre>
+                {aiAnswer.sources.length > 0 && (
+                  <div className="mt-2 border-t border-line/60 pt-2 text-[11px] text-ink-faint">
+                    来源：{aiAnswer.sources.join(' · ')}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -594,8 +628,8 @@ export function IntelligencePage() {
         </div>
       </Dialog>
 
-      {/* 来源快捷入口 */}
-      {sources.length > 0 && (
+      {/* 来源快捷入口（筛选激活时隐藏：此时用户意图明确，入口是噪音） */}
+      {sources.length > 0 && !filtersActive && (
         <div className="mt-6 border-t border-line pt-4">
           <div className="mb-2 text-[11px] tracking-[0.24em] text-ink-faint">情报源 · SOURCES</div>
           <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">

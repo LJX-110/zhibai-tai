@@ -142,6 +142,22 @@ export function primeAudio(): void {
   audio()
 }
 
+/* 首次用户手势解锁音频 —— 音效"从未播放"的根因修复。
+ * Chrome 自动播放策略：非手势中创建的 AudioContext 恒为 suspended，
+ * 无激活时 resume() 也会被拒。若首个 playSound 恰好发生在异步回调
+ * （启动通知 / 抓取完成），上下文被锁死，此后即使点测试按钮也可能无声。
+ * 此处在首个 pointerdown/keydown（必为手势）创建并恢复上下文。 */
+if (typeof window !== 'undefined') {
+  const unlock = () => {
+    window.removeEventListener('pointerdown', unlock)
+    window.removeEventListener('keydown', unlock)
+    const c = audio()
+    if (c && c.state === 'suspended') void c.resume()
+  }
+  window.addEventListener('pointerdown', unlock, { passive: true })
+  window.addEventListener('keydown', unlock)
+}
+
 /** 直接播放（供组件绑定事件） */
 export const sfx = {
   click: () => playSound('ui-click'),

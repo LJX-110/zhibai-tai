@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutMode } from './useAppStore'
+import type { CollectionType } from '../types/entities'
 import { INTELLIGENCE_CATEGORIES } from '../services/intelligence/providers/index'
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
@@ -71,6 +72,12 @@ interface SettingsState {
   removeIntelCategory: (name: string) => void
   resetIntelCategories: () => void
 
+  /** 藏阁筛选中隐藏的类型。类型是固定枚举（驱动签条配色/图标/同步字段），
+   *  不可用户增删——「管理」等价物是显隐：不用的类型收起，数据不受影响 */
+  collectionHiddenTypes: CollectionType[]
+  toggleCollectionType: (t: CollectionType) => void
+  resetCollectionTypes: () => void
+
   set: (patch: Partial<SettingsState>) => void
 }
 
@@ -118,6 +125,14 @@ export const useSettingsStore = create<SettingsState>()(
         set((s) => ({ intelCategories: s.intelCategories.filter((c) => c !== name) })),
       resetIntelCategories: () =>
         set({ intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义') }),
+      collectionHiddenTypes: [],
+      toggleCollectionType: (t) =>
+        set((s) => ({
+          collectionHiddenTypes: s.collectionHiddenTypes.includes(t)
+            ? s.collectionHiddenTypes.filter((x) => x !== t)
+            : [...s.collectionHiddenTypes, t],
+        })),
+      resetCollectionTypes: () => set({ collectionHiddenTypes: [] }),
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },
