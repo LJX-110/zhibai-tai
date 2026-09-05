@@ -1,0 +1,780 @@
+@import "./styles/tokens.css";
+
+/* ============================================================
+   Fonts —— 本地书法字体（离线可用，fontsource 简体子集）
+   衬线/无衬线走系统字体栈，保证轻量；仅书法装饰字本地打包
+   ============================================================ */
+@font-face {
+  font-family: "Ma Shan Zheng";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/ma-shan-zheng-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "ZCOOL XiaoWei";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/zcool-xiaowei-400.woff2") format("woff2");
+}
+
+/* ============================================================
+   Base — 全局基础样式
+   ============================================================ */
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    /* 干净纯色底：纸纹只做局部材质（.grain-local） */
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    font-size: 15px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-cinnabar);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
+  ::selection {
+    background: rgba(157, 53, 41, 0.16);
+  }
+
+  /* 细滚动条 */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 6px;
+    border: 3px solid var(--color-paper);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ============================================================
+   Utilities — 排版与版式工具类
+   ============================================================ */
+
+@layer utilities {
+  /* 页面进入：轻 fade + 微 slide */
+  .page-enter {
+    animation: page-fade var(--duration-med) var(--ease-standard) both;
+  }
+
+  /* 大标题（书法感衬线，仅用于大标题，克制使用） */
+  .display {
+    font-family: var(--font-serif);
+    letter-spacing: 0.02em;
+  }
+  .display-lg {
+    font-family: var(--font-serif);
+    letter-spacing: 0.02em;
+    font-size: var(--text-2xl);
+    line-height: 1.2;
+  }
+  .display-hero {
+    font-family: var(--font-serif);
+    letter-spacing: 0.02em;
+    font-size: var(--text-4xl);
+    line-height: 1.1;
+  }
+
+  /* 正文弱化 */
+  .text-muted {
+    color: var(--color-ink-muted);
+  }
+  .text-faint {
+    color: var(--color-ink-faint);
+  }
+
+  /* 区块标题：小号序号 + 标题 + 渐隐分隔线（避免卡片墙，以线分割） */
+  .section-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--color-ink);
+    padding-bottom: 8px;
+  }
+  .section-title::before {
+    content: "";
+    align-self: center;
+    width: 3px;
+    height: 14px;
+    background: var(--color-cinnabar);
+    border-radius: 2px;
+  }
+  .section-title .hint {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--color-ink-faint);
+  }
+
+  /* 列表行：统一的行条目，避免卡片堆砌 */
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 8px;
+    border-radius: var(--radius-control);
+    transition: background-color var(--duration-fast) ease;
+  }
+  .row:hover {
+    background: var(--color-raised);
+  }
+  .row + .row {
+    border-top: 1px solid var(--color-line);
+  }
+
+  /* 印章状态（完成/激活） */
+  .seal {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-serif);
+    font-size: 11px;
+    line-height: 1;
+    padding: 3px 7px;
+    border-radius: 3px;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .seal--done {
+    color: var(--color-cinnabar);
+    border: 1px solid rgba(157, 53, 41, 0.55);
+  }
+  .seal--active {
+    color: var(--color-bronze);
+    border: 1px solid rgba(173, 138, 82, 0.6);
+  }
+  .seal--plain {
+    color: var(--color-ink-muted);
+    border: 1px solid var(--color-line-strong);
+  }
+
+  /* 分隔线 */
+  .divider {
+    height: 1px;
+    background: var(--color-line);
+    border: 0;
+  }
+
+  /* 数字/刻度字体 */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+
+  /* 落印动画（用于完成瞬间） */
+  .stamp-in {
+    animation: stamp var(--duration-slow) var(--ease-standard) both;
+  }
+
+  /* 弱化下划线悬停 */
+  .link-underline {
+    background-image: linear-gradient(
+      transparent calc(100% - 1px),
+      var(--color-ink) 1px
+    );
+    background-repeat: no-repeat;
+    background-size: 0% 100%;
+    transition: background-size var(--duration-med) var(--ease-standard);
+  }
+  .link-underline:hover {
+    background-size: 100% 100%;
+  }
+
+  /* 局部纸纹材质（仅用于需要材质感的局部，如奇页） */
+  .grain-local {
+    background-image: var(--grain-local);
+    background-size: 180px 180px;
+    background-repeat: repeat;
+  }
+
+  /* 低对比纸面层级 */
+  .surface {
+    background: var(--color-surface);
+  }
+  .raised {
+    background: var(--color-raised);
+  }
+
+  /* 触控目标 ≥44px（移动端通用） */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 移动端安全区 */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* 隐藏滚动条但保持可滚动 */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* 信息密度：紧凑列表 */
+  .list-compact {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== v0.4 异术化 Motion Utilities ===== */
+
+  /* 墨线划过（加载/切换/装饰） */
+  .ink-draw {
+    position: relative;
+    overflow: hidden;
+  }
+  .ink-draw::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    transform: scaleX(0);
+    transform-origin: left;
+    background: linear-gradient(90deg, var(--color-cinnabar), transparent);
+    animation: ink-draw var(--duration-slow) var(--ease-standard) forwards;
+  }
+
+  /* 炁流（石青→符箓金 淡雾，AI/道行/同步等关键状态） */
+  .qi {
+    position: relative;
+  }
+  .qi::before {
+    content: "";
+    position: absolute;
+    inset: -20% 30%;
+    pointer-events: none;
+    border-radius: 9999px;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--color-teal) 18%, transparent),
+      color-mix(in srgb, var(--color-bronze-bright) 10%, transparent),
+      transparent
+    );
+    filter: blur(8px);
+    animation: qi-breathe 4s var(--ease-standard) infinite;
+  }
+
+  /* 异印落印（任务完成/确认） */
+  .seal-stamp {
+    animation: seal-fall 520ms var(--ease-standard) both;
+  }
+
+  /* 阵纹逐层构建（奇门/异术阵） */
+  .qimen-cell {
+    animation: cell-in 420ms var(--ease-standard) both;
+  }
+
+  /* 罗盘轻微旋转（克制；以自身包围盒中心为轴，跨浏览器稳定） */
+  .compass-slow {
+    animation: compass-spin 60s linear infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  /* 数字滚动 */
+  .num-tabular {
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+
+  /* ===== 印鉴按钮（V1.4：印章式实底 · 内双线刻痕 · 衬线字 · 落印微斜） =====
+     主按钮=朱砂印鉴 / 次按钮=宣纸墨框(朱砂起笔) / 仪式=鎏金印鉴 */
+  .ink-btn {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1px solid var(--btn-edge, transparent);
+    background: var(--btn-bg, var(--color-panel-strong));
+    border-radius: 4px;
+    font-family: var(--font-serif);
+    letter-spacing: 0.04em;
+    box-shadow: inset 0 0 0 1.5px var(--btn-inner, color-mix(in srgb, #fff 22%, transparent));
+    transition: filter 0.2s var(--ease-standard), box-shadow 0.2s var(--ease-standard),
+      transform 0.12s var(--ease-standard);
+  }
+  /* 墨迹晕染悬停（实底印鉴上的墨韵） */
+  .ink-btn::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    z-index: -1;
+    background: radial-gradient(circle at 50% 40%, var(--btn-ink, rgba(0, 0, 0, 0.22)), transparent 62%);
+    opacity: 0;
+    transform: scale(0.55);
+    transition: opacity 0.2s var(--ease-standard), transform 0.2s var(--ease-standard);
+  }
+  .ink-btn:hover::before {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .ink-btn:hover {
+    filter: brightness(1.07);
+  }
+  /* 落印：轻压 + 微斜 */
+  .ink-btn:active {
+    transform: scale(0.95) rotate(-1.5deg);
+  }
+  /* 主按钮：朱砂印鉴（内双线刻痕） */
+  .ink-btn--cinnabar {
+    --btn-bg: var(--color-cinnabar);
+    --btn-edge: color-mix(in srgb, var(--color-cinnabar) 70%, #000 30%);
+    --btn-ink: rgba(0, 0, 0, 0.3);
+    --btn-inner: color-mix(in srgb, var(--color-on-cinnabar) 34%, transparent);
+    color: var(--color-on-cinnabar);
+  }
+  /* 青墨印鉴（信息/确认） */
+  .ink-btn--teal {
+    --btn-bg: var(--color-teal);
+    --btn-edge: color-mix(in srgb, var(--color-teal) 68%, #000 32%);
+    --btn-ink: rgba(0, 0, 0, 0.28);
+    --btn-inner: color-mix(in srgb, var(--color-on-teal) 32%, transparent);
+    color: var(--color-on-teal);
+  }
+  /* 仪式按钮：鎏金印鉴（亮金底 + 深字，修正"暗金看不清"） */
+  .ink-btn--bronze {
+    --btn-bg: var(--color-gold-btn);
+    --btn-edge: color-mix(in srgb, var(--color-gold-btn) 68%, #6b4e08 32%);
+    --btn-ink: rgba(0, 0, 0, 0.22);
+    --btn-inner: color-mix(in srgb, #fff 32%, transparent);
+    color: var(--color-on-gold);
+  }
+  /* 次按钮：宣纸墨框 + hover 朱砂起笔线 */
+  .ink-btn--paper {
+    --btn-bg: var(--color-panel-strong);
+    --btn-edge: var(--color-line-strong);
+    --btn-inner: transparent;
+    color: var(--color-ink);
+    box-shadow: none;
+  }
+  .ink-btn--paper::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--color-cinnabar);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.22s var(--ease-standard);
+  }
+  .ink-btn--paper:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+/* ============================================================
+   Keyframes — 克制动画
+   ============================================================ */
+
+@keyframes page-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes stamp {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.94);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 异印落印：下落 + 印章放大 → 归位 */
+@keyframes seal-fall {
+  0% {
+    transform: translateY(-14px) scale(1.8) rotate(-8deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translateY(0) scale(0.92) rotate(0deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 墨线从左划入 */
+@keyframes ink-draw {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* 炁流呼吸（淡雾扩散回收） */
+@keyframes qi-breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+/* 阵纹逐格亮起 */
+@keyframes cell-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ring-draw {
+  from {
+    stroke-dashoffset: var(--ring-circ, 260);
+  }
+}
+
+/* 罗盘轻微旋转（用于奇页装饰，克制） */
+@keyframes compass-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 启动屏太极旋转：仅动 transform 且提升合成层，
+   主线程被数据加载占用时也不掉帧 */
+.spin-smooth {
+  animation: compass-spin 2.4s linear infinite;
+  will-change: transform;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin-smooth {
+    animation: none;
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ============================================================
+   V1.3 异术设计系统 —— 自建「宣纸符箓」语言
+   四角括号（上朱下金对角） + 顶线墨迹起笔 + 印鉴 + 墨迹晕染
+   ============================================================ */
+
+/* ---- 符纸卡：宣纸贴 + 细线框 + 四角中性墨括号 + 顶线（无色，避免融进正文） ---- */
+.talisman {
+  position: relative;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--color-panel) 94%, transparent);
+  background-image:
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) top left / 11px 2px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) top left / 2px 11px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) top right / 11px 2px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) top right / 2px 11px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) bottom left / 11px 2px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) bottom left / 2px 11px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) bottom right / 11px 2px,
+    linear-gradient(var(--color-line-strong), var(--color-line-strong)) bottom right / 2px 11px;
+  background-repeat: no-repeat;
+}
+.talisman::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: var(--color-line-strong);
+  opacity: 0.45;
+  pointer-events: none;
+}
+/* 更克制的一档（仅四角括号，无底） */
+.talisman--line {
+  background-color: transparent;
+}
+.talisman--line::before {
+  display: none;
+}
+/* 符箓虚线框（今日签 / 境界 / 仪式用） */
+.talisman--seal {
+  border-style: dashed;
+  border-color: var(--color-line-strong);
+  background-image: none;
+}
+.talisman--seal::before {
+  display: none;
+}
+.talisman--seal::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 7px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+.talisman > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---- 印章勾选（任务完成 / 确认，替代普通打勾） ---- */
+.seal-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--color-cinnabar);
+  color: var(--color-paper);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #fff 30%, transparent),
+    inset 0 0 0 3px color-mix(in srgb, var(--color-cinnabar) 82%, transparent);
+  font-family: var(--font-deco);
+  font-size: 12px;
+  line-height: 1;
+  transform: rotate(-2deg);
+  animation: seal-stamp-pop 380ms var(--ease-standard);
+}
+@keyframes seal-stamp-pop {
+  0% {
+    transform: scale(1.5) rotate(-8deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.9) rotate(-2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+}
+
+/* ---- 墨迹晕染页进入（替代平淡淡入） ---- */
+.ink-reveal {
+  animation: ink-reveal 460ms var(--ease-standard) both;
+}
+@keyframes ink-reveal {
+  0% {
+    opacity: 0;
+    clip-path: circle(6% at 50% 24%);
+  }
+  100% {
+    opacity: 1;
+    clip-path: circle(142% at 50% 24%);
+  }
+}
+
+/* ---- 等宽元数据（编号 / 时间 / 大写微标） ---- */
+.mono-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 墨线扫过（同步 / 状态 / 加载） ---- */
+.line-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.line-sweep::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -30%;
+  width: 30%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-bronze) 16%, transparent),
+    transparent
+  );
+  animation: line-sweep 2.4s var(--ease-standard) infinite;
+}
+@keyframes line-sweep {
+  0% {
+    left: -30%;
+  }
+  100% {
+    left: 120%;
+  }
+}
+
+/* ---- 罗盘辅助 ---- */
+.compass-ring {
+  animation: compass-spin 60s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.glow-cinnabar {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-cinnabar) 45%, transparent));
+}
+.glow-bronze {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-bronze) 45%, transparent));
+}
+
+/* ---- 书法标题（页头 / 大数字） ---- */
+.scribal {
+  font-family: var(--font-deco);
+}
+.scribal-title {
+  font-family: var(--font-deco);
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+}
+
+/* ---- 页面背景：主体单色 + 极淡金光点缀（蓝白月亮 / 红黑太阳 · 随主题） ---- */
+body {
+  background-color: var(--color-paper);
+  background-image:
+    radial-gradient(1200px 640px at 12% -6%, color-mix(in oklch, var(--color-bronze) 5%, transparent), transparent 62%),
+    radial-gradient(980px 520px at 104% 4%, rgba(255, 255, 255, 0.5), transparent 55%),
+    var(--bg-grain);
+  background-attachment: fixed;
+}
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(1200px 640px at 12% -6%, color-mix(in oklch, var(--color-bronze) 5%, transparent), transparent 62%),
+    radial-gradient(980px 520px at 104% 4%, color-mix(in oklch, var(--color-cinnabar) 4.5%, transparent), transparent 55%),
+    var(--bg-grain);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 侧栏色抽屉（移动端「更多空间」）：
+   .talisman 为无层级样式，会压过工具层 bg-*，这里用同类无层级样式 + !important 夺回控制权 */
+.sheet-sidebar {
+  background-color: var(--color-sidebar) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.sheet-sidebar::before {
+  opacity: 0;
+}
+
+/* 立轴轴签：课程名竖排（立轴课表 B 方案） */
+.vertical-slip {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.12em;
+}
+
+/* 立轴轴签：课程名竖排（立轴课表 B 方案） */
+.vertical-slip {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.12em;
+}

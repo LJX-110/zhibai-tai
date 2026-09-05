@@ -1,0 +1,45 @@
+# 知白台 —— GitHub Pages 自动部署
+# 每次 push 到 main 后：构建 → 发布到 GitHub Pages
+# 你只需：建仓库 → push → 仓库 Settings → Pages → Source 选「GitHub Actions」
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build (base = 仓库名)
+        # 关键：GitHub Pages 部署在 https://<user>.github.io/<仓库名>/ 子路径
+        # 用仓库名作为 base，资源路径才正确
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - uses: actions/deploy-pages@v4

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 玄衡台图标 · 瓦当篆符（V1.6 冷色定稿） -->
+  <!-- 黛蓝底 -->
+  <rect width="64" height="64" rx="14" fill="#2E5A8C"/>
+  <!-- 瓦当外轮 -->
+  <circle cx="32" cy="32" r="27.5" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <!-- 弦纹 -->
+  <circle cx="32" cy="32" r="23.5" fill="none" stroke="#FFFFFF" stroke-width="0.9" opacity="0.6"/>
+  <!-- 四向箭头纹（鎏金） -->
+  <g fill="#E3C25C">
+    <path d="M28.8 8.2 L35.2 8.2 L32 14.4 Z"/>
+    <path d="M28.8 55.8 L35.2 55.8 L32 49.6 Z"/>
+    <path d="M8.2 28.8 L8.2 35.2 L14.4 32 Z"/>
+    <path d="M55.8 28.8 L55.8 35.2 L49.6 32 Z"/>
+  </g>
+  <!-- 秦篆笔意「异」 -->
+  <g fill="none" stroke="#FFFFFF" stroke-linecap="round">
+    <path d="M22.5 24.5 Q32 15.8 41.5 24.5" stroke-width="3.1"/>
+    <path d="M32 18.5 C26.6 25 37.6 29.2 32 35.6 C26.4 42 37 46.2 32 50.5" stroke-width="2.9"/>
+    <path d="M21.2 34.5 Q32 28 42.8 34.5" stroke-width="2.6"/>
+    <path d="M25.4 35.5 q0 5.4 4.1 7.7 M38.6 35.5 q0 5.4 -4.1 7.7" stroke-width="2.2"/>
+    <path d="M25 51 h14" stroke-width="3.1"/>
+  </g>
+</svg>

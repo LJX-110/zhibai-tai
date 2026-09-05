@@ -1,0 +1,284 @@
+/* ============================================================
+   Design Tokens — 知白台 V1.6（一人之下 · 冷色定稿）
+   主题：Light / Dark / System（跟随 <html data-theme>）
+   定稿配色（用户确认）：
+   · 浅色 = 白底 + 黛蓝主 + 绛红辅（印章/危险）+ 鎏金点缀
+   · 深色 = 纯黑底 + 绛红主 + 黛蓝辅 + 鎏金点缀
+   · 中性色不注入色相（纯灰阶），氛围由侧栏与点缀色承担
+   · 全部正文/弱化文字对比度实测 ≥ 4.5:1（WCAG AA）
+   · 鎏金双值：文字用 #8A6508(浅)/#D4A93C(深)，装饰固定 #C9A227，
+     金底徽章一律配深字
+   ============================================================ */
+
+@import "tailwindcss";
+
+/* ---------- 语义化颜色（运行时随主题翻转） ---------- */
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-bright: var(--ink-bright);
+  --color-teal: var(--teal);
+  --color-paper: var(--paper);
+  --color-cinnabar: var(--cinnabar);
+  --color-bronze: var(--bronze);
+  --color-bronze-bright: var(--bronze-bright);
+  --color-mist: var(--mist);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-nested: var(--nested);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-on-dark: var(--on-dark);
+  --color-on-dark-muted: var(--on-dark-muted);
+  --color-panel: var(--panel);
+  --color-panel-strong: var(--panel-strong);
+  --color-sidebar: var(--sidebar);
+  /* 侧栏专属文字（始终与侧栏底色配对，避免与 on-dark 语义冲突） */
+  --color-on-sidebar: var(--on-sidebar);
+  --color-on-sidebar-muted: var(--on-sidebar-muted);
+
+  /* 景行台补充语义组（强调深浅 / 绛红深浅 / 鎏金 / 危险） */
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-muted: var(--accent-muted);
+  --color-cinnabar-light: var(--cinnabar-light);
+  --color-cinnabar-deep: var(--cinnabar-deep);
+  --color-gold: var(--gold);
+  --color-gold-deep: var(--gold-deep);
+  --color-gold-btn: var(--gold-btn);
+  --color-on-gold: var(--on-gold);
+  --color-on-cinnabar: var(--on-cinnabar);
+  --color-on-teal: var(--on-teal);
+  --color-danger: var(--danger);
+  --color-danger-muted: var(--danger-muted);
+
+  /* 五行模块色（图表 / 罗盘 / 状态用，灰调收敛） */
+  --color-module-1: var(--module-1);
+  --color-module-2: var(--module-2);
+  --color-module-3: var(--module-3);
+  --color-module-4: var(--module-4);
+  --color-module-5: var(--module-5);
+
+  /* 印泥系（印章专用） */
+  --color-seal-cinnabar: var(--seal-cinnabar);
+  --color-seal-qing: var(--seal-qing);
+  --color-seal-ink: var(--seal-ink);
+  --color-seal-jade: var(--seal-jade);
+  --color-seal-lapis: var(--seal-lapis);
+  --color-seal-gold: var(--seal-gold);
+  --color-seal-earth: var(--seal-earth);
+}
+
+/* ---------- 字体 / 圆角 / 阴影 / 动效 / 排版 ---------- */
+@theme {
+  --font-sans: var(--font-sans-stack);
+  --font-serif: var(--font-serif-stack);
+  --font-mono: var(--font-mono-stack);
+  --font-deco: var(--font-deco-stack);
+
+  /* 圆角：控制件最小、面板次之、浮层最大 */
+  --radius-control: 4px;
+  --radius-tile: 8px;
+  --radius-paper: 12px;
+  --radius-sheet: 16px;
+
+  /* 字号阶梯（正文 15 为基准） */
+  --text-xs: 0.75rem;       /* 12px */
+  --text-sm: 0.8125rem;     /* 13px */
+  --text-base: 0.9375rem;   /* 15px */
+  --text-lg: 1.125rem;      /* 18px */
+  --text-xl: 1.3125rem;     /* 21px */
+  --text-2xl: 1.75rem;      /* 28px */
+  --text-3xl: 2.25rem;      /* 36px */
+  --text-4xl: 3rem;         /* 48px */
+
+  --shadow-soft: var(--shadow-soft-value);
+  --shadow-float: var(--shadow-float-value);
+  --shadow-overlay: var(--shadow-overlay-value);
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-med: 240ms;
+  --duration-slow: 420ms;
+}
+
+/* ============================================================
+   Light 主题 —— 白底 · 黛蓝（侧栏扛色，主体纯白）
+   侧栏 = 黛蓝 #2E5A8C；主体 = 白/冷灰单色；
+   绛红 #A32D2D 仅作印章/危险；鎏金 = 仪式/等级点缀。
+   ============================================================ */
+:root {
+  color-scheme: light;
+
+  --font-sans-stack: "Noto Sans SC", "Source Han Sans SC", "PingFang SC",
+    "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif-stack: "Noto Serif SC", "Source Han Serif SC", "Songti SC",
+    "STSong", "SimSun", serif;
+  --font-mono-stack: "JetBrains Mono", "Cascadia Code", "SF Mono", Consolas, monospace;
+  --font-deco-stack: "Ma Shan Zheng", "ZCOOL XiaoWei", "Noto Serif SC",
+    "Kaiti SC", "STKaiti", "KaiTi", serif;
+
+  /* 基底：纯白，冷灰分层（无色相注入） */
+  --paper: #ffffff;
+  --surface: #f5f6f8;
+  --raised: #ffffff;
+  --nested: #ebedf1;
+  --panel: #f8f9fb;
+  --panel-strong: #ffffff;
+  --mist: #eef0f4;
+  --sidebar: #2e5a8c;              /* 黛蓝侧栏 */
+
+  /* 文本：冷墨灰阶 */
+  --ink: #21262d;
+  --ink-bright: #0f1216;
+  --ink-soft: #3e454f;
+  --ink-muted: #5a6472;            /* ≥4.5:1 on 白 */
+  --ink-faint: #636e7c;            /* ≥4.5:1 on 白/浅灰面 */
+
+  --line: #e3e6eb;
+  --line-strong: #c6ccd5;
+
+  /* 核心色：黛蓝主 / 绛红印章·危险 / 鎏金点缀 */
+  --teal: #2e5a8c;                 /* 黛蓝·行动/链接/强调（白字 7:1） */
+  --cinnabar: #a32d2d;             /* 绛红·印章/完成/危险 */
+  --bronze: #8a6508;               /* 鎏金·文字安全值 */
+  --bronze-bright: #c9a227;        /* 鎏金·装饰用（勿作白底小字） */
+
+  /* 深浅层级 */
+  --accent-deep: #234a75;
+  --accent-muted: #e7eef7;
+  --cinnabar-light: #c04a4a;
+  --cinnabar-deep: #7e1f1f;
+  --gold: #c9a227;
+  --gold-deep: #8a6508;
+  /* 鎏金按钮底色：比文字金亮一档，配深字保证对比（7.0:1） */
+  --gold-btn: #c9a227;
+  --on-gold: #201a08;              /* 金底配深字 */
+  --on-cinnabar: #ffffff;
+  --on-teal: #ffffff;
+
+  /* 侧栏文字（黛蓝上的浅字） */
+  --on-sidebar: #f2f6fb;
+  --on-sidebar-muted: #c9d8ea;
+  /* 供 bg-ink 芯片使用（浅色主题 ink 近黑 → 白字） */
+  --on-dark: #ffffff;
+  --on-dark-muted: #c9d0d9;
+
+  /* 危险 */
+  --danger: #a32d2d;
+  --danger-muted: color-mix(in srgb, var(--cinnabar) 12%, transparent);
+
+  /* 五行模块色（图表/罗盘：黛蓝绛红为主，余者灰调收敛） */
+  --module-1: #a32d2d;             /* 火·绛红 */
+  --module-2: #2e5a8c;             /* 水·黛蓝 */
+  --module-3: #8a6508;             /* 金·鎏金 */
+  --module-4: #3e7268;             /* 木·青玉（灰化） */
+  --module-5: #8a7455;             /* 土·灰赭 */
+
+  /* 印泥系 */
+  --seal-cinnabar: #a32d2d;
+  --seal-qing: #2e5a8c;
+  --seal-ink: #21262d;
+  --seal-jade: #3e7268;
+  --seal-lapis: #44618c;
+  --seal-gold: var(--bronze);
+  --seal-earth: #8a7455;
+
+  --shadow-soft-value: 0 1px 2px rgba(15, 23, 42, 0.07), 0 4px 14px rgba(15, 23, 42, 0.08);
+  --shadow-float-value: 0 2px 4px rgba(15, 23, 42, 0.08), 0 10px 26px rgba(15, 23, 42, 0.12);
+  --shadow-overlay-value: 0 14px 34px rgba(15, 23, 42, 0.18);
+
+  /* 结构变量 */
+  --nav-w: 224px;
+  --mobile-nav-h: 60px;
+  --header-h: 60px;
+  --content-max-w: 1240px;
+
+  /* 背景纸纹 */
+  --bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   Dark 主题 —— 纯黑 · 绛红（侧栏扛色，主体纯黑）
+   侧栏 = 深绛红；主体 = 纯黑/亮灰单色；
+   绛红 #E0655C 为行动主色；黛蓝 #6B9BD8 辅助；鎏金点缀。
+   表面层级差 ≥ 19 级（#131313 起），保证纯黑上可辨层级。
+   ============================================================ */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ink: #e6e8eb;
+  --ink-bright: #f7f8fa;
+  --ink-soft: #c6cbd2;
+  --ink-muted: #9aa1ac;            /* ≥4.5:1 on 纯黑 */
+  --ink-faint: #7c8390;            /* ≥4.5:1 on 黑/深灰面 */
+
+  --paper: #000000;                /* 纯黑底 */
+  --surface: #131313;
+  --raised: #1a1a1c;
+  --nested: #232427;
+  --panel: #141416;
+  --panel-strong: #1c1c1f;
+  --mist: #26272b;
+  --sidebar: #5c1f1a;              /* 深绛红侧栏 */
+
+  --line: #232427;
+  --line-strong: #35373c;
+
+  --teal: #e0655c;                 /* 绛红·行动/链接/强调（深字 6.8:1） */
+  --cinnabar: #e0655c;             /* 绛红·印章/完成/危险 */
+  --bronze: #d4a93c;               /* 鎏金·文字安全值 */
+  --bronze-bright: #e5c463;        /* 鎏金·装饰 */
+
+  --accent-deep: #b0483f;
+  /* 深色主题的浅色洗底改用黛蓝辅色 —— 黑底绛红主色中透出蓝意，双色交融 */
+  --accent-muted: color-mix(in srgb, #6b9bd8 15%, transparent);
+  --cinnabar-light: #f08a80;
+  --cinnabar-deep: #b9524a;
+  --gold: #c9a227;
+  --gold-deep: #d4a93c;
+  /* 鎏金按钮底色：深色主题用更亮的暗金 */
+  --gold-btn: #d4a93c;
+  --on-gold: #1c1405;
+  --on-cinnabar: #140806;          /* 亮绛红底配深字（白字仅 3.1:1 不达标） */
+  --on-teal: #140806;
+
+  --on-sidebar: #faedeb;
+  --on-sidebar-muted: #dbaca6;
+  /* 供 bg-ink 芯片使用（深色主题 ink 为亮灰 → 深字） */
+  --on-dark: #17181a;
+  --on-dark-muted: #3f434a;
+
+  --danger: #e0655c;
+  --danger-muted: color-mix(in srgb, var(--cinnabar) 16%, transparent);
+
+  --module-1: #e0655c;             /* 火·绛红 */
+  --module-2: #6b9bd8;             /* 水·黛蓝 */
+  --module-3: #d4a93c;             /* 金·鎏金 */
+  --module-4: #6fa899;             /* 木·青玉 */
+  --module-5: #c7ae85;             /* 土·灰赭 */
+
+  --seal-cinnabar: #e0655c;
+  --seal-qing: #6b9bd8;
+  --seal-ink: #d9dce1;
+  --seal-jade: #6fa899;
+  --seal-lapis: #7fa3cc;
+  --seal-gold: var(--bronze);
+  --seal-earth: #c7ae85;
+
+  --shadow-soft-value: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.42);
+  --shadow-float-value: 0 2px 4px rgba(0, 0, 0, 0.55), 0 10px 24px rgba(0, 0, 0, 0.5);
+  --shadow-overlay-value: 0 16px 48px rgba(0, 0, 0, 0.7);
+
+  /* 背景纸纹 */
+  --bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.04' fill='%23fff'/%3E%3C/svg%3E");
+}
+
+/* ---------- 局部纸纹材质（SVG 噪声，仅用于奇页等局部） ---------- */
+:root {
+  --grain-local: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+}
+[data-theme="dark"] {
+  --grain-local: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05' fill='%23fff'/%3E%3C/svg%3E");
+}
