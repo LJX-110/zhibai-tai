@@ -45,12 +45,23 @@ export class GitHubSnapshotProvider implements SyncProvider {
 
   /** 统一请求：非 2xx 时抛出「GitHub <状态码>: <message>」，状态码始终在场（404 分支判断依赖它） */
   private async request(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
-    const res = await fetch(this.api(path), { headers: this.headers(), ...init })
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { message?: string } | null
-      throw new Error(`GitHub ${res.status}${body?.message ? `: ${body.message}` : ''}`)
+    // 30s 超时与 Gist Provider 对齐：弱网/挂起时避免同步窗口无限卡在 syncing，
+    // 并防止并发锁被占死（后续手动/自动同步全被 runSync 跳过）
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 30_000)
+    try {
+      const res = await fetch(this.api(path), { headers: this.headers(), signal: ctrl.signal, ...init })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null
+        throw new Error(`GitHub ${res.status}${body?.message ? `: ${body.message}` : ''}`)
+      }
+      return (await res.json()) as Record<string, unknown>
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') throw new Error('同步请求超时（30s）')
+      throw e
+    } finally {
+      clearTimeout(timer)
     }
-    return (await res.json()) as Record<string, unknown>
   }
 
   /** 读取分支头：commit sha 与根 tree sha；分支不存在返回 null */

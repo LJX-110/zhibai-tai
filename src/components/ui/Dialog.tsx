@@ -13,6 +13,7 @@ import { createPortal } from 'react-dom'
 import { cn } from '../../utils/cn'
 import { playSound } from '../../services/sound'
 import { Button } from './Button'
+import { overlayClosed, overlayOpened } from './overlay'
 
 export interface DialogProps {
   open: boolean
@@ -42,6 +43,7 @@ export function Dialog({
   useEffect(() => {
     if (!open) return
     playSound('ui-open')
+    overlayOpened()
     const previous = document.activeElement as HTMLElement | null
     // createPortal 挂载后下一帧才有真实 DOM
     const raf = requestAnimationFrame(() => {
@@ -52,6 +54,7 @@ export function Dialog({
       cancelAnimationFrame(raf)
       previous?.focus?.()
       playSound('ui-close')
+      overlayClosed()
     }
   }, [open])
 

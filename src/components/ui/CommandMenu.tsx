@@ -18,6 +18,7 @@ import { ALL_SECTIONS, type SectionId } from '../../app/navigation'
 import { useAppStore } from '../../stores/useAppStore'
 import { useInspectorStore, type InspectorType } from '../inspector/Inspector'
 import { useTaskStore } from '../../stores/useTaskStore'
+import { hasActiveOverlay } from './overlay'
 import { useNoteStore } from '../../stores/useNoteStore'
 import { useWaterStore } from '../../stores/useWaterStore'
 import { useCollectionStore } from '../../stores/useCollectionStore'
@@ -81,7 +82,9 @@ export function CommandMenu() {
           setCursor(0)
         }
       }
-      if (e.key === 'Escape') setOpen(false)
+      // 堆叠时让位：有模态弹层在上（如帮助弹窗），Esc 只关最上层，
+      // 否则一次 Esc 会把命令面板一起关掉
+      if (e.key === 'Escape' && !hasActiveOverlay()) setOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

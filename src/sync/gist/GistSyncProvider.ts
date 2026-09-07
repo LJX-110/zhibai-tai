@@ -70,13 +70,30 @@ export class GistSnapshotProvider {
       files: { [FILE_NAME]: { content: JSON.stringify(syncFile) } },
     })
     if (!this.gistId) {
-      const j = await this.request('', { method: 'POST', body })
-      const newId = (j as { id: string }).id
-      this.gistId = newId
-      this.onGistId(newId)
+      await this.createGist(body)
       return
     }
-    await this.request(`/${this.gistId}`, { method: 'PATCH', body })
+    try {
+      await this.request(`/${this.gistId}`, { method: 'PATCH', body })
+    } catch (e) {
+      // gist 在远端被手动删除 → PATCH 404；与 readSyncFile「404=视为空」语义一致，
+      // 清空本地 id 后走 POST 自动重建，否则同步将永久失败
+      if (e instanceof Error && e.message.includes('404')) {
+        this.gistId = ''
+        this.onGistId('')
+        await this.createGist(body)
+        return
+      }
+      throw e
+    }
+  }
+
+  /** 新建 Gist 并回填 id（首次同步 / 被删后重建共用） */
+  private async createGist(body: string): Promise<void> {
+    const j = await this.request('', { method: 'POST', body })
+    const newId = (j as { id: string }).id
+    this.gistId = newId
+    this.onGistId(newId)
   }
 
   async ping(): Promise<boolean> {

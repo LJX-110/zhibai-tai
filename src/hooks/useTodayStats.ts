@@ -1,7 +1,7 @@
 /**
  * 今日统计 —— 聚合各 store 得到当天数据，供首页「观」与道行计算复用
  */
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useBodyMetricLogStore } from '../stores/useBodyStore'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { useHabitLogStore } from '../stores/useHabitStore'
@@ -12,7 +12,7 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import { useTaskStore } from '../stores/useTaskStore'
 import { useWaterStore } from '../stores/useWaterStore'
 import type { Task } from '../types/entities'
-import { diffDays, todayISO, toISODate } from '../utils/id'
+import { diffDays, toISODate } from '../utils/id'
 
 export interface TodayStats {
   date: string
@@ -44,9 +44,10 @@ export function useTodayStats(): TodayStats {
   const notes = useNoteStore((s) => s.items)
   const collections = useCollectionStore((s) => s.items)
   const waterGoal = useSettingsStore((s) => s.waterGoalMl)
+  // 参与依赖：跨午夜后每分钟翻新，让下方统计随日期自动重算
+  const today = useTodayISO()
 
   return useMemo<TodayStats>(() => {
-    const today = todayISO()
     const todayStart = new Date(`${today}T00:00:00`).getTime()
     const todayEnd = new Date(`${today}T23:59:59`).getTime()
 
@@ -107,10 +108,16 @@ export function useTodayStats(): TodayStats {
       journal,
       creations,
     }
-  }, [tasks, waterLogs, pomo, habitLogs, bodyLogs, journals, notes, collections, waterGoal])
+  }, [tasks, waterLogs, pomo, habitLogs, bodyLogs, journals, notes, collections, waterGoal, today])
 }
 
-/** 当前本地日期（yyyy-mm-dd） —— 供组件直接用，避免每处重复 toISODate */
+/** 当前本地日期（yyyy-mm-dd） —— 每分钟滚动一次，跨午夜后自动翻新；
+ *  此前 useMemo(()=>…,[]) 固定首次渲染值，应用挂机过午夜统计与"今日"不再更新 */
 export function useTodayISO(): string {
-  return useMemo(() => toISODate(new Date()), [])
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(t)
+  }, [])
+  return toISODate(now)
 }

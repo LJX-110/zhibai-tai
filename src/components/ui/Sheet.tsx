@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { cn } from '../../utils/cn'
 import { playSound } from '../../services/sound'
 import { Button } from './Button'
+import { overlayClosed, overlayOpened } from './overlay'
 
 export interface SheetProps {
   open: boolean
@@ -20,11 +21,15 @@ export interface SheetProps {
 }
 
 export function Sheet({ open, onClose, title, children, footer, className, tone = 'paper' }: SheetProps) {
-  // 开合伴音（与 Dialog 同语言）
+  // 开合伴音（与 Dialog 同语言）；作为模态层登记到 overlay 栈
   useEffect(() => {
     if (open) playSound('ui-open')
+    if (open) overlayOpened()
     return () => {
-      if (open) playSound('ui-close')
+      if (open) {
+        playSound('ui-close')
+        overlayClosed()
+      }
     }
   }, [open])
 

@@ -286,6 +286,11 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     const remoteFile = await provider.readSyncFile()
     let remote: Record<string, unknown[]> | null = null
     if (remoteFile) {
+      // 快照版本不匹配时拒绝静默当作"远端为空"：否则会用本地-only 快照
+      // 覆盖推送，其他设备的数据面临被覆盖风险且无提示
+      if (remoteFile.schemaVersion !== 2) {
+        throw new Error(`远端快照版本不兼容（v${remoteFile.schemaVersion}，本应用支持 v2），请升级应用或检查同步目标`)
+      }
       const decrypted = (await decryptSyncData(key, remoteFile.ciphertext)) as {
         tables?: Record<string, unknown[]>
       }
