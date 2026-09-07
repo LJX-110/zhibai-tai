@@ -288,7 +288,7 @@ export function AIPage() {
                     )}
                     aria-label={r.enabled ? '停用' : '启用'}
                   >
-                    <Power size={13} /> {r.enabled ? '启用' : '停用'}
+                    <Power size={13} /> {r.enabled ? '停用' : '启用'}
                   </button>
                   <Button size="sm" variant="tertiary" onClick={() => openEdit(r)}>
                     编辑

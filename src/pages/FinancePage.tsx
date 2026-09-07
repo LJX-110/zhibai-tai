@@ -127,7 +127,7 @@ function MonthTab() {
       createdAt: editing?.createdAt ?? now,
     }
     await useFinanceStore.getState().save(rec)
-    // 若是购买物品，同步到购买表
+    // 若是购买物品，同步到购买表（带来源流水 id，取消勾选时可联动清理）
     if (rec.isPurchase) {
       await usePurchaseStore.getState().add({
         id: createId(),
@@ -136,8 +136,15 @@ function MonthTab() {
         category: rec.category,
         date: rec.date,
         note: rec.note,
+        financeId: rec.id,
         createdAt: now,
       })
+    } else if (editing?.isPurchase) {
+      // 编辑流水时取消了「购买」：删除此前由该流水自动生成的购买记录，避免孤儿数据
+      const orphaned = usePurchaseStore
+        .getState()
+        .items.filter((p) => p.financeId === rec.id)
+      for (const p of orphaned) await usePurchaseStore.getState().remove(p.id)
     }
     setEditorOpen(false)
     toast('已记录', 'success')

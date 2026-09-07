@@ -45,7 +45,10 @@ export function NotificationGate() {
         )
         .sort((a, b) => a.start.localeCompare(b.start))
       if (todayClasses.length > 0) {
-        const next = todayClasses[0]
+        // 取当前时间之后的最近一节课；若今日课都已结束则报第一节次日课
+        const nowHM = new Date().toTimeString().slice(0, 5)
+        const next =
+          todayClasses.find((c) => c.start > nowHM) ?? todayClasses[0]
         toast(`今日 ${todayClasses.length} 节课 · 下一节 ${next.name} ${next.start}`, 'info')
         if (browserNotifyOn) void browserNotify('课程提醒', `今日 ${todayClasses.length} 节课，下一节 ${next.name} ${next.start}`)
       }

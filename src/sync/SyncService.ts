@@ -147,10 +147,12 @@ export function pruneTombstones(tombstones: Tombstone[]): Tombstone[] {
  * 若某记录在 A 端删除后，B 端又编辑过它（updatedAt 更晚），
  * 说明用户意图是"删错了又改回来"，此时保留该记录并撤销墓碑。
  *
- * @returns 需要保留（未被撤销）的墓碑
+ * @returns kept：需要保留（未被撤销）的墓碑；doomedIds：实际被删除的 表内记录id 列表
  */
-async function applyTombstones(tombstones: Tombstone[]): Promise<Tombstone[]> {
-  if (tombstones.length === 0) return []
+async function applyTombstones(
+  tombstones: Tombstone[],
+): Promise<{ kept: Tombstone[]; doomedIds: string[] }> {
+  if (tombstones.length === 0) return { kept: [], doomedIds: [] }
 
   // 按表聚合：entity -> (entityId -> 最晚删除时刻)
   const byEntity = new Map<string, Map<string, number>>()
@@ -167,6 +169,7 @@ async function applyTombstones(tombstones: Tombstone[]): Promise<Tombstone[]> {
   }
 
   const kept: Tombstone[] = []
+  const doomedIds: string[] = []
   for (const [entity, idMap] of byEntity) {
     const ids = [...idMap.keys()]
     const table = db.table<{ id: string; updatedAt?: string; createdAt?: string }>(entity)
@@ -179,13 +182,14 @@ async function applyTombstones(tombstones: Tombstone[]): Promise<Tombstone[]> {
       else survived.add(row.id)
     }
     if (doomed.length > 0) await table.bulkDelete(doomed)
+    doomedIds.push(...doomed.map((id) => `${entity}:${id}`))
     for (const t of tombstones) {
       if (t.entity !== entity) continue
       if (survived.has(t.entityId)) continue // 删除后被重新修改 → 撤销墓碑
       kept.push(t)
     }
   }
-  return kept
+  return { kept, doomedIds }
 }
 
 async function ensureMeta(): Promise<{ deviceId: string; version: number }> {
@@ -205,19 +209,30 @@ export interface SyncRunResult {
   message?: string
 }
 
+/** 同步并发锁：手动 + 自动同步可能同时触发，合并/推送须串行（模块级单例） */
+let syncInFlight = false
+
 /**
  * 执行一次完整同步。
  * 远端快照刚被其他设备更新（sha 竞争）时，整体重跑一次"拉取-合并-推送"：
  * 重跑会拿到对方的最新快照重新合并，保证双方数据都不丢；仅重试一次，避免无限循环。
  */
 export async function runSync(): Promise<SyncRunResult> {
+  if (syncInFlight) {
+    return { ok: true, pulled: 0, pushed: 0, conflicts: 0, message: '同步进行中，已跳过本次' }
+  }
+  syncInFlight = true
   try {
-    return await runSyncOnce()
-  } catch (e) {
-    if (e instanceof Error && e.message.includes('远端快照正被其他设备更新')) {
-      return runSyncOnce()
+    try {
+      return await runSyncOnce()
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('远端快照正被其他设备更新')) {
+        return runSyncOnce()
+      }
+      throw e
     }
-    throw e
+  } finally {
+    syncInFlight = false
   }
 }
 
@@ -225,7 +240,11 @@ async function runSyncOnce(): Promise<SyncRunResult> {
   const settings = useSettingsStore.getState()
   const rawPassword = (settings.syncPassword ?? '').trim()
   const password = settings.syncPasswordEnc ? await encryptor.decrypt(rawPassword) : rawPassword
-  if (!password) throw new Error('请设置 Sync Password（用于数据加密）')
+  if (!password) {
+    // 配置缺失类失败同样落状态，供设置页状态行/错误文本展示
+    settings.set({ syncStatus: 'error', syncError: '请设置 Sync Password（用于数据加密）' })
+    throw new Error('请设置 Sync Password（用于数据加密）')
+  }
   if (!isCryptoReady()) throw new Error('当前环境不支持 Web Crypto，无法同步')
 
   // 同步模式：gist=云笺轻量（Token 一项 + 自动建 Gist） repo=私有仓库完整
@@ -234,7 +253,10 @@ async function runSyncOnce(): Promise<SyncRunResult> {
   if (mode === 'gist') {
     const rawG = (settings.gistToken ?? '').trim()
     const gistToken = settings.gistTokenEnc ? await encryptor.decrypt(rawG) : rawG
-    if (!gistToken) throw new Error('请先配置 Gist Token（仅需 gist 权限）')
+    if (!gistToken) {
+      settings.set({ syncStatus: 'error', syncError: '请先配置 Gist Token（仅需 gist 权限）' })
+      throw new Error('请先配置 Gist Token（仅需 gist 权限）')
+    }
     settings.set({ syncStatus: 'syncing', syncError: undefined })
     provider = new GistSnapshotProvider(gistToken, settings.gistId ?? '', (id) =>
       useSettingsStore.getState().set({ gistId: id }),
@@ -244,7 +266,10 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     const rawToken = (settings.githubToken ?? '').trim()
     const branch = (settings.githubBranch ?? 'main').trim() || 'main'
     const token = settings.githubTokenEnc ? await encryptor.decrypt(rawToken) : rawToken
-    if (!repo || !token) throw new Error('请先配置 GitHub 仓库与 Token')
+    if (!repo || !token) {
+      settings.set({ syncStatus: 'error', syncError: '请先配置 GitHub 仓库与 Token' })
+      throw new Error('请先配置 GitHub 仓库与 Token')
+    }
     settings.set({ syncStatus: 'syncing', syncError: undefined })
     provider = new GitHubSnapshotProvider(repo, token, branch)
   }
@@ -290,13 +315,22 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     }
 
     // 重放删除：必须在并集写回之后执行，否则被删记录会被远端副本复活
-    const liveTombstones = pruneTombstones(
-      await applyTombstones(mergedTombstones),
-    )
+    const { kept, doomedIds } = await applyTombstones(mergedTombstones)
+    const liveTombstones = pruneTombstones(kept)
     const tombstoneTable = db.table<Tombstone>(TOMBSTONES)
     await tombstoneTable.clear()
     if (liveTombstones.length > 0) await tombstoneTable.bulkPut(liveTombstones)
     merged[TOMBSTONES] = liveTombstones
+
+    // 已删除的记录从推送快照中移除（此前只删本地、快照仍残留，
+    // 云端密文随删除无限膨胀）。合并对象里残留的行一并剔除。
+    if (doomedIds.length > 0) {
+      const doomedSet = new Set(doomedIds)
+      for (const t of SYNC_TABLES) {
+        const rows = (merged[t] ?? []) as { id: string }[]
+        merged[t] = rows.filter((r) => !doomedSet.has(`${t}:${r.id}`))
+      }
+    }
 
     // 加密推送
     const syncFile: SyncFile = {

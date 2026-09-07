@@ -157,7 +157,8 @@ export function CollectionPage() {
       id: editing?.id ?? createId(),
       title: form.title.trim(),
       type: form.type,
-      category: form.category.trim() || editing?.category,
+      // 编辑时允许清空分类：留空即无分类，不再回落到原值（已有分类永远无法取消是缺陷）
+      category: form.category.trim() || undefined,
       tags: form.tags.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean),
       url: form.url.trim() || undefined,
       description: form.description.trim() || undefined,

@@ -284,6 +284,8 @@ export interface Purchase {
   date: string
   url?: string
   note?: string
+  /** 来源流水 id（由财页「购买」自动生成时记录；编辑流水取消购买可据此联动清理） */
+  financeId?: string
   createdAt: string
   updatedAt?: string
 }

@@ -211,7 +211,12 @@ export function SettingsPage() {
     toast('Sync Password 已加密保存（PBKDF2 推导数据密钥）', 'success')
   }
 
-  const connected = Boolean(settings.githubRepo && settings.githubTokenEnc)
+  // 连接判定需按模式区分：gist 用 gist 权限 Token，repo 用仓库 + contents 权限 Token。
+  // 两种模式都需要 Sync Password（数据加密密钥），缺口令时同步必然失败，不能算「已连接」。
+  const connected =
+    (settings.syncMode ?? 'repo') === 'gist'
+      ? Boolean(settings.gistTokenEnc && settings.syncPasswordEnc)
+      : Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
   const [group, setGroup] = useState<SettingsGroup>('appearance')
 
   return (
@@ -795,7 +800,11 @@ export function SettingsPage() {
           </div>
           <p className="flex items-center gap-1.5 pt-1 text-[11px] text-cinnabar">
             <span className="h-1.5 w-1.5 rounded-full bg-cinnabar" />
-            Token 经 AES-GCM 加密后仅存本机；需仓库 <code className="rounded-control bg-nested px-1">contents:write</code> 权限。绝不写入代码/提交。
+            {settings.syncMode === 'gist' ? (
+              <>Sync Password 经 PBKDF2 推导加密密钥；Gist 上仅存密文，跨设备用同一口令解密。</>
+            ) : (
+              <>Token 经 AES-GCM 加密后仅存本机；需仓库 <code className="rounded-control bg-nested px-1">contents:write</code> 权限。绝不写入代码/提交。</>
+            )}
           </p>
 
           {/* 自动同步 */}

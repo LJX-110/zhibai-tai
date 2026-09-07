@@ -103,8 +103,9 @@ export const usePomodoroTimerStore = create<PomodoroTimerState>((set, get) => ({
     }
     // 归零 → 结算本段
     if (st.mode === 'focus' && st.focusStart) {
-      const focusMin = useSettingsStore.getState().pomodoroFocusMin
       const now = new Date()
+      // 用实际经过时长而不是当前配置值：专注中途改了设置，记录仍与真实时长一致
+      const focusMin = Math.max(1, Math.round((now.getTime() - new Date(st.focusStart).getTime()) / 60000))
       const tag =
         st.assoc === 'task'
           ? '任务'
