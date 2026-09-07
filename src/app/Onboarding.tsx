@@ -3,7 +3,8 @@
  * 欢迎 → 主题 → 布局 → 喝水目标 → 完成
  */
 import { useState } from 'react'
-import { Check, Moon, Palette, Sun, Monitor, LayoutGrid, Smartphone, Droplet } from 'lucide-react'
+import { Check, Moon, Sun, Monitor, LayoutGrid, Smartphone, Droplet } from 'lucide-react'
+import { Taiji } from '../components/ui/Taiji'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import type { ThemeMode } from '../stores/useSettingsStore'
 import type { LayoutMode } from '../stores/useAppStore'
@@ -68,7 +69,7 @@ export function Onboarding() {
           {step === 0 && (
             <div className="animate-[page-fade_240ms_var(--ease-standard)]">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-ink">
-                <Palette size={28} className="text-bronze" />
+                <Taiji size={36} />
               </div>
               <h1 className="display text-2xl font-semibold text-ink">
                 个人异术工作台

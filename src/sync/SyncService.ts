@@ -18,6 +18,7 @@
 import { db } from '../db/db'
 import { BUSINESS_TABLE_KEYS, TOMBSTONES, isBusinessTable } from '../db/tables'
 import { GitHubSnapshotProvider } from './github/GithubSyncProvider'
+import { GistSnapshotProvider } from './gist/GistSyncProvider'
 import { syncMetaRepo, syncQueueRepo } from '../repositories/sync-repo'
 import {
   decryptSyncData,
@@ -222,20 +223,31 @@ export async function runSync(): Promise<SyncRunResult> {
 
 async function runSyncOnce(): Promise<SyncRunResult> {
   const settings = useSettingsStore.getState()
-  const repo = (settings.githubRepo ?? '').trim()
-  const rawToken = (settings.githubToken ?? '').trim()
-  const branch = (settings.githubBranch ?? 'main').trim() || 'main'
-  // 解密：Token 与 Sync Password 均经设备本地密钥加密存储
-  const token = settings.githubTokenEnc ? await encryptor.decrypt(rawToken) : rawToken
   const rawPassword = (settings.syncPassword ?? '').trim()
   const password = settings.syncPasswordEnc ? await encryptor.decrypt(rawPassword) : rawPassword
-
-  if (!repo || !token) throw new Error('请先配置 GitHub 仓库与 Token')
   if (!password) throw new Error('请设置 Sync Password（用于数据加密）')
   if (!isCryptoReady()) throw new Error('当前环境不支持 Web Crypto，无法同步')
 
-  settings.set({ syncStatus: 'syncing', syncError: undefined })
-  const provider = new GitHubSnapshotProvider(repo, token, branch)
+  // 同步模式：gist=云笺轻量（Token 一项 + 自动建 Gist） repo=私有仓库完整
+  const mode = settings.syncMode ?? 'repo'
+  let provider: { readSyncFile(): Promise<SyncFile | null>; writeSyncFile(f: SyncFile): Promise<void> }
+  if (mode === 'gist') {
+    const rawG = (settings.gistToken ?? '').trim()
+    const gistToken = settings.gistTokenEnc ? await encryptor.decrypt(rawG) : rawG
+    if (!gistToken) throw new Error('请先配置 Gist Token（仅需 gist 权限）')
+    settings.set({ syncStatus: 'syncing', syncError: undefined })
+    provider = new GistSnapshotProvider(gistToken, settings.gistId ?? '', (id) =>
+      useSettingsStore.getState().set({ gistId: id }),
+    )
+  } else {
+    const repo = (settings.githubRepo ?? '').trim()
+    const rawToken = (settings.githubToken ?? '').trim()
+    const branch = (settings.githubBranch ?? 'main').trim() || 'main'
+    const token = settings.githubTokenEnc ? await encryptor.decrypt(rawToken) : rawToken
+    if (!repo || !token) throw new Error('请先配置 GitHub 仓库与 Token')
+    settings.set({ syncStatus: 'syncing', syncError: undefined })
+    provider = new GitHubSnapshotProvider(repo, token, branch)
+  }
 
   try {
     const { deviceId } = await ensureMeta()

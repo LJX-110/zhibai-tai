@@ -27,6 +27,12 @@ interface SettingsState {
   pomodoroFocusMin: number
   pomodoroBreakMin: number
   /** GitHub 同步 */
+  /** 同步模式：repo=GitHub 私有仓库（完整） gist=Gist 云笺（轻量） */
+  syncMode?: 'repo' | 'gist'
+  gistToken?: string
+  gistTokenEnc?: boolean
+  /** 首次同步自动创建后回填 */
+  gistId?: string
   githubRepo?: string
   githubBranch?: string
   /** Token 经加密后存储（encryptor），绝不存明文进代码 */
@@ -72,11 +78,15 @@ interface SettingsState {
   removeIntelCategory: (name: string) => void
   resetIntelCategories: () => void
 
-  /** 藏阁筛选中隐藏的类型。类型是固定枚举（驱动签条配色/图标/同步字段），
-   *  不可用户增删——「管理」等价物是显隐：不用的类型收起，数据不受影响 */
+  /** 藏阁分类（可增删，与情报分类同交互；类型保留为条目属性徽标）。
+   *  移除分类不删条目——条目归入「其他」 */
+  collectionCategories: string[]
+  addCollectionCategory: (name: string) => void
+  removeCollectionCategory: (name: string) => void
+  resetCollectionCategories: () => void
+
+  /** 藏阁筛选中隐藏的类型（旧版类型显隐管理，已被分类体系取代，保留字段兼容旧持久化数据） */
   collectionHiddenTypes: CollectionType[]
-  toggleCollectionType: (t: CollectionType) => void
-  resetCollectionTypes: () => void
 
   set: (patch: Partial<SettingsState>) => void
 }
@@ -91,6 +101,10 @@ export const useSettingsStore = create<SettingsState>()(
       waterGoalMl: 2000,
       pomodoroFocusMin: 25,
       pomodoroBreakMin: 5,
+      syncMode: 'repo',
+      gistToken: '',
+      gistTokenEnc: false,
+      gistId: '',
       githubRepo: '',
       githubBranch: 'main',
       githubToken: '',
@@ -125,14 +139,18 @@ export const useSettingsStore = create<SettingsState>()(
         set((s) => ({ intelCategories: s.intelCategories.filter((c) => c !== name) })),
       resetIntelCategories: () =>
         set({ intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义') }),
+      collectionCategories: ['小说', '动漫', '游戏', '影视', '书籍', 'GitHub', '设计', '灵感', '其他'],
+      addCollectionCategory: (name) =>
+        set((s) => {
+          const t = name.trim()
+          if (!t || s.collectionCategories.includes(t)) return {}
+          return { collectionCategories: [...s.collectionCategories, t] }
+        }),
+      removeCollectionCategory: (name) =>
+        set((s) => ({ collectionCategories: s.collectionCategories.filter((c) => c !== name) })),
+      resetCollectionCategories: () =>
+        set({ collectionCategories: ['小说', '动漫', '游戏', '影视', '书籍', 'GitHub', '设计', '灵感', '其他'] }),
       collectionHiddenTypes: [],
-      toggleCollectionType: (t) =>
-        set((s) => ({
-          collectionHiddenTypes: s.collectionHiddenTypes.includes(t)
-            ? s.collectionHiddenTypes.filter((x) => x !== t)
-            : [...s.collectionHiddenTypes, t],
-        })),
-      resetCollectionTypes: () => set({ collectionHiddenTypes: [] }),
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },

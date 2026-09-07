@@ -49,6 +49,7 @@ export function Hotkeys() {
       <div className="space-y-2 text-sm">
         <KbdRow keys={['1', '…', '9']} desc="跳转对应空间（观 行 修 学 财 藏 情 奇 术）" />
         <KbdRow keys={['0']} desc="跳转系统" />
+        <KbdRow keys={['Ctrl', 'K']} desc="命令面板（新建 / 跳转 / 抓取）" />
         <KbdRow keys={['/']} desc="全局搜索 / 命令面板" />
         <KbdRow keys={['?']} desc="打开此速查表" />
         <KbdRow keys={['Esc']} desc="关闭弹层 / 面板" />

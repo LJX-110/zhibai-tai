@@ -98,7 +98,7 @@ function FeedMediaRow({
       role="button"
       tabIndex={0}
       className={cn(
-        'group flex cursor-pointer items-start gap-3 rounded-tile border border-line bg-panel/60 px-3 py-3 transition-colors hover:border-line-strong active:bg-nested',
+        'group flex cursor-pointer items-start gap-3 rounded-tile border border-line bg-paper/50 px-3 py-3 transition-colors hover:border-line-strong active:bg-nested',
         it.read && 'opacity-60',
       )}
     >
@@ -391,7 +391,7 @@ export function IntelligencePage() {
     query.trim() !== ''
 
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       {/* 页头 */}
       <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
         <div>

@@ -144,7 +144,7 @@ export function AIPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       {/* 页头 */}
       <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
         <div>
@@ -164,7 +164,7 @@ export function AIPage() {
             'group flex flex-col items-start gap-1 rounded-tile border px-3 py-2.5 text-left transition-colors',
             typeFilter === 'all'
               ? 'border-cinnabar/40 bg-cinnabar/5'
-              : 'border-line bg-panel hover:border-line-strong',
+              : 'border-line bg-paper/40 hover:border-line-strong',
           )}
         >
           <span className={cn('text-sm font-medium', typeFilter === 'all' ? 'text-cinnabar' : 'text-ink')}>
@@ -183,7 +183,7 @@ export function AIPage() {
                 'group flex flex-col items-start gap-1 rounded-tile border px-3 py-2.5 text-left transition-colors',
                 active
                   ? 'border-cinnabar/40 bg-cinnabar/5'
-                  : 'border-line bg-panel hover:border-line-strong',
+                  : 'border-line bg-paper/40 hover:border-line-strong',
               )}
             >
               <span className="flex items-center gap-1.5">
@@ -211,7 +211,7 @@ export function AIPage() {
 
       {/* 空态：完整工作台结构 */}
       {resources.length === 0 && (
-        <div className="talisman p-6">
+        <div className="talisman talisman--line p-6">
           <EmptyState
             icon={Box}
             title="你的术还没有收藏任何能力"

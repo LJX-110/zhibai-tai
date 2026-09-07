@@ -18,7 +18,7 @@ export function buildDailySignRecord(date: string): DivinationRecord {
     title: `每日签 · ${sign.title}`,
     input: date,
     result: `${sign.tag} · ${sign.title}`,
-    interpretation: sign.text,
+    interpretation: `${sign.text}\n宜：${sign.do}　忌：${sign.dont}\n${sign.advice}`,
     tags: ['每日签', sign.tag],
     createdAt: new Date().toISOString(),
   }

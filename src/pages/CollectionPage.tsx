@@ -58,6 +58,7 @@ const TYPE_ORDER: CollectionType[] = [
 interface FormState {
   title: string
   type: CollectionType
+  category: string
   tags: string
   url: string
   description: string
@@ -69,6 +70,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   title: '',
   type: 'novel',
+  category: '',
   tags: '',
   url: '',
   description: '',
@@ -79,10 +81,10 @@ const EMPTY_FORM: FormState = {
 
 export function CollectionPage() {
   const items = useCollectionStore((s) => s.items)
-  const hiddenTypes = useSettingsStore((s) => s.collectionHiddenTypes)
+  const collectionCategories = useSettingsStore((s) => s.collectionCategories)
   const toast = useToast().toast
   const [view, setView] = useState<'items' | 'projects'>('items')
-  const [typeFilter, setTypeFilter] = useState<CollectionType | 'all'>('all')
+  const [catFilter, setCatFilter] = useState<string>('all')
   const [onlyFav, setOnlyFav] = useState(false)
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState<CollectionItem | null>(null)
@@ -91,23 +93,18 @@ export function CollectionPage() {
   const [tidy, setTidy] = useState<{ description: string; tags: string[]; category: string; reason: string } | null>(null)
   const [tidyBusy, setTidyBusy] = useState(false)
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM })
-  /** 分类管理弹层：类型为固定枚举，管理 = 显隐（与情页管理入口一致） */
-  const [typeMgrOpen, setTypeMgrOpen] = useState(false)
+  /** 分类管理弹层：与情页同交互（增/删/恢复默认），并显示各分类条目数 */
+  const [catMgrOpen, setCatMgrOpen] = useState(false)
+  const [catDraft, setCatDraft] = useState('')
 
-  const visibleTypes = useMemo(
-    () => TYPE_ORDER.filter((t) => !hiddenTypes.includes(t)),
-    [hiddenTypes],
-  )
-
-  const toggleTypeVisible = (t: CollectionType) => {
-    useSettingsStore.getState().toggleCollectionType(t)
-    // 被隐藏的正是当前筛选时回到「全部」，避免停留在一个看不见的筛选上
-    if (typeFilter === t) setTypeFilter('all')
-  }
-
+  /** 分类筛选：'all' | 分类名 | '其他'（无分类或分类已删除的条目） */
   const list = useMemo(() => {
     return items
-      .filter((it) => typeFilter === 'all' || it.type === typeFilter)
+      .filter((it) => {
+        if (catFilter === 'all') return true
+        if (catFilter === '其他') return !it.category || !collectionCategories.includes(it.category)
+        return it.category === catFilter
+      })
       .filter((it) => !onlyFav || it.favorite)
       .filter((it) => {
         if (!query.trim()) return true
@@ -119,11 +116,22 @@ export function CollectionPage() {
         )
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  }, [items, typeFilter, onlyFav, query])
+  }, [items, catFilter, onlyFav, query, collectionCategories])
+
+  const addCategory = () => {
+    const t = catDraft.trim()
+    if (!t) return
+    useSettingsStore.getState().addCollectionCategory(t)
+    setCatDraft('')
+  }
+  const removeCategory = (name: string) => {
+    useSettingsStore.getState().removeCollectionCategory(name)
+    if (catFilter === name) setCatFilter('all')
+  }
 
   const openNew = () => {
     setEditing(null)
-    setForm({ ...EMPTY_FORM, type: typeFilter === 'all' ? 'novel' : typeFilter })
+    setForm({ ...EMPTY_FORM, type: 'novel' })
     setFormOpen(true)
   }
   const openEdit = (it: CollectionItem) => {
@@ -131,6 +139,7 @@ export function CollectionPage() {
     setForm({
       title: it.title,
       type: it.type,
+      category: it.category ?? '',
       tags: it.tags.join(' '),
       url: it.url ?? '',
       description: it.description ?? '',
@@ -148,7 +157,7 @@ export function CollectionPage() {
       id: editing?.id ?? createId(),
       title: form.title.trim(),
       type: form.type,
-      category: editing?.category,
+      category: form.category.trim() || editing?.category,
       tags: form.tags.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean),
       url: form.url.trim() || undefined,
       description: form.description.trim() || undefined,
@@ -199,6 +208,7 @@ export function CollectionPage() {
     if (!tidy || !detail) return
     const patch: Partial<CollectionItem> = {}
     if (tidy.description && tidy.description !== detail.description) patch.description = tidy.description
+    if (tidy.category && tidy.category !== (detail.category ?? '')) patch.category = tidy.category
     const mergedTags = [...new Set([...detail.tags, ...tidy.tags])]
     if (mergedTags.join('|') !== detail.tags.join('|')) patch.tags = mergedTags
     if (Object.keys(patch).length > 0) {
@@ -213,10 +223,10 @@ export function CollectionPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="腹有诗书气自华" title="藏 · 典藏" />
       {/* 藏品 / 项目 切换 */}
-      <div className="mb-4 flex gap-1 rounded-tile bg-nested/50 p-0.5 w-fit">
+      <div className="mb-4 switch-pill flex gap-1 rounded-tile p-0.5 w-fit">
         {([
           { key: 'items', label: '藏品' },
           { key: 'projects', label: '项目中心' },
@@ -226,7 +236,7 @@ export function CollectionPage() {
             onClick={() => setView(v.key)}
             className={cn(
               'rounded-control px-4 py-1.5 text-sm transition-colors',
-              view === v.key ? 'bg-paper text-ink shadow-soft' : 'text-ink-muted',
+              view === v.key ? 'switch-pill-active' : 'text-ink-muted',
             )}
           >
             {v.label}
@@ -238,33 +248,39 @@ export function CollectionPage() {
         <ProjectList />
       ) : (
         <>
-      {/* 筛选条（行尾 + 号管理类型显隐，与情页入口一致） */}
+      {/* 筛选条：分类体系（行尾 + 号管理，与情页一致）；类型为条目属性徽标 */}
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <div className="flex flex-1 flex-wrap items-center gap-1">
           <button
-            onClick={() => setTypeFilter('all')}
+            onClick={() => setCatFilter('all')}
             className={cn(
               'rounded-tile px-3 py-1.5 text-sm transition-colors',
-              typeFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+              catFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
             )}
           >
             全部 <span className="tabular text-xs opacity-60">{items.length}</span>
           </button>
-          {visibleTypes.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTypeFilter(t)}
-              className={cn(
-                'rounded-tile px-3 py-1.5 text-sm transition-colors',
-                typeFilter === t ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-              )}
-            >
-              {TYPE_LABEL[t]}
-            </button>
-          ))}
+          {collectionCategories.map((c) => {
+            const count =
+              c === '其他'
+                ? items.filter((it) => !it.category || !collectionCategories.includes(it.category)).length
+                : items.filter((it) => it.category === c).length
+            return (
+              <button
+                key={c}
+                onClick={() => setCatFilter(c)}
+                className={cn(
+                  'rounded-tile px-3 py-1.5 text-sm transition-colors',
+                  catFilter === c ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+                )}
+              >
+                {c} <span className="tabular text-xs opacity-60">{count}</span>
+              </button>
+            )
+          })}
           <Tooltip label="管理分类">
             <button
-              onClick={() => setTypeMgrOpen(true)}
+              onClick={() => setCatMgrOpen(true)}
               className="rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
               aria-label="管理分类"
             >
@@ -397,12 +413,18 @@ export function CollectionPage() {
                 <option key={t} value={t}>{TYPE_LABEL[t]}</option>
               ))}
             </Select>
-            <Input placeholder="#标签" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} aria-label="分类">
+              <option value="">不分类</option>
+              {collectionCategories.filter((c) => c !== '其他').map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </Select>
           </div>
           <div className="grid grid-cols-2 gap-3">
+            <Input placeholder="#标签" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
             <Input placeholder="评分 0-5" type="number" min={0} max={5} step={0.5} value={form.rating} onChange={(e) => setForm({ ...form, rating: e.target.value })} />
-            <Input placeholder="状态（如：在读/追更/已完）" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
           </div>
+          <Input placeholder="状态（如：在读/追更/已完）" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
           <Input placeholder="URL（可选）" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
           <Textarea placeholder="简介（可选）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           <Textarea placeholder="备注（可选）" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -496,36 +518,55 @@ export function CollectionPage() {
           </div>
         )}
       </Dialog>
-      {/* 类型管理：固定枚举不可增删，显隐即管理（隐藏不影响已有藏品） */}
-      <Dialog open={typeMgrOpen} onClose={() => setTypeMgrOpen(false)} title="管理藏阁分类">
+      {/* 分类管理：与情页同交互（增/删/恢复默认），附各分类条目数 */}
+      <Dialog open={catMgrOpen} onClose={() => setCatMgrOpen(false)} title="管理藏阁分类">
         <div className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
-            {TYPE_ORDER.map((t) => {
-              const visible = !hiddenTypes.includes(t)
+            {collectionCategories.map((c) => {
+              const count =
+                c === '其他'
+                  ? items.filter((it) => !it.category || !collectionCategories.includes(it.category)).length
+                  : items.filter((it) => it.category === c).length
               return (
-                <button
-                  key={t}
-                  onClick={() => toggleTypeVisible(t)}
-                  aria-pressed={visible}
-                  className={cn(
-                    'rounded-control border px-2.5 py-1 text-xs transition-colors',
-                    visible
-                      ? 'border-ink/40 bg-ink text-on-dark'
-                      : 'border-dashed border-line text-ink-faint hover:text-ink',
-                  )}
+                <span
+                  key={c}
+                  className="inline-flex items-center gap-1.5 rounded-control border border-line bg-raised px-2 py-1 text-xs text-ink-soft"
                 >
-                  {TYPE_LABEL[t]}
-                  {!visible && '（已隐藏）'}
-                </button>
+                  {c}
+                  <span className="tabular text-[10px] text-ink-faint">{count}</span>
+                  <button
+                    onClick={() => removeCategory(c)}
+                    className="text-ink-faint transition-colors hover:text-cinnabar"
+                    aria-label={`移除 ${c}`}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </span>
               )
             })}
           </div>
+          <div className="flex gap-2">
+            <Input
+              autoFocus
+              value={catDraft}
+              onChange={(e) => setCatDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+              placeholder="新增分类名…"
+              className="max-w-[200px]"
+            />
+            <Button size="sm" variant="secondary" onClick={addCategory} disabled={!catDraft.trim()}>
+              <Plus size={13} /> 添加
+            </Button>
+          </div>
           <div className="flex items-center justify-between border-t border-line pt-3">
-            <p className="text-[11px] text-ink-faint">点击切换显隐 · 隐藏只收起筛选页签，已有藏品不受影响</p>
+            <p className="text-[11px] text-ink-faint">移除分类不删条目，相关条目归入「其他」</p>
             <Button
               size="sm"
               variant="tertiary"
-              onClick={() => useSettingsStore.getState().resetCollectionTypes()}
+              onClick={() => {
+                useSettingsStore.getState().resetCollectionCategories()
+                setCatFilter('all')
+              }}
             >
               恢复默认
             </Button>

@@ -226,7 +226,7 @@ export interface IntelligenceItem {
 }
 
 /** 占卜类型 */
-export type DivinationType = 'daily_sign' | 'hexagram' | 'bagua' | 'qimen'
+export type DivinationType = 'daily_sign' | 'hexagram' | 'bagua' | 'qimen' | 'dayan'
 
 /** 占卜记录（按 type 区分：签 / 卦 / 六爻 / 奇门） */
 export interface DivinationRecord {
@@ -240,6 +240,8 @@ export interface DivinationRecord {
   result?: string
   /** 解卦/解读 */
   interpretation?: string
+  /** AI 个性化解读（每日签/梅花等，生成后缓存，离线可回看） */
+  aiReading?: string
   detail?: string
   raw?: string
   tags: string[]

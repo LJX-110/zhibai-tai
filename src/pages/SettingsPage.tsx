@@ -167,6 +167,7 @@ export function SettingsPage() {
   const [tokenDraft, setTokenDraft] = useState('')
   const [passwordDraft, setPasswordDraft] = useState('')
   const [aiKeyDraft, setAiKeyDraft] = useState('')
+  const [gistTokenDraft, setGistTokenDraft] = useState('')
   const pendingCount = useSyncStore((s) => s.pending)
   const conflicts = useConflictStore((s) => s.items)
   const pendingConflicts = conflicts.filter((c) => !c.resolved)
@@ -192,6 +193,15 @@ export function SettingsPage() {
     toast('Token 已加密保存（AES-GCM）', 'success')
   }
 
+  /** 保存 Gist Token：设备本地密钥加密（云笺轻量模式用） */
+  const saveGistToken = async () => {
+    if (!gistTokenDraft.trim()) return toast('请先粘贴 Gist Token', 'danger')
+    const enc = await encryptor.encrypt(gistTokenDraft.trim())
+    settings.set({ gistToken: enc, gistTokenEnc: true })
+    setGistTokenDraft('')
+    toast('Gist Token 已加密保存（AES-GCM）', 'success')
+  }
+
   /** 保存 Sync Password：设备本地密钥加密（跨设备恢复用同一密码） */
   const savePassword = async () => {
     if (passwordDraft.length < 6) return toast('Sync Password 至少 6 位', 'danger')
@@ -208,14 +218,14 @@ export function SettingsPage() {
     <div className="mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="大象无形" title="系统 · 配置" />
       {/* 分组导航：一次点击定位任一设置 */}
-      <div className="mb-5 flex w-fit gap-1 rounded-tile bg-nested/50 p-0.5">
+      <div className="switch-pill mb-5 flex w-fit gap-1 rounded-tile p-0.5">
         {SETTINGS_GROUPS.map((g) => (
           <button
             key={g.key}
             onClick={() => setGroup(g.key)}
             className={cn(
               'rounded-control px-3.5 py-1.5 text-sm transition-colors',
-              group === g.key ? 'bg-paper text-ink shadow-soft' : 'text-ink-muted hover:text-ink',
+              group === g.key ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
             )}
           >
             {g.label}
@@ -516,7 +526,7 @@ export function SettingsPage() {
         <div className="max-w-xl space-y-3">
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-sm text-ink-muted">Provider</span>
-            <div className="flex gap-1 rounded-tile bg-nested/50 p-0.5">
+            <div className="switch-pill flex shrink-0 gap-1 rounded-tile p-0.5">
               {([
                 ['local', '本地规则'],
                 ['remote', '远程模型'],
@@ -528,15 +538,18 @@ export function SettingsPage() {
                     void resolveAIProvider()
                   }}
                   className={cn(
-                    'rounded-control px-3 py-1 text-sm transition-colors',
-                    settings.aiProvider === v ? 'bg-paper text-ink' : 'text-ink-muted',
+                    'whitespace-nowrap rounded-control px-3 py-1 text-sm transition-colors',
+                    settings.aiProvider === v ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
                   )}
                 >
                   {l}
                 </button>
               ))}
             </div>
-            <span className="text-[11px] text-ink-faint">远程需配置 Key（加密存储，绝不硬编码）</span>
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-ink-faint">远程需配置 Key（加密存储，绝不硬编码）</span>
+            {settings.aiProvider === 'remote' && !settings.aiKey && (
+              <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-cinnabar">⚠ 未配置 Key：当前 AI 功能仍走本地规则，填入 Key 并测试连接后才切换远程</span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-sm text-ink-muted">预设</span>
@@ -671,7 +684,33 @@ export function SettingsPage() {
           )}
         </div>
 
+        {/* 同步模式：云笺轻量（推荐新手）/ 仓库完整 */}
+        <div className="mb-3 flex items-center gap-3">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">模式</span>
+          <div className="switch-pill flex gap-1 rounded-tile p-0.5">
+            {([
+              ['gist', '云笺轻量'],
+              ['repo', '仓库完整'],
+            ] as const).map(([m, l]) => (
+              <button
+                key={m}
+                onClick={() => settings.set({ syncMode: m })}
+                className={cn(
+                  'whitespace-nowrap rounded-control px-3 py-1 text-sm transition-colors',
+                  (settings.syncMode ?? 'repo') === m ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
+                )}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-ink-faint">
+            {(settings.syncMode ?? 'repo') === 'gist' ? '仅需一个 gist 权限 Token，Gist 自动创建' : '私有仓库 + 加密快照，支持超大历史'}
+          </span>
+        </div>
+
         <div className="space-y-2 py-1">
+          {settings.syncMode !== 'gist' && (<>
           <div className="row">
             <span className="w-20 shrink-0 text-sm text-ink-muted">仓库</span>
             <Input
@@ -705,6 +744,39 @@ export function SettingsPage() {
               <span className="text-[11px] text-teal">已保存（加密）</span>
             )}
           </div>
+          </>)}
+
+          {settings.syncMode === 'gist' && (<>
+          <div className="row">
+            <span className="w-20 shrink-0 text-sm text-ink-muted">Token</span>
+            <Input
+              type="password"
+              placeholder="GitHub Token（仅需 gist 权限）"
+              value={gistTokenDraft}
+              onChange={(e) => setGistTokenDraft(e.target.value)}
+              className="max-w-[300px]"
+            />
+            <Button size="sm" variant="secondary" onClick={saveGistToken} disabled={!gistTokenDraft.trim()}>
+              加密保存
+            </Button>
+            {settings.gistTokenEnc && (
+              <span className="text-[11px] text-teal">已保存（加密）</span>
+            )}
+          </div>
+          <div className="row">
+            <span className="w-20 shrink-0 text-sm text-ink-muted">云笺 ID</span>
+            <Input
+              value={settings.gistId ?? ''}
+              readOnly
+              placeholder="留空——首次同步自动创建"
+              className="max-w-[300px] opacity-70"
+            />
+          </div>
+          <p className="flex items-center gap-1.5 pt-1 text-[11px] text-cinnabar">
+            <span className="h-1.5 w-1.5 rounded-full bg-cinnabar" />
+            Token 经 AES-GCM 加密后仅存本机；创建 Token 时勾选 <code className="rounded-control bg-nested px-1">gist</code> 权限即可。
+          </p>
+          </>)}
           <div className="row">
             <span className="w-20 shrink-0 text-sm text-ink-muted">同步口令</span>
             <Input

@@ -2,7 +2,12 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- 用相对路径而非 /favicon-v2.svg：GitHub Pages 子路径（/zhibai-tai/）部署下
+         绝对根路径 `/favicon-v2.svg` 会 404，导致浏览器标签页无图标 -->
+    <link rel="icon" type="image/svg+xml" href="favicon-v2.svg" />
+    <!-- iOS 添加主屏幕不读 manifest，只认 apple-touch-icon（缺失会退回把页面截图当图标）；
+         180x180 为 iOS 规范尺寸，专用图由 scripts/generate_maskable_icon.py 生成 -->
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#2e5a8c" />
     <meta name="description" content="知白台 — 知其白，守其黑 · 个人效率系统" />

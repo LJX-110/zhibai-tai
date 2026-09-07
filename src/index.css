@@ -729,6 +729,42 @@
   line-height: 1.2;
 }
 
+/* ---- 分段切换胶囊（无底色，与背景一致） ----
+   选中项：caller 加 .switch-pill-active → 黛蓝实底白字 */
+.switch-pill {
+  background: transparent;
+}
+/* 防挤压：切换器内按钮永不换行、不被 flex 压缩 */
+.switch-pill > button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.switch-pill-active {
+  background: var(--color-teal);
+  color: #ffffff;
+}
+/* 键盘可达：focus-visible 统一焦点环 */
+:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-teal) 55%, transparent);
+  outline-offset: 2px;
+}
+/* 细滚动条工具类（横向列表/课表用） */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 3px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 /* ---- 页面背景：主体单色 + 极淡金光点缀（蓝白月亮 / 红黑太阳 · 随主题） ---- */
 body {
   background-color: var(--color-paper);

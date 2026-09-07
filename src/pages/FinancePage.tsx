@@ -55,7 +55,7 @@ const money = (n: number) =>
 export function FinancePage() {
   const [tab, setTab] = useState('month')
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="君子爱财，取之有道" title="财 · 度支" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       {tab === 'month' && <MonthTab />}
@@ -335,9 +335,9 @@ function AllTab() {
           <Select value={month} onChange={(e) => setMonth(e.target.value)} className="!w-auto !py-1.5 text-sm">
             {months.length > 0 ? months.map((m) => <option key={m} value={m}>{m}</option>) : <option value={month}>{month}</option>}
           </Select>
-          <div className="flex gap-1 rounded-tile bg-nested/50 p-0.5">
+          <div className="switch-pill flex gap-1 rounded-tile p-0.5">
             {(['all', 'expense', 'income'] as const).map((k) => (
-              <button key={k} onClick={() => setKind(k)} className={cn('rounded-control px-2 py-0.5 text-xs transition-colors', kind === k ? 'bg-paper text-ink' : 'text-ink-muted')}>
+              <button key={k} onClick={() => setKind(k)} className={cn('rounded-control px-2 py-0.5 text-xs transition-colors', kind === k ? 'switch-pill-active' : 'text-ink-muted')}>
                 {k === 'all' ? '全部' : k === 'expense' ? '支出' : '收入'}
               </button>
             ))}

@@ -48,7 +48,7 @@ const TABS: TabItem[] = [
 export function CultivatePage() {
   const [tab, setTab] = useState('habit')
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="苟日新，日日新" title="修 · 修身" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       {tab === 'habit' && <HabitTab />}
@@ -529,7 +529,7 @@ function GrowthTab() {
       <div className="mb-4">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-medium text-ink">道行历史</span>
-          <div className="flex gap-1 rounded-tile bg-nested/50 p-0.5">
+          <div className="switch-pill flex gap-1 rounded-tile p-0.5">
             {([
               { k: 'day', l: '按天' },
               { k: 'week', l: '按周' },
@@ -540,7 +540,7 @@ function GrowthTab() {
                 onClick={() => setGranularity(g.k)}
                 className={cn(
                   'rounded-control px-2.5 py-0.5 text-xs transition-colors',
-                  granularity === g.k ? 'bg-paper text-ink' : 'text-ink-muted',
+                  granularity === g.k ? 'switch-pill-active' : 'text-ink-muted',
                 )}
               >
                 {g.l}

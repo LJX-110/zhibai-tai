@@ -43,7 +43,7 @@ const TABS: TabItem[] = [
 export function ActionPage() {
   const [tab, setTab] = useState('today')
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="千里之行，始于足下" title="行 · 践行" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       {tab === 'today' && <TodayTab />}

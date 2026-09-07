@@ -42,7 +42,7 @@ const TABS: TabItem[] = [
 export function StudyPage() {
   const [tab, setTab] = useState('timetable')
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="学而时习之，不亦说乎" title="学 · 进境" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       <StudyAssistant />
@@ -105,6 +105,8 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
   const [mode, setMode] = useState<'today' | 'week' | 'list'>(
     resolvedLayout === 'mobile' ? 'today' : 'week',
   )
+  /** 日列点击聚焦（null = 不聚焦；用于列头变绛红的持续态） */
+  const [focusedDay, setFocusedDay] = useState<number | null>(null)
 
   // 今天课程（按时段排序）
   const todayCourses = courses
@@ -124,7 +126,7 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
             <span className="text-xs text-ink-faint">点击课程查看详情</span>
           </div>
         </div>
-        <div className="flex gap-0.5 rounded-tile bg-raised p-0.5">
+        <div className="switch-pill flex gap-0.5 rounded-tile p-0.5">
           {(
             [
               ['today', '今天'],
@@ -137,7 +139,7 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
               onClick={() => setMode(k)}
               className={cn(
                 'rounded-control px-3 py-1.5 text-sm transition-colors',
-                mode === k ? 'bg-paper text-ink shadow-soft' : 'text-ink-muted hover:text-ink',
+                mode === k ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
               )}
             >
               {label}
@@ -153,7 +155,7 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
               <button
                 key={`${course.id}-${slot.start}`}
                 onClick={() => useInspectorStore.getState().open('course', course.id)}
-                className="flex w-full items-center gap-4 rounded-tile border border-line bg-panel px-4 py-3 text-left transition-colors hover:border-line-strong"
+                className="flex w-full items-center gap-4 rounded-tile border border-line bg-paper/50 px-4 py-3 text-left transition-colors hover:border-line-strong"
               >
                 <span className={cn('h-10 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
                 <div className="tabular w-20 shrink-0 text-[13px] text-ink-muted">
@@ -173,7 +175,7 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
               </button>
             ))
           ) : (
-            <div className="rounded-paper border border-line bg-panel/60">
+            <div className="rounded-paper border border-line">
               <EmptyState
                 title="今天没有排课"
                 desc="周末或休息日，可安排自主复习"
@@ -191,7 +193,7 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
 
       {mode === 'week' && (
         /* 立轴课表：每日一根轴，课程为垂挂轴签（B 方案） */
-        <div className="overflow-x-auto pb-1">
+        <div className="scrollbar-thin overflow-x-auto pb-1">
           <div className="flex min-w-[660px] gap-2.5">
             {WEEKDAY_NAMES.map((name, wd) => {
               const isToday = wd === today
@@ -203,17 +205,25 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
                 )
                 .sort((a, b) => a.slot.start.localeCompare(b.slot.start))
               return (
-                <div
+                <button
+                  type="button"
                   key={wd}
+                  onClick={() => !isToday && setFocusedDay((v) => (v === wd ? null : wd))}
                   className={cn(
-                    'flex min-w-[86px] flex-1 flex-col rounded-tile border p-2',
-                    isToday ? 'border-gold-btn/60 bg-teal/[0.06]' : 'border-line bg-panel/50',
+                    'flex min-w-[86px] flex-1 flex-col rounded-tile border p-2 text-left transition-colors',
+                    isToday
+                      ? 'border-cinnabar/60 bg-cinnabar/[0.09]'
+                      : focusedDay === wd
+                        ? 'border-cinnabar/50 bg-cinnabar/[0.08]'
+                        : 'border-teal/40 bg-teal/[0.08] hover:border-cinnabar/50 hover:bg-cinnabar/[0.08]',
                   )}
                 >
                   <div
                     className={cn(
                       'mb-2 text-center text-xs',
-                      isToday ? 'font-medium text-gold-btn' : 'text-ink-faint',
+                      isToday || focusedDay === wd
+                        ? 'font-medium text-gold-btn'
+                        : 'text-ink-faint',
                     )}
                   >
                     {name}
@@ -243,7 +253,7 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
@@ -328,7 +338,7 @@ function PomodoroTab() {
           {/* 关联选择（仅专注开始前） */}
           {!running && mode === 'focus' && (
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              <div className="flex gap-1 rounded-tile bg-nested/50 p-0.5">
+              <div className="switch-pill flex gap-1 rounded-tile p-0.5">
                 {(['none', 'task', 'course', 'project'] as const).map((k) => (
                   <button
                     key={k}
@@ -375,7 +385,8 @@ function PomodoroTab() {
             </Button>
           </div>
         </div>
-        <div className="w-full max-w-[240px] text-sm sm:text-right">
+        {/* 右栏：水平垂直双居中（此前窄屏塌成左上角） */}
+        <div className="flex w-full max-w-[240px] flex-col items-center justify-center gap-0.5 text-center">
           <div className="text-ink-muted">今日专注</div>
           <div className="display text-3xl font-semibold text-cinnabar tabular">
             {todayFocusMin} <span className="text-sm font-normal text-ink-faint">分钟</span>

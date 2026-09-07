@@ -13,6 +13,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { TriangleAlert, RefreshCw } from 'lucide-react'
 // 深路径导入：barrel 会拉入 CommandMenu→stores，与本层形成重量级依赖
 import { Button } from '../components/ui/Button'
+import { useToastStore } from '../components/ui/Toast'
 
 interface Props {
   children: ReactNode
@@ -105,7 +106,7 @@ export class ErrorBoundary extends Component<Props, State> {
 export function reportError(context: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error)
   console.error(`[知白台] ${context}:`, error)
-  void import('../components/ui/Toast').then((m) => {
-    m.useToastStore.getState().push(`${context}失败：${message}`, 'danger')
-  })
+  // Toast 已被多处静态导入（NotificationGate/CommandMenu 等），
+  // 动态 import 不会切分 chunk，反而触发 vite 的 INEFFECTIVE_DYNAMIC_IMPORT 警告
+  useToastStore.getState().push(`${context}失败：${message}`, 'danger')
 }

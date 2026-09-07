@@ -1,15 +1,14 @@
 /**
- * 奇 —— 视觉实验场（今日奇门状态 + 八卦圆阵 + 排盘 + 历史 + 常用工具）
- * 圆阵/九宫等结构服务于信息表达；本页允许更明显的局部纸纹材质
+ * 奇 —— 梅花易数 + 每日签 + 历史 + 常用工具
  */
 import { useState } from 'react'
-import { Compass, History, ScrollText, Sparkles, Wand2 } from 'lucide-react'
+import { History, ScrollText, Sparkles, Wand2 } from 'lucide-react'
 import { useDivinationStore, saveDailySignRecord } from '../stores/useDivinationStore'
-import { BAGUA, signOf, tossCoins } from '../services/divination'
-import { analyzeLiuyao, lineSymbol, type LiuyaoAnalysis } from '../services/occult/liuyao'
-import { qimenFromString, type QimenPan } from '../services/occult/qimen'
-import { interpretLiuyao, interpretQimen } from '../services/occult/interpretation'
+import { BAGUA, signOf } from '../services/divination'
+import { castMeihua, MEIHUA_METHOD_LABEL, type MeihuaCast, type MeihuaMethod } from '../services/occult/meihua'
+import { initDayan, stepDayan, yaoTitle, type DayanState } from '../services/occult/dayan'
 import { aiService } from '../services/ai/ai-service'
+import { useTodayStats } from '../hooks/useTodayStats'
 import { recordActivity } from '../services/activity'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { Taiji } from '../components/ui/Taiji'
@@ -23,30 +22,41 @@ import { Badge, Button, Dialog, EmptyState, Input, Section, useToast } from '../
 export function OccultPage() {
   const today = todayISO()
   const sign = signOf(today)
-  const [guah, setGuah] = useState<LiuyaoAnalysis | null>(null)
-  const [pan, setPan] = useState<QimenPan | null>(null)
-  const [explain, setExplain] = useState<{ title: string; body: string } | null>(null)
-  const [explaining, setExplaining] = useState<string | null>(null)
-  const [question, setQuestion] = useState('')
   const toast = useToast().toast
   const records = useDivinationStore((s) => s.items)
+  const stats = useTodayStats()
 
-  /** AI 解释（只解释，不决定卦象/盘面；结合占问之事给现代解读） */
-  const explainResult = async (kind: 'liuyao' | 'qimen') => {
-    if (kind === 'liuyao' && !guah) return
-    if (kind === 'qimen' && !pan) return
-    setExplaining(kind)
+  const [explain, setExplain] = useState<{ title: string; body: string } | null>(null)
+  const [explaining, setExplaining] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
+
+  /** AI 白话解读（梅花） */
+  const [mhMethod, setMhMethod] = useState<MeihuaMethod>('numbers')
+  const [mhN1, setMhN1] = useState('')
+  const [mhN2, setMhN2] = useState('')
+  const [mhWords, setMhWords] = useState('')
+  const [mh, setMh] = useState<MeihuaCast | null>(null)
+
+  const castMh = () => {
+    try {
+      const c = castMeihua(mhMethod, { n1: Number(mhN1), n2: Number(mhN2), words: mhWords })
+      setMh(c)
+      setExplain(null)
+      playSound('compass')
+      toast(`梅花起卦：${c.benGua.name} · ${c.verdict}`, 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '起卦失败', 'danger')
+    }
+  }
+
+  const explainMh = async () => {
+    if (!mh) return
+    setExplaining('meihua')
     playSound('ui-open')
     try {
-      const data =
-        kind === 'liuyao'
-          ? guah!.lines.map((l) => `${l.index}爻 ${l.shen} ${l.zhi}${l.element} ${l.qin}${l.position} 变${l.changing ? '动' : '静'}`).join('；') + `；本卦 ${guah!.benGua.name}，变卦 ${guah!.bianGua?.name ?? '无'}`
-          : `局 ${pan!.dun}遁${pan!.ju}局；节气 ${pan!.jieqi}；旬首 ${pan!.xunShou}；值符 ${pan!.zhifu} 值使 ${pan!.zhishi}`
-      const body = await aiService.occultExplain(kind, data, question)
-      setExplain({
-        title: kind === 'liuyao' ? 'AI 解卦' : 'AI 解盘',
-        body: question.trim() ? `占问：${question.trim()}\n${body}` : body,
-      })
+      const data = `本卦 ${mh.benGua.name}（${mh.benGua.xiang}），卦辞：${mh.benGua.guoci}；互卦 ${mh.huGua.name}；变卦 ${mh.bianGua.name}；动爻第 ${mh.dongYao} 爻；体${mh.ti.trigram.name}（${mh.ti.element}）、用${mh.yong.trigram.name}（${mh.yong.element}），${mh.relation}。规则断曰：${mh.verdict}`
+      const body = await aiService.occultExplain('meihua', data)
+      setExplain({ title: 'AI 解卦', body })
     } catch {
       toast('AI 解释失败', 'danger')
     } finally {
@@ -54,62 +64,25 @@ export function OccultPage() {
     }
   }
 
-  const toss = () => {
-    const seed = Date.now() + Math.floor(Math.random() * 1000)
-    const coins = tossCoins(seed)
-    const result = analyzeLiuyao(
-      coins.map((l, i) => ({
-        index: i + 1,
-        value: (l.coin === 'yang' || l.coin === 'changing-yang' ? 1 : 0) as 0 | 1,
-        changing: l.coin === 'changing-yang' || l.coin === 'changing-yin',
-      })),
-    )
-    setGuah(result)
-    playSound('qimen')
-    const linesText = result.lines
-      .map((l) => `${l.index} 爻：${l.shen} ${l.zhi} ${l.element} ${l.qin}${l.position ? `（${l.position}）` : ''} ${lineSymbol(l.value, l.changing)}`)
-      .join('\n')
+  const saveMh = async () => {
+    if (!mh) return
     const record: DivinationRecord = {
       id: createId(),
-      type: 'hexagram',
+      type: 'bagua',
       date: today,
-      title: `六爻 · ${result.benGua.name}${result.bianGua ? ` → ${result.bianGua.name}` : ''}`,
-      input: `${question.trim() ? `问事：${question.trim()} · ` : ''}种子 ${seed} · ${new Date().toLocaleString('zh-CN')}`,
-      result: `${result.benGua.name}（${result.palace}宫${result.palaceElement}，世${result.shiYao}应${result.yingYao}）${result.bianGua ? `，变卦 ${result.bianGua.name}` : ''}`,
-      interpretation: `${result.dayGanZhi}日 · ${result.monthGanZhi}月 · ${result.yearGanZhi}年；传统断卦需人工参详，此处仅结构化排卦。`,
-      detail: linesText,
-      raw: result.lines.map((l) => lineSymbol(l.value, l.changing)).join(' | '),
-      tags: ['六爻', result.palace + '宫', ...(result.changingCount > 0 ? ['动爻'] : [])],
+      title: `梅花易数 · ${mh.benGua.name}（${mh.verdict}）`,
+      input: `${MEIHUA_METHOD_LABEL[mh.method]} · ${mh.seed}`,
+      result: `本卦 ${mh.benGua.name}（${mh.benGua.xiang}）· 互卦 ${mh.huGua.name} · 变卦 ${mh.bianGua.name}；动爻第 ${mh.dongYao} 爻；体${mh.ti.trigram.name}(${mh.ti.element}) 用${mh.yong.trigram.name}(${mh.yong.element})`,
+      interpretation: `${mh.relation}。断曰：${mh.verdict}。${mh.summary}\n本卦辞：${mh.benGua.guoci}`,
+      tags: ['梅花易数', mh.verdict],
       createdAt: new Date().toISOString(),
     }
-    void useDivinationStore.getState().add(record)
-    void recordActivity({ entityType: 'divination', entityId: record.id, title: `六爻起卦 · ${result.benGua.name}` })
-    toast('卦已成', 'success')
+    await useDivinationStore.getState().add(record)
+    void recordActivity({ entityType: 'divination', entityId: record.id, title: `梅花易数 · ${mh.benGua.name}` })
+    toast('卦已入档', 'success')
   }
 
-  /** 奇门排盘：由当前时间生成盘面并保存 */
-  const qimen = () => {
-    const now = new Date()
-    const p = qimenFromString(now.toISOString())
-    setPan(p)
-    playSound('compass')
-    const record: DivinationRecord = {
-      id: createId(),
-      type: 'qimen',
-      date: today,
-      title: `奇门 · ${p.dun}遁${p.ju}局`,
-      input: `${question.trim() ? `问事：${question.trim()} · ` : ''}${p.timeLabel}`,
-      result: JSON.stringify(p),
-      interpretation: p.notes.join(' '),
-      tags: ['奇门', `${p.dun}遁`, `${p.ju}局`],
-      createdAt: now.toISOString(),
-    }
-    void useDivinationStore.getState().add(record)
-    void recordActivity({ entityType: 'divination', entityId: record.id, title: `奇门排盘 · ${p.dun}遁${p.ju}局` })
-    toast(`奇门排盘：${p.dun}遁${p.ju}局`, 'success')
-  }
-
-  /** 记今日签：把今天的签存档为记录（与命令面板共用 saveDailySignRecord） */
+  /** 记今日签 */
   const saveDailySign = async () => {
     const { sign: s, saved } = await saveDailySignRecord(today)
     if (!saved) {
@@ -127,11 +100,93 @@ export function OccultPage() {
     toast('今日签已入档', 'success')
   }
 
-  const hexCount = records.filter((r) => r.type === 'hexagram').length
-  const qimenCount = records.filter((r) => r.type === 'qimen').length
+  /** AI 个性化解读：结合今日真实数据，生成后缓存进签记录 */
+  const todaySignRecord = records.find((r) => r.type === 'daily_sign' && r.date === today)
+  const genSignReading = async () => {
+    setReading(true)
+    try {
+      const body = await aiService.dailySignReading(sign, {
+        tasksDone: stats.tasksDone,
+        focusMin: stats.focusMinutes,
+        waterMl: stats.waterMl,
+      })
+      await saveDailySignRecord(today) // 幂等：未入档先入档
+      const rec = useDivinationStore
+        .getState()
+        .items.find((r) => r.type === 'daily_sign' && r.date === today)
+      if (rec) await useDivinationStore.getState().update(rec.id, { aiReading: body })
+      toast('个性化解读已生成', 'success')
+    } catch {
+      toast('AI 解读失败', 'danger')
+    } finally {
+      setReading(false)
+    }
+  }
+
+  /** 大衍筮法：五十蓍草十八变成卦（《系辞》正统法） */
+  const [dy, setDy] = useState<DayanState | null>(null)
+  const dyDone = dy?.cast ?? null
+  /** 分步：推进一变（每变 = 分二→挂一→揲四→归奇） */
+  const nextBian = () => {
+    if (!dy || dy.cast) return
+    const before = dy.steps.length
+    setDy(stepDayan(dy))
+    playSound(before % 3 === 0 ? 'paper' : 'ui-click')
+  }
+  /** 一键完成剩余变数 */
+  const finishDy = () => {
+    if (!dy || dy.cast) return
+    let st = dy
+    while (!st.cast) st = stepDayan(st)
+    setDy(st)
+    playSound('seal')
+    toast(`大衍成卦：${st.cast!.benGua.name}`, 'success')
+  }
+  const startDy = () => {
+    setDy(initDayan())
+    setExplain(null)
+    playSound('ui-open')
+  }
+  const explainDy = async () => {
+    if (!dyDone) return
+    setExplaining('dayan')
+    playSound('ui-open')
+    try {
+      const movingText = dyDone.dongYao
+        ? `第 ${dyDone.dongYao} 爻（${yaoTitle(dyDone.dongYao, dyDone.lines[dyDone.dongYao - 1].value)}）动，之 ${dyDone.bianGua!.name} 卦`
+        : '六爻安静'
+      const data = `本卦 ${dyDone.benGua.name}，卦辞：${dyDone.benGua.guoci}；${movingText}。`
+      const body = await aiService.occultExplain('dayan', data)
+      setExplain({ title: 'AI 解卦', body })
+    } catch {
+      toast('AI 解释失败', 'danger')
+    } finally {
+      setExplaining(null)
+    }
+  }
+  const saveDy = async () => {
+    if (!dyDone) return
+    const record: DivinationRecord = {
+      id: createId(),
+      type: 'dayan',
+      date: today,
+      title: `大衍筮法 · ${dyDone.benGua.name}${dyDone.dongYao ? `（动）` : ''}`,
+      input: dyDone.seedNote,
+      result: `本卦 ${dyDone.benGua.name}（${dyDone.benGua.xiang}）${dyDone.bianGua ? `· 变卦 ${dyDone.bianGua.name}` : '· 六爻安静'}；${dyDone.lines.map((l) => yaoTitle(l.index, l.value)).join('、')}`,
+      interpretation: `${dyDone.summary}\n六爻：${dyDone.lines.map((l) => `${yaoTitle(l.index, l.value)}（${l.value}）`).join(' · ')}`,
+      tags: ['大衍筮法'],
+      createdAt: new Date().toISOString(),
+    }
+    await useDivinationStore.getState().add(record)
+    void recordActivity({ entityType: 'divination', entityId: record.id, title: `大衍筮法 · ${dyDone.benGua.name}` })
+    toast('卦已入档', 'success')
+  }
+
+  const meihuaCount = records.filter((r) => r.type === 'bagua').length
+  const dayanCount = records.filter((r) => r.type === 'dayan').length
 
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       {/* 页头 */}
       <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
         <div>
@@ -139,188 +194,252 @@ export function OccultPage() {
           <p className="scribal mt-1.5 text-base text-ink-muted">阴阳不测之谓神</p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-ink-faint">
-          <Badge tone="cinnabar">六爻 {hexCount}</Badge>
-          <Badge tone="bronze">奇门 {qimenCount}</Badge>
+          <Badge tone="teal">梅花 {meihuaCount}</Badge>
+          <Badge tone="cinnabar">大衍 {dayanCount}</Badge>
           <Badge tone="plain">签 {records.filter((r) => r.type === 'daily_sign').length}</Badge>
         </div>
       </div>
 
+      {/* 今日签（全宽） */}
       <div className="grain-local rounded-paper border border-line px-4 py-5 sm:px-6">
-        {/* 左：今日签 + 八卦圆阵；右：排盘 */}
-        <div className="grid grid-cols-1 gap-x-10 lg:grid-cols-12">
-          <div className="lg:col-span-5">
-            <Section
-              title="今日签"
-              hint={today}
-              action={
-                <Button size="sm" variant="secondary" onClick={saveDailySign}>
-                  记入档
+        <Section
+          title="今日签"
+          hint={today}
+          action={
+            <Button size="sm" variant="secondary" onClick={saveDailySign}>
+              记入档
+            </Button>
+          }
+        >
+          <div className="rounded-tile border border-line bg-paper/50 p-4">
+            <div className="flex items-start gap-4">
+              <Seal size={52} char={sign.tag} tone="cinnabar" rotate={-2} />
+              <div className="min-w-0 flex-1">
+                <div className="scribal-title text-lg text-ink">{sign.title}</div>
+                <p className="mt-1 text-sm leading-relaxed text-ink-muted">{sign.text}</p>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  <span className="text-teal">宜 {sign.do}</span>
+                  <span className="text-cinnabar">忌 {sign.dont}</span>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-muted">{sign.advice}</p>
+              </div>
+              <div className="hidden shrink-0 sm:block">
+                <BaguaWheel />
+              </div>
+            </div>
+            {/* AI 个性化解读：生成后缓存，离线可回看 */}
+            <div className="mt-3 border-t border-line/70 pt-3">
+              {todaySignRecord?.aiReading ? (
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
+                  {todaySignRecord.aiReading}
+                </p>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={genSignReading} disabled={reading}>
+                  <Sparkles size={13} /> {reading ? '解读中…' : 'AI 个性化解读'}
                 </Button>
-              }
-            >
-              <div className="flex items-center gap-4 rounded-tile border border-line bg-panel/70 p-4">
-                {/* 每日签签章：圆形符箓（与全局符箓语言一致） */}
-                <Seal size={52} char={sign.tag} tone="cinnabar" rotate={-2} />
-                <div className="min-w-0">
-                  <div className="scribal-title text-lg text-ink">{sign.title}</div>
-                  <p className="mt-1 text-sm leading-relaxed text-ink-muted">{sign.text}</p>
+              )}
+            </div>
+          </div>
+        </Section>
+      </div>
+
+      {/* 梅花易数：起卦四式 → 排盘 → 解卦 → 入档 */}
+      <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <Section title="梅花易数" hint="体用生克 · 起卦四式">
+            <div className="space-y-3">
+              <div className="switch-pill flex flex-wrap gap-1 rounded-tile p-0.5">
+                {(Object.keys(MEIHUA_METHOD_LABEL) as MeihuaMethod[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMhMethod(m)}
+                    className={cn(
+                      'rounded-control px-2.5 py-1 text-xs transition-colors',
+                      mhMethod === m ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
+                    )}
+                  >
+                    {MEIHUA_METHOD_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+              {mhMethod === 'numbers' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="number" placeholder="第一数" value={mhN1} onChange={(e) => setMhN1(e.target.value)} />
+                  <Input type="number" placeholder="第二数" value={mhN2} onChange={(e) => setMhN2(e.target.value)} />
+                </div>
+              )}
+              {mhMethod === 'words' && (
+                <Input
+                  placeholder="默念心中所想之事（按字数起卦）"
+                  value={mhWords}
+                  onChange={(e) => setMhWords(e.target.value)}
+                />
+              )}
+              {mhMethod === 'time' && (
+                <p className="text-[11px] leading-relaxed text-ink-faint">
+                  以当下公历年月日时为数（简化起卦法）：年+月+日定上卦，加时辰定下卦，总数取动爻。
+                </p>
+              )}
+              {mhMethod === 'draw' && (
+                <p className="text-[11px] leading-relaxed text-ink-faint">
+                  心中默念所占之事，点击起卦连抽三签：上卦、下卦、动爻。
+                </p>
+              )}
+              <Button variant="primary" onClick={castMh} className="w-full">
+                <Wand2 size={14} /> 起卦
+              </Button>
+            </div>
+          </Section>
+        </div>
+        <div className="lg:col-span-7">
+          <Section title="梅花排盘" hint={mh ? MEIHUA_METHOD_LABEL[mh.method] : '尚未起卦'}>
+            {mh ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ['本卦', mh.benGua, 'border-cinnabar/40'],
+                    ['互卦', mh.huGua, 'border-line'],
+                    ['变卦', mh.bianGua, 'border-gold-btn/40'],
+                  ] as const).map(([label, g, border]) => (
+                    <div key={label} className={cn('rounded-tile border bg-paper/50 p-3 text-center', border)}>
+                      <div className="text-[10px] tracking-[0.2em] text-ink-faint">{label}</div>
+                      <div className="scribal-title mt-1 text-xl text-ink">{g.name}</div>
+                      <div className="mt-0.5 text-[11px] text-ink-faint">{g.xiang}</div>
+                      <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-ink-muted">{g.guoci}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-tile border border-line bg-paper/50 px-3 py-2.5 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-ink">
+                      体 <span className="font-medium text-teal">{mh.ti.trigram.name}·{mh.ti.element}</span>
+                    </span>
+                    <span className="text-ink-faint">／</span>
+                    <span className="text-ink">
+                      用 <span className="font-medium text-cinnabar">{mh.yong.trigram.name}·{mh.yong.element}</span>
+                    </span>
+                    <span className="ml-auto text-xs text-ink-faint">动爻第 {mh.dongYao} 爻</span>
+                  </div>
+                  <p className="mt-1 text-[13px] text-ink-soft">{mh.relation}。</p>
+                  <p className={cn('mt-0.5 text-sm font-medium', mh.verdict === '凶' || mh.verdict === '小凶' ? 'text-cinnabar' : 'text-teal')}>
+                    断曰：{mh.verdict}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">{mh.summary}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={explainMh} disabled={explaining === 'meihua'}>
+                    <Sparkles size={12} /> {explaining === 'meihua' ? '解读中…' : 'AI 白话解读'}
+                  </Button>
+                  <Button size="sm" variant="tertiary" onClick={saveMh}>
+                    入档
+                  </Button>
                 </div>
               </div>
-            </Section>
-
-            <Section title="八卦" hint="后天方位 · 罗盘结构">
-              <BaguaWheel />
-            </Section>
-          </div>
-
-          <div className="lg:col-span-7">
-            {/* 问事：先写你想问的，起卦/起盘后 AI 据此解读 */}
-            <div className="mb-3">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="scribal text-sm text-cinnabar">问事</span>
-                <span className="text-[11px] text-ink-faint">先写下你想占问的事，起卦/起盘后 AI 据此解读</span>
-              </div>
-              <Input
-                placeholder="例如：这周要不要换实习方向？考试能不能过？…"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+            ) : (
+              <EmptyState
+                icon={Wand2}
+                title="尚未起卦"
+                desc="四种起卦方式：年月日时、报两数、默念字占、抽签"
+                step="左侧选择起卦方式后点击「起卦」"
               />
-            </div>
-            <Section
-              title="六爻"
-              hint="本卦 / 动爻 / 变卦 · 世应六亲纳甲"
-              action={
-                <Button variant="ritual" size="sm" onClick={toss}>
-                  <Wand2 size={13} /> 起卦
+            )}
+          </Section>
+        </div>
+      </div>
+
+      {/* 大衍筮法：五十蓍草十八变成卦（《系辞》正统法） */}
+      <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <Section title="大衍筮法" hint="《系辞》正统 · 十八变成卦">
+            <div className="space-y-3">
+              <p className="text-[11px] leading-relaxed text-ink-faint">
+                大衍之数五十，其用四十九。每爻分二、挂一、揲四、归奇，三变得一爻，十八变而成卦——起卦最繁复，亦最庄重。
+              </p>
+              {!dy && (
+                <Button variant="ritual" onClick={startDy} className="w-full">
+                  <Wand2 size={14} /> 建局（其用四十九）
                 </Button>
-              }
-            >
-              {guah ? (
-                <div className="rounded-tile border border-line bg-panel/70 p-5">
-                  {/* 本卦 / 变卦 */}
-                  <div className="mb-3 flex items-center justify-center gap-4">
-                    <div className="text-center">
-                      <div className="display text-lg font-semibold text-ink">{guah.benGua.name}</div>
-                      <div className="text-xs text-ink-muted">
-                        {guah.benGua.lower.symbol}{guah.benGua.upper.symbol} {guah.palace}宫{guah.palaceElement}
-                      </div>
+              )}
+              {dy && !dy.cast && (
+                <div className="space-y-2">
+                  <Button variant="primary" onClick={nextBian} className="w-full">
+                    推进一变（第 {dy.steps.length + 1} / 18 变）
+                  </Button>
+                  <Button variant="tertiary" onClick={finishDy} className="w-full">
+                    余变从简 · 直至成卦
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Section>
+        </div>
+        <div className="lg:col-span-7">
+          <Section title="大衍排盘" hint={dyDone ? `十八变毕 · 六爻成卦` : dy ? `进行中 · ${dy.steps.length} / 18 变` : '尚未建局'}>
+            {dyDone ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-tile border border-cinnabar/40 bg-paper/50 p-3 text-center">
+                    <div className="text-[10px] tracking-[0.2em] text-ink-faint">本卦</div>
+                    <div className="scribal-title mt-1 text-xl text-ink">{dyDone.benGua.name}</div>
+                    <div className="mt-0.5 text-[11px] text-ink-faint">{dyDone.benGua.xiang}</div>
+                    <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-ink-muted">{dyDone.benGua.guoci}</p>
+                  </div>
+                  <div className="rounded-tile border border-line bg-paper/50 p-3 text-center flex flex-col items-center justify-center">
+                    <div className="text-[10px] tracking-[0.2em] text-ink-faint">动爻</div>
+                    <div className="scribal-title mt-1 text-xl text-ink">
+                      {dyDone.dongYao ? yaoTitle(dyDone.dongYao, dyDone.lines[dyDone.dongYao - 1].value) : '静'}
                     </div>
-                    {guah.bianGua && (
-                      <>
-                        <span className="text-ink-faint">→</span>
-                        <div className="text-center">
-                          <div className="display text-lg font-semibold text-cinnabar">{guah.bianGua.name}</div>
-                          <div className="text-xs text-ink-muted">
-                            {guah.bianGua.lower.symbol}{guah.bianGua.upper.symbol} 变卦
-                          </div>
-                        </div>
-                      </>
-                    )}
+                    <div className="mt-0.5 text-[11px] text-ink-faint">{dyDone.dongYao ? '老阴/老阳' : '六爻安静'}</div>
                   </div>
-                  {/* 年月日时干支 */}
-                  <div className="mb-3 flex flex-wrap justify-center gap-1.5 text-[11px] text-ink-faint">
-                    <Badge tone="plain">{guah.yearGanZhi}年</Badge>
-                    <Badge tone="plain">{guah.monthGanZhi}月</Badge>
-                    <Badge tone="cinnabar">{guah.dayGanZhi}日</Badge>
-                    <Badge tone="bronze">{guah.hourGanZhi}时</Badge>
+                  <div className="rounded-tile border border-gold-btn/40 bg-paper/50 p-3 text-center">
+                    <div className="text-[10px] tracking-[0.2em] text-ink-faint">变卦</div>
+                    <div className="scribal-title mt-1 text-xl text-ink">{dyDone.bianGua?.name ?? '—'}</div>
+                    <div className="mt-0.5 text-[11px] text-ink-faint">{dyDone.bianGua?.xiang ?? '六爻不变'}</div>
                   </div>
-                  <div className="flex flex-col items-center gap-1.5">
-                    {[...guah.lines].reverse().map((l) => (
-                      <div key={l.index} className="flex items-center gap-2.5">
-                        <span className={cn('w-6 text-right text-[11px]', l.position === '世' ? 'text-cinnabar' : l.position === '应' ? 'text-bronze' : 'text-ink-faint')}>
-                          {l.position || `${l.index}`}
-                        </span>
-                        <span className="tabular w-6 text-right text-[11px] text-ink-faint">{l.zhi}</span>
-                        <span className="w-8 text-center text-[11px] text-ink-faint">{l.qin}</span>
-                        <span className={cn('text-xl font-mono', l.changing ? 'text-cinnabar' : 'text-ink')}>
-                          {lineSymbol(l.value, l.changing).replace('（动）', '')}
-                        </span>
-                        <span className="w-6 text-[11px] text-ink-muted">{l.shen}</span>
-                      </div>
-                    ))}
+                </div>
+                {/* 六爻爻题行 */}
+                <div className="flex flex-wrap gap-1.5">
+                  {dyDone.lines.map((l) => (
+                    <span key={l.index} className="rounded-control border border-line bg-raised px-2 py-0.5 text-[11px] tabular text-ink-muted">
+                      {yaoTitle(l.index, l.value)}（{l.value}）
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[13px] leading-relaxed text-ink-muted">{dyDone.summary}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={explainDy} disabled={explaining === 'dayan'}>
+                    <Sparkles size={12} /> {explaining === 'dayan' ? '解读中…' : 'AI 白话解读'}
+                  </Button>
+                  <Button size="sm" variant="tertiary" onClick={saveDy}>
+                    入档
+                  </Button>
+                </div>
+              </div>
+            ) : dy && !dy.cast ? (
+              <div className="space-y-2 rounded-tile border border-line bg-paper/50 p-4 text-sm">
+                  <div className="flex justify-between text-xs text-ink-muted">
+                    <span>第 {Math.floor(dy.steps.length / 3) + 1} 爻 · 第 {(dy.steps.length % 3) + 1} 变</span>
+                    <span className="tabular">蓍草余 {dy.currentRemaining}</span>
                   </div>
-                  <p className="mt-4 text-center text-[11px] text-ink-faint">
-                    动爻 {guah.changingCount} 处 · 世{guah.shiYao}应{guah.yingYao} · 月建/时支为简化近似，传统断卦需人工参详
-                  </p>
-                  {/* 结构解读（非吉凶断言） */}
-                  <div className="mt-3 space-y-1 rounded-tile border border-teal/20 bg-teal/5 px-3 py-2 text-[11px] leading-relaxed text-ink-muted">
-                    {interpretLiuyao(guah).map((l, i) => (
-                      <p key={i}>· {l}</p>
-                    ))}
-                  </div>
-                  <div className="mt-2 text-center">
-                    <Button size="sm" variant="tertiary" onClick={() => explainResult('liuyao')} disabled={explaining === 'liuyao'}>
-                      <Sparkles size={12} /> {explaining === 'liuyao' ? '解释中…' : 'AI 解释'}
-                    </Button>
-                  </div>
+                  {dy.steps.length > 0 && (
+                    <p className="text-[13px] text-ink-soft">
+                      上一变：分二 {dy.steps[dy.steps.length - 1].left} + {dy.steps[dy.steps.length - 1].right}
+                      {dy.steps[dy.steps.length - 1].suspended ? ` · 挂一 ${dy.steps[dy.steps.length - 1].suspended}` : ''}
+                      {' '}→ 归奇 {dy.steps[dy.steps.length - 1].odd}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-ink-faint">点击左侧「推进一变」，三变成一爻，十八变成卦</p>
                 </div>
               ) : (
                 <EmptyState
                   icon={Wand2}
-                  title="尚未起卦"
-                  desc="点击「起卦」以三枚铜钱之法得六爻（动爻以朱砂标注）"
-                  step="铜钱六掷，得本卦与动爻"
+                  title="尚未建局"
+                  desc="大衍之数五十，其用四十九"
+                  step="点击「建局」开始十八变"
                 />
-              )}
-            </Section>
-
-            <Section
-              title="奇门"
-              hint="简化排盘 · 阴阳遁 / 九宫 / 八门 / 九星 / 八神"
-              action={
-                <Button variant="ritual" size="sm" onClick={qimen}>
-                  <Compass size={13} /> 起盘
-                </Button>
-              }
-            >
-              {pan ? (
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-                    <span className="display font-semibold text-cinnabar">
-                      {pan.dun}遁{pan.ju}局
-                    </span>
-                    <span className="text-xs text-ink-muted">{pan.timeLabel} · {pan.yearGanZhi}年</span>
-                  </div>
-                  <NinePalace pan={pan} />
-                  {pan.jieqi && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <Badge tone="cinnabar">节气 {pan.jieqi}</Badge>
-                      {pan.yuan && <Badge tone="teal">{pan.yuan}</Badge>}
-                      <Badge tone="bronze">旬首 {pan.xunShou}</Badge>
-                      {pan.zhifu && <Badge tone="plain">值符 {pan.zhifu}</Badge>}
-                      {pan.zhishi && <Badge tone="plain">值使 {pan.zhishi}</Badge>}
-                      {pan.dayGanZhi && pan.hourGanZhi && (
-                        <span className="text-ink-faint">日 {pan.dayGanZhi} · 时 {pan.hourGanZhi}</span>
-                      )}
-                    </div>
-                  )}
-                  <ul className="mt-2 space-y-1 text-[11px] text-ink-faint">
-                    {pan.notes.map((n, i) => (
-                      <li key={i}>· {n}</li>
-                    ))}
-                  </ul>
-                  {/* 结构解读（非吉凶断言） */}
-                  <div className="mt-2 space-y-1 rounded-tile border border-teal/20 bg-teal/5 px-3 py-2 text-[11px] leading-relaxed text-ink-muted">
-                    {interpretQimen(pan).map((l, i) => (
-                      <p key={i}>· {l}</p>
-                    ))}
-                  </div>
-                  <div className="mt-2">
-                    <Button size="sm" variant="tertiary" onClick={() => explainResult('qimen')} disabled={explaining === 'qimen'}>
-                      <Sparkles size={12} /> {explaining === 'qimen' ? '解释中…' : 'AI 解释'}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <EmptyState
-                  icon={Compass}
-                  title="尚未起盘"
-                  desc="按当前时间起盘（简化占法）：定阴阳遁、局数，排九宫盘面"
-                  step="点击「起盘」生成当前时辰盘面"
-                />
-              )}
-            </Section>
-          </div>
+              )
+            }
+          </Section>
         </div>
       </div>
 
@@ -329,15 +448,12 @@ export function OccultPage() {
         <div className="lg:col-span-5">
           <Section title="常用工具" hint="快捷入口">
             <div className="grid grid-cols-2 gap-2">
-              <ToolTile icon={Wand2} label="六爻起卦" desc="铜钱之法" onClick={toss} />
-              <ToolTile icon={Compass} label="奇门排盘" desc="当前时辰" onClick={qimen} />
               <ToolTile icon={ScrollText} label="记今日签" desc="签文入档" onClick={saveDailySign} />
               <ToolTile
                 icon={Sparkles}
                 label="每日签"
                 desc="今日所宜所忌"
                 onClick={async () => {
-                  // P0-C 修复：此前为空 handler，点击无任何反应
                   const { sign: s } = await saveDailySignRecord(today)
                   toast(`${s.tag} · ${s.title} —— ${s.text}`)
                 }}
@@ -345,7 +461,6 @@ export function OccultPage() {
             </div>
           </Section>
         </div>
-
         <div className="lg:col-span-7">
           <Section
             title="历史"
@@ -366,9 +481,8 @@ export function OccultPage() {
                     >
                       <span className="tabular text-xs text-ink-faint">{r.date}</span>
                       <span className="flex-1 truncate text-sm text-ink">{r.title}</span>
-                      {r.raw && <span className="hidden font-mono text-sm text-ink-muted sm:inline">{r.raw}</span>}
-                      <Badge tone={r.type === 'hexagram' ? 'cinnabar' : r.type === 'qimen' ? 'bronze' : 'plain'}>
-                        {r.type === 'daily_sign' ? '每日签' : r.type === 'hexagram' ? '六爻' : r.type === 'qimen' ? '奇门' : r.type}
+                      <Badge tone={r.type === 'bagua' || r.type === 'dayan' ? 'teal' : r.type === 'daily_sign' ? 'cinnabar' : 'plain'}>
+                        {r.type === 'daily_sign' ? '每日签' : r.type === 'bagua' ? '梅花' : r.type === 'dayan' ? '大衍' : r.type}
                       </Badge>
                     </button>
                   ))}
@@ -377,15 +491,15 @@ export function OccultPage() {
               <EmptyState
                 icon={History}
                 title="暂无占卜记录"
-                desc="起卦、排盘、记签后会自动留档"
-                step="先起一卦或排一盘"
+                desc="起卦、记签后会自动留档"
+                step="先起一卦或记一签"
               />
             )}
           </Section>
         </div>
       </div>
 
-      {/* AI 解释（只解释，不决定卦象/盘面） */}
+      {/* AI 解释 */}
       <Dialog
         open={explain != null}
         onClose={() => setExplain(null)}
@@ -397,7 +511,7 @@ export function OccultPage() {
         <pre className="whitespace-pre-wrap rounded-tile border border-line bg-paper/70 p-4 font-sans text-sm leading-relaxed text-ink-soft">
           {explain?.body}
         </pre>
-        <p className="mt-2 text-[11px] text-ink-faint">AI 仅解释结构，卦象与盘面由算法生成，不由 AI 决定。</p>
+        <p className="mt-2 text-[11px] text-ink-faint">AI 仅解释结构，卦象由算法生成，不由 AI 决定。</p>
       </Dialog>
     </div>
   )
@@ -410,7 +524,7 @@ function ToolTile({
   desc,
   onClick,
 }: {
-  icon: typeof Compass
+  icon: typeof History
   label: string
   desc: string
   onClick: () => void
@@ -418,7 +532,7 @@ function ToolTile({
   return (
     <button
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-tile border border-line bg-panel/60 px-4 py-3 text-left transition-colors hover:border-cinnabar/40 hover:bg-cinnabar/5"
+      className="group flex items-center gap-3 rounded-tile border border-line bg-paper/50 px-4 py-3 text-left transition-colors hover:border-cinnabar/40 hover:bg-cinnabar/5"
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-line bg-raised text-ink-muted group-hover:text-cinnabar">
         <Icon size={16} />
@@ -432,33 +546,6 @@ function ToolTile({
 }
 
 /** 九宫格盘面（洛书数位 · 天干/八门/九星/八神） */
-function NinePalace({ pan }: { pan: QimenPan }) {
-  const cells = [...pan.palaces].sort((a, b) => a.y - b.y || a.x - b.x)
-  return (
-    <div className="grid grid-cols-3 gap-1 rounded-control border border-line p-1">
-      {cells.map((p) => (
-        <div
-          key={`${p.x}-${p.y}`}
-          className={cn(
-            'flex min-h-[74px] flex-col items-center justify-center rounded-control border border-line/60 p-1 text-center',
-            p.number === 5 ? 'bg-nested/40' : 'bg-raised',
-          )}
-        >
-          <div className="tabular text-[10px] text-ink-faint">
-            {p.number === 5 ? '中' : `${p.pos}${p.number}`}
-          </div>
-          <div className="display mt-0.5 text-base font-semibold text-ink">{p.tianGan ?? ''}</div>
-          <div className="text-[11px] text-cinnabar">{p.men ?? ''}</div>
-          <div className="text-[10px] text-ink-muted">{p.xing}</div>
-          <div className="text-[10px] text-bronze">{p.shen ?? ''}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** 异术阵 —— 多环罗盘（外环八卦 / 中环五行 / 内环阴阳 / 中心异印）
- *  旋转仅作用于 24 刻度组；八卦与五行固定不转；五行恰为金木水火土 */
 function BaguaWheel() {
   const R = 46
   const bagua = [...BAGUA]
@@ -553,8 +640,8 @@ function BaguaWheel() {
           <circle cx="50" cy="50" r="19" fill="none" stroke="var(--color-cinnabar)" strokeWidth="0.5" opacity="0.55" />
           <circle cx="50" cy="50" r="19" fill="none" stroke="var(--color-cinnabar)" strokeWidth="0.5" strokeDasharray="6 1 2 1" opacity="0.35" />
         </svg>
-        {/* 中心太极（当前状态） */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        {/* 中心太极（当前状态）：同观页锚定真实圆心，不依赖容器内容分布 */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <Taiji size={34} />
         </div>
       </div>

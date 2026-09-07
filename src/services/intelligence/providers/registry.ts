@@ -108,10 +108,17 @@ export async function fetchAllFromSources(
  *  曾默认停用这些源（担心 rsshub.app 公共实例限流），但「静默停用」让用户
  *  误以为功能坏了——现默认全部启用：抓取失败会在源卡片上显示 lastError，
  *  由用户自行决定换镜像或删除；抓取链路本身直连+多代理兜底（见 rss.ts）。 */
-/** 机器之心 RSS 端点已下线（302 跳产品页），从默认源移除；老数据由 revive 移除。
+/** 机器之心 RSS 端点已下线（302 跳产品页）、战双帕弥什 B站路由无稳定数据源
+ *  （rsshub.app 国内不通、镜像 503、公共代理间歇可用，2026-09 实测）——
+ *  从默认源移除；老数据由 revive 迁移移除。
  *  AI 资讯可用「新增源」自行接入（如量子位 https://www.qbitai.com/feed）。 */
 const RETIRED_DEFAULTS = [
   { name: 'AI 资讯 · 机器之心', url: 'https://www.jiqizhixin.com/rss' },
+  // 播种时 URL 经 encodeURIComponent 存储，迁移匹配必须用同一形式
+  {
+    name: '战双帕弥什 · B站动态',
+    url: `https://rsshub.app/bilibili/keyword/${encodeURIComponent('战双帕弥什')}`,
+  },
 ]
 
 export function defaultSources(): IntelligenceSource[] {
@@ -151,12 +158,6 @@ export function defaultSources(): IntelligenceSource[] {
       provider: 'rss',
       category: '游戏',
       url: rsshubBiliKeyword('鸣潮'),
-    }),
-    base({
-      name: '战双帕弥什 · B站动态',
-      provider: 'rss',
-      category: '游戏',
-      url: rsshubBiliKeyword('战双帕弥什'),
     }),
     base({
       name: '国产单机 · B站动态',

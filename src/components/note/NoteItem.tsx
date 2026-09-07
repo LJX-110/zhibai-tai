@@ -19,7 +19,7 @@ export function NoteItem({ note, onEdit, onDelete, onTogglePin }: NoteItemProps)
     <div
       className={cn(
         'group relative overflow-hidden rounded-tile border border-line bg-raised p-4 pl-4.5 transition-all duration-fast hover:-translate-y-px hover:shadow-soft',
-        note.pinned && 'border-bronze/35 bg-panel',
+        note.pinned && 'border-bronze/35 bg-paper/50',
       )}
     >
       {/* 左侧签条：灵感朱砂 / 笔记鎏金 */}

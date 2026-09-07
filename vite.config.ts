@@ -11,7 +11,16 @@ export default defineConfig({
     // PWA：manifest + service worker，离线可用、可添加到主屏幕
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon-v2.svg'],
+      // dev 模式默认不注入 manifest（vite-plugin-pwa 源码：
+      // devEnvironment && !devOptions.enabled → webManifestData() 返回 void）
+      // 启动 dev 服务器安装 PWA 会拿不到图标，变成灰底白字的字母回退图。
+      // 开启后 dev 同样可见 manifest + 可安装，本地调试与线上体验一致。
+      devOptions: {
+        enabled: true,
+        type: 'module',
+        suppressWarnings: true,
+      },
       manifest: {
         name: '知白台',
         short_name: '知白台',
@@ -25,17 +34,21 @@ export default defineConfig({
         scope: './',
         icons: [
           {
-            src: './pwa-192.png',
+            src: './icon-192.png',
             sizes: '192x192',
             type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: './pwa-512.png',
+            src: './icon-512.png',
             sizes: '512x512',
             type: 'image/png',
+            purpose: 'any',
           },
+          // 常规图标含圆角/留白，复用为 maskable 会被平台遮罩裁掉外圈；
+          // 专用 maskable 版（全底铺色、内容收缩在安全区内）见 icon-maskable.png
           {
-            src: './pwa-512.png',
+            src: './icon-maskable.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

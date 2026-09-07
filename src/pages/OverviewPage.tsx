@@ -21,7 +21,7 @@ import { aiService } from '../services/ai/ai-service'
 import { playSound } from '../services/sound'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
-import { Section, EmptyState, Timeline, Button, Sheet, Taiji } from '../components/ui'
+import { Section, EmptyState, Timeline, Button, Sheet, Taiji, Dialog } from '../components/ui'
 import { formatHM, nowHM, todayISO, weekdayCN } from '../utils/id'
 import { cn } from '../utils/cn'
 import type { Task } from '../types/entities'
@@ -86,7 +86,7 @@ function QuadNode({ beast, char, dim, pos }: { beast: string; char: string; dim:
     right: 'right-0 top-1/2 -translate-y-1/2',
   }[pos]
   return (
-    <div className={cn('absolute flex w-[120px] flex-col items-center gap-1 rounded-[8px] border border-line bg-panel/85 px-2 py-1.5', posClass)}>
+    <div className={cn('absolute flex w-[120px] flex-col items-center gap-1 rounded-[8px] border border-line bg-paper/75 px-2 py-1.5', posClass)}>
       <span className="mono-meta text-[9px] text-ink-faint">
         {char} · {beast}
       </span>
@@ -164,12 +164,14 @@ function FourSymbolsCompass({ qiDims, gradeTitle }: { qiDims: QiDim[]; gradeTitl
         <line x1="180" y1="44" x2="180" y2="316" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
         <line x1="44" y1="180" x2="316" y2="180" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
       </svg>
-      {/* 中央太极 */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-1.5">
-          <Taiji size={52} className="glow-bronze" />
-          <div className="scribal-title text-lg text-ink">{gradeTitle}</div>
-        </div>
+      {/* 中央太极：锚定 svg 真实圆心（180,180）。
+          此前用 inset-0 容器居中包住"太极+文字"纵向堆叠，
+          文字把太极顶离了圆心约 15px —— 现太极独占圆心，文字锚在其下 */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <Taiji size={52} className="glow-bronze" />
+      </div>
+      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-[32px]">
+        <div className="scribal-title text-lg text-ink">{gradeTitle}</div>
       </div>
       {/* 四象 */}
       <QuadNode pos="right" beast="青龙" char="东" dim={qiDims[0]} />
@@ -288,11 +290,16 @@ export function OverviewPage() {
   const courses = useCourseStore((s) => s.items)
   const activities = useActivityStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
+  const weekTasks = useTaskStore((s) => s.items)
+  const weekPomos = usePomodoroStore((s) => s.items)
   const [editing, setEditing] = useState<Task | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [allTraceOpen, setAllTraceOpen] = useState(false)
   const [brief, setBrief] = useState('')
   const [briefLoading, setBriefLoading] = useState(false)
+  const [weekOpen, setWeekOpen] = useState(false)
+  const [week, setWeek] = useState('')
+  const [weekLoading, setWeekLoading] = useState(false)
 
   const now = new Date()
   const date = todayISO()
@@ -341,6 +348,49 @@ export function OverviewPage() {
 
   const urgent = [...stats.todayDue, ...stats.upcoming].slice(0, 5)
 
+  // 道行周报（本周聚合：周一为起点）
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+  weekStart.setHours(0, 0, 0, 0)
+  const weekTasksDone = weekTasks.filter(
+    (t) => t.done && t.completedAt && new Date(t.completedAt) >= weekStart,
+  ).length
+  const weekFocusMin = weekPomos
+    .filter((p) => p.type === 'focus' && new Date(p.startAt) >= weekStart)
+    .reduce((a, p) => a + p.durationMin, 0)
+  const ACTIVITY_LABEL: Record<string, string> = {
+    task: '待办', pomodoro: '专注', finance: '收支', collection: '收藏',
+    water: '饮水', divination: '占卜', note: '笔记', intelligence: '情报',
+  }
+  const weekTop = Object.entries(
+    activities
+      .filter((a) => new Date(a.timestamp) >= weekStart)
+      .reduce<Record<string, number>>((m, a) => {
+        m[a.entityType] = (m[a.entityType] ?? 0) + 1
+        return m
+      }, {}),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k]) => ACTIVITY_LABEL[k] ?? k)
+
+  const loadWeek = async () => {
+    setWeekOpen(true)
+    setWeekLoading(true)
+    try {
+      const body = await aiService.weeklyReport({
+        range: `本周（${weekStart.toISOString().slice(0, 10)} 起）`,
+        tasksDone: weekTasksDone,
+        focusMin: weekFocusMin,
+        creations: 0,
+        topActivity: weekTop,
+      })
+      setWeek(body)
+    } finally {
+      setWeekLoading(false)
+    }
+  }
+
   // 下一件事：今天下一节课 / 最近到期任务（打开首页即获行动指令）
   const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const nextClass = todayClasses.find((c) => c.start > nowHMStr)
@@ -378,7 +428,7 @@ export function OverviewPage() {
   }, [])
 
   return (
-    <div className="mx-auto max-w-[var(--content-max-w)]">
+    <div className="relative mx-auto max-w-[var(--content-max-w)]">
       {/* 页头：问候 + 日期 */}
       <div className="pb-6">
         <p className="mono-meta text-ink-faint">
@@ -430,7 +480,7 @@ export function OverviewPage() {
       )}
 
       {/* 今日炁象：四象罗盘 */}
-      <section className="relative overflow-hidden rounded-paper border border-line bg-panel px-6 py-6">
+      <section className="relative overflow-hidden rounded-paper border border-line px-6 py-6">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2 mono-meta text-ink-faint">
             <Sparkles size={13} className="text-bronze" />
@@ -572,26 +622,36 @@ export function OverviewPage() {
       </div>
 
       {/* AI 今日简报 */}
-      <section className="mt-2 rounded-paper border border-line bg-panel px-6 py-5">
+      <section className="mt-2 rounded-paper border border-line px-6 py-5">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2 mono-meta text-teal">
             <Sparkles size={13} /> AI 今日简报 · BRIEF
           </div>
-          <button
-            onClick={() => {
-              playSound('ui-click')
-              void loadBrief()
-            }}
-            disabled={briefLoading}
-            className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-xs text-teal transition-colors hover:bg-teal/10 disabled:opacity-50"
-          >
-            <RefreshCw size={12} className={cn(briefLoading && 'animate-spin')} /> 重新生成
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => void loadWeek()}
+              className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-xs text-bronze transition-colors hover:bg-bronze/10"
+            >
+              道行周报
+            </button>
+            <button
+              onClick={() => {
+                playSound('ui-click')
+                void loadBrief()
+              }}
+              disabled={briefLoading}
+              className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-xs text-teal transition-colors hover:bg-teal/10 disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={cn(briefLoading && 'animate-spin')} /> 重新生成
+            </button>
+          </div>
         </div>
         <p className="text-[15px] leading-relaxed text-ink-soft">
           {briefLoading ? '正在梳理今日…' : brief || '正在生成今日简报…'}
         </p>
       </section>
+
+
 
       <TaskEditor
         open={editorOpen}
@@ -602,6 +662,18 @@ export function OverviewPage() {
         task={editing}
         onSave={taskActions.save}
       />
+
+      {/* 道行周报 */}
+      <Dialog open={weekOpen} onClose={() => setWeekOpen(false)} title="道行周报">
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
+          {weekLoading ? '正在汇总本周…' : week || '本周暂无可汇总的数据。'}
+        </p>
+        {week && (
+          <p className="mt-3 border-t border-line pt-3 text-[11px] text-ink-faint">
+            本周完成 {weekTasksDone} 项 · 专注 {weekFocusMin} 分钟 · 高频：{weekTop.join('、') || '—'}
+          </p>
+        )}
+      </Dialog>
 
       {/* 全部轨迹 Sheet */}
       <Sheet open={allTraceOpen} onClose={() => setAllTraceOpen(false)} title="个人轨迹">

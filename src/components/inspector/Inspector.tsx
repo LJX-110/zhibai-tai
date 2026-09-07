@@ -328,8 +328,8 @@ function InspectorBody({ type, id, onClose }: { type: InspectorType; id: string;
       <InspectorShell title="占卜详情" onClose={onClose}>
         <h3 className="display text-lg font-semibold text-ink">{divRecord.title}</h3>
         <MetaSection>
-          <Badge tone={divRecord.type === 'hexagram' ? 'cinnabar' : divRecord.type === 'qimen' ? 'bronze' : 'plain'}>
-            {divRecord.type === 'daily_sign' ? '每日签' : divRecord.type === 'hexagram' ? '六爻' : divRecord.type === 'qimen' ? '奇门' : divRecord.type}
+          <Badge tone={divRecord.type === 'bagua' ? 'teal' : divRecord.type === 'daily_sign' ? 'cinnabar' : 'plain'}>
+            {divRecord.type === 'daily_sign' ? '每日签' : divRecord.type === 'bagua' ? '梅花' : divRecord.type === 'dayan' ? '大衍' : divRecord.type}
           </Badge>
           <Badge tone="plain">{divRecord.date}</Badge>
         </MetaSection>

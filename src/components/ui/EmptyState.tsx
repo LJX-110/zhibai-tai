@@ -1,10 +1,10 @@
 /**
  * EmptyState —— 空态（完整产品结构：说明 + 下一步 + 主要操作）
- * 右下角淡太极底纹：留白处保持品牌记忆点（低透明度不抢内容）
+ * 中央偏上放蓝白太极水印（TaijiWatermark，全局统一水印，8% 透明度不抢内容）
  */
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { Taiji } from './Taiji'
+import { TaijiWatermark } from './Watermark'
 
 export interface EmptyStateProps {
   icon?: LucideIcon
@@ -24,11 +24,20 @@ export function EmptyState({ icon: Icon, title, desc, step, action, className }:
         className,
       )}
     >
-      <div className="pointer-events-none absolute -bottom-4 -right-3 opacity-[0.05]" aria-hidden="true">
-        <Taiji size={88} />
-      </div>
+      <TaijiWatermark
+        id="es-b"
+        variant="blue"
+        opacity={0.08}
+        style={{ position: 'absolute', top: -14, right: -14, width: 100, height: 100 }}
+      />
+      <TaijiWatermark
+        id="es-r"
+        variant="red"
+        opacity={0.08}
+        style={{ position: 'absolute', bottom: -16, left: -14, width: 100, height: 100 }}
+      />
       {Icon && (
-        <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-[6px] border border-line-strong bg-panel text-ink-faint">
+        <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-[6px] border border-line-strong bg-paper/60 text-ink-faint">
           <Icon size={20} strokeWidth={1.5} />
         </div>
       )}

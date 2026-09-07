@@ -124,7 +124,7 @@ export function AITasks() {
               key={t.key}
               onClick={() => run(t.key)}
               disabled={busy != null}
-              className="group flex items-center gap-3 rounded-tile border border-line bg-panel/70 px-4 py-3 text-left transition-colors hover:border-teal/40 hover:bg-teal/5 disabled:opacity-50"
+              className="group flex items-center gap-3 rounded-tile border border-line bg-paper/50 px-4 py-3 text-left transition-colors hover:border-teal/40 hover:bg-teal/5 disabled:opacity-50"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-line bg-raised text-ink-muted group-hover:text-teal">
                 <Icon size={16} />

@@ -183,7 +183,7 @@ export function SourceManager() {
       }
     >
       {/* 定时自动抓取 */}
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-panel px-3 py-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
         <span className="text-sm text-ink">定时自动抓取</span>
         <button
           role="switch"
@@ -225,7 +225,7 @@ export function SourceManager() {
       </div>
 
       {/* 自建 CORS 代理：治本情报抓取的可用性（部署见仓库 cloudflare-worker/） */}
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-panel px-3 py-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
         <span className="text-sm text-ink">自建代理</span>
         <Input
           placeholder="https://你的-worker.workers.dev（可选）"

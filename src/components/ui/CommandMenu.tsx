@@ -97,6 +97,14 @@ export function CommandMenu() {
     const now = new Date().toISOString()
     return [
       {
+        id: 'open-hotkeys',
+        label: '键盘速查',
+        group: '帮助',
+        hint: '？',
+        run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' })),
+       },
+
+{
         id: 'task',
         label: '新建待办',
         group: '新建',
@@ -170,20 +178,6 @@ export function CommandMenu() {
           useAppStore.getState().setFocusMode(true)
           setOpen(false)
         },
-      },
-      {
-        id: 'open-liuyao',
-        label: '六爻起卦',
-        group: '新建',
-        hint: '→ 奇 · 六爻',
-        run: () => go('occult'),
-      },
-      {
-        id: 'open-qimen',
-        label: '奇门起盘',
-        group: '新建',
-        hint: '→ 奇 · 九宫',
-        run: () => go('occult'),
       },
       {
         id: 'add-follow',

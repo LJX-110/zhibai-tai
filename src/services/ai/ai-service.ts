@@ -127,7 +127,11 @@ export interface AIService {
   /** 收藏分析（简介/标签/分类/收藏原因） */
   analyzeCollection(item: { title: string; type: string; category?: string; tags: string[] }): Promise<{ description: string; tags: string[]; category: string; reason: string }>
   /** 术数解释（AI 只解释，不决定卦象/盘面；支持占问之事） */
-  occultExplain(kind: 'liuyao' | 'qimen', data: string, question?: string): Promise<string>
+  occultExplain(kind: 'liuyao' | 'qimen' | 'meihua' | 'daily_sign' | 'dayan', data: string, question?: string): Promise<string>
+  /** 每日签个性化解读（结合今日数据；远程就绪走模型，否则本地拼装） */
+  dailySignReading(sign: { title: string; text: string; tag: string; advice: string }, stats: { tasksDone: number; focusMin: number; waterMl: number }): Promise<string>
+  /** 道行周报（一周复盘：亮点 / 短板 / 下周一条可执行建议） */
+  weeklyReport(input: { range: string; tasksDone: number; focusMin: number; creations: number; topActivity: string[] }): Promise<string>
 }
 
 /**
@@ -351,18 +355,44 @@ export const aiService: AIService = {
     }
   },
 
-  occultExplain(kind: 'liuyao' | 'qimen', data: string, question?: string): Promise<string> {
+  occultExplain(kind: 'liuyao' | 'qimen' | 'meihua' | 'daily_sign' | 'dayan', data: string, question?: string): Promise<string> {
     // AI 只负责解释，不生成卦象/盘面；可结合占问之事给现代解读
     const q = question?.trim()
-    const prompt =
-      kind === 'liuyao'
-        ? q
-          ? `以下是一组六爻排盘结果。占问之事：${q}。请先 1-2 句概述卦象与动爻指向，再针对占问之事用现代人话给 3-5 句解读与可执行建议（克制理性，不编造绝对吉凶）。\n${data}`
-          : `以下是一组六爻排盘结果。请以克制、理性的方式，用 3-4 句说明卦象结构与动爻指向，不要编造吉凶断言：\n${data}`
-        : q
-          ? `以下是一组奇门盘（简化占法）。占问之事：${q}。请先 1-2 句概述盘面（值符值使/宫位指向），再针对占问之事用现代人话给 3-5 句解读与可执行建议（克制理性，不编造绝对吉凶）。\n${data}`
-          : `以下是一组奇门盘（简化占法）。请以克制、理性的方式，用 3-4 句说明盘面结构与值符值使含义，不要编造吉凶断言：\n${data}`
-    return remoteOr(prompt, () => `结构要点：\n${data}${q ? `\n\n（针对「${q}」的现代解读需接入远程 AI）` : ''}`)
+    const head = q ? `占问之事：${q}。` : ''
+    const prompts: Record<typeof kind, string> = {
+      liuyao: `${head}以下是一组六爻排盘结果。请先 1-2 句概述卦象与动爻指向，再用现代人话给 3-5 句解读与可执行建议（克制理性，不编造绝对吉凶）。\n${data}`,
+      qimen: `${head}以下是一组奇门盘（简化占法）。请先 1-2 句概述盘面（值符值使/宫位指向），再用现代人话给 3-5 句解读与可执行建议（克制理性，不编造绝对吉凶）。\n${data}`,
+      meihua: `${head}以下是一组梅花易数排盘（本卦/互卦/变卦与体用生克）。请先 1-2 句概述体用格局与吉凶倾向，再针对占问之事用现代人话给 3-5 句解读与可执行建议（克制理性，不编造绝对吉凶）。\n${data}`,
+      dayan: `${head}以下是大衍筮法所得之卦（含动爻）。请先 1-2 句结合卦辞概述卦意，再针对占问之事用现代人话给 3-5 句解读与可执行建议（克制理性，不编造绝对吉凶）。\n${data}`,
+      daily_sign: `${head}以下是今日签与用户今日的真实数据。请把签文建议与用户当日实际状态结合起来，用 2-3 句中文给出贴身的个性化解读（不重复签文原文，克制不说教）。\n${data}`,
+    }
+    return remoteOr(prompts[kind], () => `结构要点：\n${data}${q ? `\n\n（针对「${q}」的现代解读需接入远程 AI）` : ''}`)
+  },
+
+  dailySignReading(sign, stats) {
+    const data = `签：${sign.title}（${sign.tag}）· ${sign.text} · 建议：${sign.advice}\n今日数据：完成任务 ${stats.tasksDone} 项，专注 ${stats.focusMin} 分钟，饮水 ${stats.waterMl}ml。`
+    return remoteOr(data, () => {
+      const parts: string[] = []
+      if (stats.focusMin >= 50) parts.push('今日专注已经不短，签中「守」字正合收势。')
+      else if (stats.tasksDone === 0) parts.push('今日尚未动笔，签意正好用来开局。')
+      else parts.push('今日节奏平缓，按签中建议稳步推进即可。')
+      return `${sign.advice} ${parts.join(' ')}`
+    })
+  },
+
+  weeklyReport({ range, tasksDone, focusMin, creations, topActivity }) {
+    const data = `${range}：完成待办 ${tasksDone} 项，专注 ${focusMin} 分钟，新增灵感/收藏 ${creations} 条，高频活动：${topActivity.join('、') || '无'}。`
+    return remoteOr(
+      `${data}请用中文写一份 3-4 句的周报复盘：先肯定一个亮点，再指出一个短板，最后给一条下周可执行的具体建议（务实，不说空话）。`,
+      () => {
+        const lines: string[] = []
+        lines.push(`本周完成待办 ${tasksDone} 项、专注 ${focusMin} 分钟${creations ? `，新增记录 ${creations} 条` : ''}。`)
+        if (focusMin >= 200) lines.push('专注状态很好，节奏已经立住了。')
+        else lines.push('专注还有空间，下周试着留出两段不受打扰的整块时间。')
+        if (topActivity.length > 0) lines.push(`精力主要花在：${topActivity.join('、')}。`)
+        return lines.join('\n')
+      },
+    )
   },
 }
 
