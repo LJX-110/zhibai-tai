@@ -66,7 +66,7 @@ npm run build      # 生产构建（输出 dist/）
 
 ## 数据与同步
 
-- 数据 100% 在本地，浏览器 IndexedDB（共 23 张业务表）。
+- 数据 100% 在本地，浏览器 IndexedDB（共 24 张业务表）。
 - 同步原理：将全量数据加密为快照文件写入指定 GitHub 仓库（Git Data API：blob → tree → commit → ref，支持大快照、原子提交、并发冲突自动重跑），任意设备拉取后解密合并；合并采用 Last-Write-Wins，冲突记录保存在本地可查，删除经墓碑跨设备传播。
 - 安全：同步密文由你的 **Sync Password** 经 PBKDF2 推导密钥加密，仓库中的快照无密钥不可读；GitHub Token 亦由本地密钥加密存储。
 
