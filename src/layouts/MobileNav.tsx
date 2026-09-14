@@ -150,10 +150,16 @@ export function MobileNav() {
                   active ? 'text-on-sidebar' : 'text-on-sidebar-muted',
                 )}
               >
-                <span className={cn('text-base leading-none', active && 'display')}>
+                <span className={cn('leading-none', active ? 'display text-base' : 'text-sm')}>
                   {s.label}
                 </span>
-                <span className={cn('text-[9px] tracking-[0.16em]', active ? 'text-on-sidebar' : 'text-on-sidebar-muted opacity-70')}>
+                {/* 英文副标仅激活态显示：五个标签并排时都带双语会堆叠发挤 */}
+                <span
+                  className={cn(
+                    'text-[8px] tracking-[0.18em]',
+                    active ? 'text-on-sidebar/70' : 'hidden',
+                  )}
+                >
                   {s.sub}
                 </span>
                 {active && (
@@ -173,7 +179,9 @@ export function MobileNav() {
             )}
           >
             <span className="text-base leading-none">⋯</span>
-            <span className="text-[9px] tracking-[0.16em] opacity-70">MORE</span>
+            <span className={cn('text-[8px] tracking-[0.18em]', moreOpen || moreSections.some((m) => m.id === section) ? 'text-on-sidebar/70' : 'hidden')}>
+              MORE
+            </span>
           </button>
         </div>
       </nav>

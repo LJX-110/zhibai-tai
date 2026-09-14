@@ -4,7 +4,7 @@
  * 每条：标题 / 摘要 / 来源 / 分类 / 时间 / 标签；操作仅保留 收藏·稍后·更多，其余进 Inspector
  */
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, SlidersHorizontal, Sparkles, Star, Trash2, X } from 'lucide-react'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useSourceStore } from '../stores/useSourceStore'
 import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
@@ -265,6 +265,8 @@ export function IntelligencePage() {
   const [onlyFav, setOnlyFav] = useState(false)
   const [onlyUnread, setOnlyUnread] = useState(false)
   const [query, setQuery] = useState('')
+  /** 进阶筛选（来源/时间/收藏/未读）默认折叠：手机首屏只保留搜索+分类 */
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE)
   /** 最近一次抓取的结果：失败源要留在界面上，而不是只在 toast 里闪一下 */
@@ -535,54 +537,73 @@ export function IntelligencePage() {
         </Tooltip>
       </div>
 
-      {/* 筛选条 */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input
-          placeholder="搜索标题 / 标签"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="!w-40 !py-1.5 !pl-3 text-sm sm:!w-52"
-        />
-        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="!w-auto !py-1.5 text-sm">
-          {catOptions.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </Select>
-        <Select
-          value={sourceType}
-          onChange={(e) => setSourceType(e.target.value as SourceType | 'all')}
-          className="!w-auto !py-1.5 text-sm"
-        >
-          {SOURCE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-        <Select value={time} onChange={(e) => setTime(e.target.value)} className="!w-auto !py-1.5 text-sm">
-          {TIME_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </Select>
-        <button
-          onClick={() => setOnlyFav((v) => !v)}
-          className={cn(
-            'flex items-center gap-1 rounded-tile px-2.5 py-2 text-sm transition-colors',
-            onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
-          )}
-        >
-          <Bookmark size={13} /> 收藏
-        </button>
-        <button
-          onClick={() => setOnlyUnread((v) => !v)}
-          className={cn(
-            'flex items-center gap-1 rounded-tile px-2.5 py-2 text-sm transition-colors',
-            onlyUnread ? 'bg-teal/15 text-teal' : 'bg-raised text-ink-muted hover:text-ink',
-          )}
-        >
-          未读
-        </button>
-        <span className="ml-auto hidden text-xs text-ink-faint sm:inline">
-          {list.length} 条{mediaCount > 0 ? ` · ${mediaCount} 条含图` : ''}
-        </span>
+      {/* 筛选条：手机上只留高频（搜索+分类），来源/时间/收藏/未读收进「筛选」折叠，
+          避免 6 个控件挤在首屏（此前 375px 下一行塞满、换行后仍是三行小控件堆叠） */}
+      <div className="mb-4 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="搜索标题 / 标签"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="!w-40 !py-1.5 !pl-3 text-sm sm:!w-52"
+          />
+          <Select value={category} onChange={(e) => setCategory(e.target.value)} className="!w-auto !py-1.5 text-sm">
+            {catOptions.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </Select>
+          <button
+            onClick={() => setMoreFiltersOpen((v) => !v)}
+            className={cn(
+              'flex items-center gap-1 rounded-tile px-2.5 py-2 text-sm transition-colors',
+              moreFiltersOpen || filtersActive
+                ? 'bg-teal/10 text-teal'
+                : 'bg-raised text-ink-muted hover:text-ink',
+            )}
+            aria-expanded={moreFiltersOpen}
+          >
+            <SlidersHorizontal size={13} /> 筛选
+          </button>
+          <span className="ml-auto hidden text-xs text-ink-faint sm:inline">
+            {list.length} 条{mediaCount > 0 ? ` · ${mediaCount} 条含图` : ''}
+          </span>
+        </div>
+        {moreFiltersOpen && (
+          <div className="flex flex-wrap items-center gap-2 rounded-tile border border-line bg-raised px-2.5 py-2">
+            <Select
+              value={sourceType}
+              onChange={(e) => setSourceType(e.target.value as SourceType | 'all')}
+              className="!w-auto !py-1 text-sm"
+            >
+              {SOURCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+            <Select value={time} onChange={(e) => setTime(e.target.value)} className="!w-auto !py-1 text-sm">
+              {TIME_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+            <button
+              onClick={() => setOnlyFav((v) => !v)}
+              className={cn(
+                'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
+                onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
+              )}
+            >
+              <Bookmark size={13} /> 收藏
+            </button>
+            <button
+              onClick={() => setOnlyUnread((v) => !v)}
+              className={cn(
+                'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
+                onlyUnread ? 'bg-teal/15 text-teal' : 'bg-raised text-ink-muted hover:text-ink',
+              )}
+            >
+              未读
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 关注管理：关注此前只能加不能删、也看不到加了什么，是个单向入口 */}

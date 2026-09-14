@@ -11,7 +11,7 @@ import { useNoteStore } from '../../stores/useNoteStore'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { playSound } from '../../services/sound'
 import { createId } from '../../utils/id'
-import { Button, Dialog, Input, useToast } from '../ui'
+import { Button, Dialog, Input, useToast, Collapse } from '../ui'
 
 export function StudyAssistant() {
   const courses = useCourseStore((s) => s.items)
@@ -86,27 +86,34 @@ export function StudyAssistant() {
   }
 
   return (
-    <div className="mt-6">
-      <div className="section-title text-sm">
+    // 默认收起：AI 助手是低频入口，首屏不该被它占据（手机尤其明显）。
+    // Collapse 只存内存态，切换板块后自动收起，页面保持清爽。
+    <Collapse
+      title={
         <span className="display flex items-center gap-1.5">
           <Bot size={14} className="text-teal" /> AI 学习助手
         </span>
-        <span className="hint">输入目标，生成学习计划（预览后确认写入）</span>
-      </div>
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <BookOpen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
-          <Input
-            placeholder="如：准备数据结构考试 / 期末复习高数"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && generate()}
-            className="!pl-9"
-          />
+      }
+      hint="生成学习计划"
+      defaultOpen={false}
+      className="mb-4"
+    >
+      <div className="pt-1">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <BookOpen size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+            <Input
+              placeholder="如：准备数据结构考试 / 期末复习高数"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && generate()}
+              className="!pl-9"
+            />
+          </div>
+          <Button variant="primary" onClick={generate} disabled={busy || !goal.trim()}>
+            {busy ? '生成中…' : '生成计划'}
+          </Button>
         </div>
-        <Button variant="primary" onClick={generate} disabled={busy || !goal.trim()}>
-          {busy ? '生成中…' : '生成计划'}
-        </Button>
       </div>
 
       <Dialog
@@ -132,6 +139,6 @@ export function StudyAssistant() {
           <Check size={11} /> 写入前请确认：AI 仅生成建议，可自由修改。
         </p>
       </Dialog>
-    </div>
+    </Collapse>
   )
 }

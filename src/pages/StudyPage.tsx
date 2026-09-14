@@ -189,7 +189,8 @@ function TimetableTab({
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 space-y-2">
+        {/* 标题行：只放标题与周次（学期起始日入口同样在此，未设置时显式露出） */}
         <div className="flex flex-wrap items-baseline gap-2">
           <h2 className="scribal-title text-xl text-ink">课程表</h2>
           {week != null ? (
@@ -202,20 +203,22 @@ function TimetableTab({
               第 {week} 周
             </button>
           ) : (
-            /* 未设学期起始日就没法算周次，单双周形同虚设 —— 入口直接摆在课表上 */
-            <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-              学期首周周一
+            /* 未设学期起始日就没法算周次：图标入口，点击弹出日期选择（不占标题行宽） */
+            <label className="flex cursor-pointer items-center gap-1 text-xs text-cinnabar">
+              设置首周
               <input
                 type="date"
                 value={termStartDate ?? ''}
                 onChange={(e) =>
                   useSettingsStore.getState().set({ termStartDate: e.target.value || undefined })
                 }
-                className="rounded-control border border-line bg-raised px-1.5 py-0.5 text-xs text-ink"
+                className="h-5 w-0 cursor-pointer opacity-0"
+                aria-label="设置学期首周周一"
               />
             </label>
           )}
         </div>
+        {/* 操作行：视图切换 + 课程管理（与标题分行，手机上一行内不再塞四样控件） */}
         <div className="flex items-center gap-2">
           <div className="switch-pill flex gap-0.5 rounded-tile p-0.5">
             {(

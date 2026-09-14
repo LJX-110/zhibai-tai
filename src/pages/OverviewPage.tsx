@@ -520,7 +520,7 @@ export function OverviewPage() {
       )}
 
       {/* 今日炁象：四象罗盘 */}
-      <section className="relative overflow-hidden rounded-paper border border-line px-6 py-6">
+      <section className="relative overflow-hidden rounded-paper border border-line px-6 pb-4 pt-5">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2 mono-meta text-ink-faint">
             <Sparkles size={13} className="text-bronze" />

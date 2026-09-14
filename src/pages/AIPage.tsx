@@ -162,8 +162,8 @@ export function AIPage() {
         </Button>
       </div>
 
-      {/* 分类顶部条（带计数） */}
-      <div className="mb-4 grid grid-cols-4 gap-2 sm:grid-cols-7">
+      {/* 分类顶部条（带计数）：手机上 4 列过挤，改为 2 行 × 3/4 列的紧凑网格 */}
+      <div className="mb-4 grid grid-cols-4 gap-2 sm:grid-cols-7 max-[420px]:grid-cols-3">
         <button
           onClick={() => setTypeFilter('all')}
           className={cn(
