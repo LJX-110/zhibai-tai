@@ -1,10 +1,20 @@
+import { readFileSync } from 'node:fs'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/** 版本号单一事实源：package.json。
+ *  此前应用内有三处手写版本（页脚 V1.6 / 导出备份 0.4.0 / package.json 0.3.0），
+ *  互相矛盾，排查线上问题时无法确认用户到底跑的是哪一版。 */
+const { version } = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
+) as { version: string }
+
 // https://vite.dev/config/
 export default defineConfig({
+  // 构建期注入，应用内统一从 src/app/version.ts 读取
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
     react(),
     tailwindcss(),

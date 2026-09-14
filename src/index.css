@@ -250,10 +250,42 @@
     background: var(--color-raised);
   }
 
+  /* 横向滚动行的可发现性：渐隐只作用于右缘（左侧不遮第一项）。
+     用 mask 而不是叠一层渐变遮罩，这样不必关心父容器底色（宣纸/浮层/侧栏都能用）。
+     内容不足一屏时右侧是空白，渐隐自然看不出来。 */
+  .scroll-fade-x {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 0,
+      #000 calc(100% - 28px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
+  }
+
   /* 触控目标 ≥44px（移动端通用） */
   .touch-target {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  /* 列表操作按钮的显隐 —— 必须区分指针能力。
+     此前统一写 opacity-0 + group-hover:opacity-100，在触屏上没有 hover 事件，
+     按钮永远停在 opacity:0：手机端「详情 / 编辑 / 删除」看不见也点不到。
+     现仅对真正支持悬停的指针（鼠标/触控板）做悬停显现，触屏一律常显；
+     :focus-within 保证键盘用户同样可达。 */
+  .hover-reveal {
+    opacity: 1;
+    transition: opacity var(--duration-fast) var(--ease-standard);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .hover-reveal {
+      opacity: 0;
+    }
+    .group:hover .hover-reveal,
+    .group:focus-within .hover-reveal {
+      opacity: 1;
+    }
   }
 
   /* 移动端安全区 */
@@ -801,14 +833,7 @@ body {
   opacity: 0;
 }
 
-/* 立轴轴签：课程名竖排（立轴课表 B 方案） */
-.vertical-slip {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  letter-spacing: 0.12em;
-}
-
-/* 立轴轴签：课程名竖排（立轴课表 B 方案） */
+/* 立轴轴签：课程名竖排（周景课表） */
 .vertical-slip {
   writing-mode: vertical-rl;
   text-orientation: upright;

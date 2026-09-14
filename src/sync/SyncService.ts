@@ -47,6 +47,52 @@ export interface SyncFile {
 
 type AnyRecord = { id: string; updatedAt?: string; createdAt?: string }
 
+/**
+ * 只看本机、不参与跨设备比对的字段（「本机这次抓得怎么样」）。
+ * 跟着快照走只会两台设备互相覆盖，还会凭空制造 LWW 冲突记录。
+ * 策略：导出时剥离，写回本地时保留本机原值。
+ */
+const LOCAL_ONLY_FIELDS: Record<string, readonly string[]> = {
+  intelligenceSources: ['lastFetchedAt', 'lastError'],
+}
+
+/** 导出前剥离本机独有字段（纯函数，便于单测） */
+export function stripLocalOnly(table: string, rows: unknown[]): unknown[] {
+  const fields = LOCAL_ONLY_FIELDS[table]
+  if (!fields || rows.length === 0) return rows
+  return rows.map((row) => {
+    const copy = { ...(row as Record<string, unknown>) }
+    for (const f of fields) delete copy[f]
+    return copy
+  })
+}
+
+/** 写回本地前，把本机独有的字段值还原回来（远端快照里这些字段不该覆盖本机） */
+async function restoreLocalOnly(
+  table: string,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  const fields = LOCAL_ONLY_FIELDS[table]
+  if (!fields || rows.length === 0) return rows
+  const ids = rows.map((r) => String(r.id))
+  const localRows = await db
+    .table<Record<string, unknown>, string>(table)
+    .where('id')
+    .anyOf(ids)
+    .toArray()
+  const byId = new Map(localRows.map((r) => [String(r.id), r]))
+  return rows.map((row) => {
+    const local = byId.get(String(row.id))
+    if (!local) return row
+    const next = { ...row }
+    for (const f of fields) {
+      if (local[f] !== undefined) next[f] = local[f]
+      else delete next[f]
+    }
+    return next
+  })
+}
+
 export function modifiedAt(r: AnyRecord): number {
   const t = r.updatedAt ?? r.createdAt ?? 0
   return new Date(t).getTime() || 0
@@ -56,7 +102,7 @@ export function modifiedAt(r: AnyRecord): number {
 async function exportData(): Promise<Record<string, unknown[]>> {
   const tables: Record<string, unknown[]> = {}
   for (const t of SYNC_TABLES) {
-    tables[t] = await db.table(t).toArray()
+    tables[t] = stripLocalOnly(t, await db.table(t).toArray())
   }
   tables[TOMBSTONES] = await db.table<Tombstone>(TOMBSTONES).toArray()
   return tables
@@ -313,10 +359,13 @@ async function runSyncOnce(): Promise<SyncRunResult> {
         )
       : ((local[TOMBSTONES] ?? []) as Tombstone[])
 
-    // 写回本地（并集）
+    // 写回本地（并集）；本机独有的字段（抓取状态等）以本机为准
     for (const t of SYNC_TABLES) {
       const rows = merged[t]
-      if (rows && rows.length > 0) await db.table(t).bulkPut(rows as never[])
+      if (rows && rows.length > 0) {
+        const restored = await restoreLocalOnly(t, rows as Record<string, unknown>[])
+        await db.table(t).bulkPut(restored as never[])
+      }
     }
 
     // 重放删除：必须在并集写回之后执行，否则被删记录会被远端副本复活

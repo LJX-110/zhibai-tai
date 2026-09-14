@@ -5,20 +5,25 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutMode } from './useAppStore'
-import type { CollectionType } from '../types/entities'
-import { INTELLIGENCE_CATEGORIES } from '../services/intelligence/providers/index'
+import { DEFAULT_MOBILE_TABS, type SectionId } from '../app/navigation'
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
 export type ThemeMode = 'light' | 'dark' | 'system'
 /** 自动同步间隔 */
 export type SyncInterval = 'immediate' | '30s' | '5m' | 'manual'
 
-interface SettingsState {
+export interface SettingsState {
   profileName: string
   /** 浅色 / 深色 / 跟随系统 */
   theme: ThemeMode
   /** 桌面工作台 / 移动终端 / 自动 */
   layoutMode: LayoutMode
+  /** 移动端底栏常驻板块（最多 4 个，第 5 格固定是「更多」）。
+   *  此前写死「观行修学」，财/藏/情/奇/术 全埋在「更多」抽屉里 ——
+   *  手机为主要使用场景时，等于一半功能没有入口。 */
+  mobileTabs: SectionId[]
+  setMobileTab: (index: number, id: SectionId) => void
+  resetMobileTabs: () => void
   /** 首次启动引导是否完成 */
   onboarded: boolean
   /** 喝水每日目标 ml */
@@ -65,28 +70,18 @@ interface SettingsState {
   aiKey?: string
   aiKeyEnc?: boolean
 
-  /** 情报定时自动抓取（默认关） */
+  /** 情报定时自动抓取（默认开） */
   intelAutoFetch: boolean
   intelFetchMinutes: number
+  /** 情报保留上限（条）。情报是会持续自动增长的表，没有上限会让同步快照无限膨胀。 */
+  intelKeepLimit: number
   /** 自建 CORS 代理（如 Cloudflare Worker）。配置后情报抓取优先经它转发，
-   *  彻底摆脱公共代理的可用性波动；留空则走 直连 → 公共代理 兜底链 */
+   *  彻底摆脱公共代理的可用性波动；留空则走 直连 → 公共代理 兜底链。
+   *  B 站源（bilibili provider）同样依赖它：B 站接口不接受浏览器跨域直连。 */
   corsProxyUrl?: string
 
-  /** 情报分类（在情报页页签处内联增删；藏阁不再有第二套分类——藏阁仅按「类型」筛选） */
-  intelCategories: string[]
-  addIntelCategory: (name: string) => void
-  removeIntelCategory: (name: string) => void
-  resetIntelCategories: () => void
-
-  /** 藏阁分类（可增删，与情报分类同交互；类型保留为条目属性徽标）。
-   *  移除分类不删条目——条目归入「其他」 */
-  collectionCategories: string[]
-  addCollectionCategory: (name: string) => void
-  removeCollectionCategory: (name: string) => void
-  resetCollectionCategories: () => void
-
-  /** 藏阁筛选中隐藏的类型（旧版类型显隐管理，已被分类体系取代，保留字段兼容旧持久化数据） */
-  collectionHiddenTypes: CollectionType[]
+  /** 学期起始日（周一，yyyy-mm-dd）—— 课程表按它推算当前周次与单双周 */
+  termStartDate?: string
 
   set: (patch: Partial<SettingsState>) => void
 }
@@ -97,6 +92,19 @@ export const useSettingsStore = create<SettingsState>()(
       profileName: '修者',
       theme: 'dark',
       layoutMode: 'auto',
+      mobileTabs: [...DEFAULT_MOBILE_TABS],
+      setMobileTab: (index, id) =>
+        set((s) => {
+          const next = [...s.mobileTabs]
+          if (index < 0 || index >= next.length) return {}
+          const existing = next.indexOf(id)
+          if (existing === index) return {}
+          // 已在别格 → 两格互换，避免同一板块占两个位置、又凭空少一个入口
+          if (existing >= 0) next[existing] = next[index]
+          next[index] = id
+          return { mobileTabs: next }
+        }),
+      resetMobileTabs: () => set({ mobileTabs: [...DEFAULT_MOBILE_TABS] }),
       onboarded: false,
       waterGoalMl: 2000,
       pomodoroFocusMin: 25,
@@ -111,7 +119,9 @@ export const useSettingsStore = create<SettingsState>()(
       githubTokenEnc: false,
       syncPassword: '',
       syncPasswordEnc: false,
-      autoSync: false,
+      /** 默认开启：移动端为主要使用场景时，手动同步几乎不会被想起，
+       *  数据就一直躺在单台设备上（未配置同步目标时静默跳过，不打扰） */
+      autoSync: true,
       syncInterval: '30s',
       lastSyncedAt: null,
       syncStatus: 'idle',
@@ -126,31 +136,12 @@ export const useSettingsStore = create<SettingsState>()(
       aiModel: 'agnes-2.5-flash',
       aiKey: '',
       aiKeyEnc: false,
-      intelAutoFetch: false,
+      /** 定时自动抓取默认开启：手机是主要场景，指望用户想起来点按钮并不现实。
+       *  未配置转发端点时大部分源会失败，但失败原因是逐源可查的（见情报源卡片）。 */
+      intelAutoFetch: true,
       intelFetchMinutes: 60,
-      intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义'),
-      addIntelCategory: (name) =>
-        set((s) => {
-          const t = name.trim()
-          if (!t || s.intelCategories.includes(t)) return {}
-          return { intelCategories: [...s.intelCategories, t] }
-        }),
-      removeIntelCategory: (name) =>
-        set((s) => ({ intelCategories: s.intelCategories.filter((c) => c !== name) })),
-      resetIntelCategories: () =>
-        set({ intelCategories: [...INTELLIGENCE_CATEGORIES].filter((c) => c !== '全部' && c !== '自定义') }),
-      collectionCategories: ['小说', '动漫', '游戏', '影视', '书籍', 'GitHub', '设计', '灵感', '其他'],
-      addCollectionCategory: (name) =>
-        set((s) => {
-          const t = name.trim()
-          if (!t || s.collectionCategories.includes(t)) return {}
-          return { collectionCategories: [...s.collectionCategories, t] }
-        }),
-      removeCollectionCategory: (name) =>
-        set((s) => ({ collectionCategories: s.collectionCategories.filter((c) => c !== name) })),
-      resetCollectionCategories: () =>
-        set({ collectionCategories: ['小说', '动漫', '游戏', '影视', '书籍', 'GitHub', '设计', '灵感', '其他'] }),
-      collectionHiddenTypes: [],
+      intelKeepLimit: 500,
+      termStartDate: undefined,
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },

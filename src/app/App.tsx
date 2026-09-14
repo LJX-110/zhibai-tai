@@ -11,6 +11,7 @@ import { Onboarding } from './Onboarding'
 import { NotificationGate } from '../components/notification/NotificationGate'
 import { AmbientSound } from '../components/sound/AmbientSound'
 import { PomodoroTicker } from '../components/pomodoro/PomodoroTicker'
+import { ClassReminder } from '../components/study/ClassReminder'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
@@ -33,6 +34,7 @@ export default function App() {
         <NotificationGate />
         <AmbientSound />
         <PomodoroTicker />
+        <ClassReminder />
         {onboarded ? (
           // 就绪门：数据载入前显示启动屏，避免"空数据"闪烁
           bootReady ? (

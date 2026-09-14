@@ -113,7 +113,8 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
         </div>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
+      {/* hover-reveal：仅鼠标设备悬停显现，触屏常显（否则手机端按钮不可达） */}
+      <div className="hover-reveal flex items-center gap-1">
         <Tooltip label="详情">
           <button
             className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-cinnabar/40 hover:text-cinnabar"

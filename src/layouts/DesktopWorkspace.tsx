@@ -38,7 +38,7 @@ export function DesktopWorkspace() {
 
       <div className="pl-[var(--nav-w)]">
         {/* 顶栏 */}
-        <header className="sticky top-0 z-30 border-b border-line bg-paper/92 backdrop-blur-sm">
+        <header className="sticky top-0 z-[var(--z-header)] border-b border-line bg-paper/92 backdrop-blur-sm">
           <div className="h-[3px] w-full bg-gradient-to-r from-bronze/70 via-bronze/40 to-transparent" />
           <div className="flex h-[calc(var(--header-h)-3px)] items-center justify-between px-8">
             <div className="flex items-baseline gap-3">

@@ -9,13 +9,18 @@ import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import type { SyncInterval } from '../stores/useSettingsStore'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
+import { NAV_SECTIONS, normalizeMobileTabs, type SectionId } from '../app/navigation'
+import { APP_VERSION } from '../app/version'
+import { seedAllCategories } from '../stores/useCategoryStore'
 import { db } from '../db/db'
 import { BUSINESS_TABLES, TOMBSTONES } from '../db/tables'
 import { markTombstones } from '../repositories/repo'
 import { reloadAllStores } from '../stores/reload'
 import { runSync } from '../sync/SyncService'
 import { encryptor } from '../sync/encryption/encryption'
-import { SourceManager } from '../components/source/SourceManager'
+import { ProxyConfig, SourceManager } from '../components/source/SourceManager'
+import { useIntelligenceStore } from '../stores/useIntelligenceStore'
+import { clearAllIntelligence, clearReadIntelligence, KEEP_LIMIT_OPTIONS } from '../services/intelligence/retention'
 import { playSound } from '../services/sound'
 import { browserNotify } from '../services/notification'
 import { testAIProvider, resolveAIProvider } from '../services/ai/ai-service'
@@ -23,10 +28,13 @@ import type { LayoutMode } from '../stores/useAppStore'
 import {
   Badge,
   Button,
+  Collapse,
   Dialog,
   Input,
   PageHeader,
+  ScrollRow,
   Section,
+  Select,
   useToast,
 } from '../components/ui'
 import { cn } from '../utils/cn'
@@ -53,22 +61,26 @@ const AI_PRESETS: { name: string; baseUrl: string; model: string }[] = [
 ]
 
 type SettingsGroup = 'appearance' | 'ai' | 'data' | 'sync'
-/** 设置分组：四组语义导航，替代 15+ 区块长滚动 */
+/** 设置分组：四组语义导航，替代 15+ 区块长滚动。
+ *  标签按「组里到底装了什么」命名 —— 智能组同时装着 AI Core 与情报源，
+ *  只挂「智能」会让人在情报源出问题时想不到来这里找。 */
 const SETTINGS_GROUPS: { key: SettingsGroup; label: string }[] = [
   { key: 'appearance', label: '外观 · 目标' },
-  { key: 'ai', label: '智能' },
+  { key: 'ai', label: '智能 · 情报' },
   { key: 'data', label: '数据' },
   { key: 'sync', label: '同步' },
 ]
 
-/** 分类管理已内联到使用处：情报分类在「情」页页签行尾 + 号管理；
- *  藏阁仅保留「类型」一套体系，不再有独立分类编辑。 */
+/* 分类管理不在这里：情报分类与藏阁分类都在各自页面的页签行尾「+」就地增删
+   （分类是业务表 categories，随快照跨设备同步，不再是设置项）。 */
 
 export function SettingsPage() {
   const settings = useSettingsStore()
   const resolved = useResolvedLayout()
   const toast = useToast().toast
   const [clearOpen, setClearOpen] = useState(false)
+  const [clearIntelOpen, setClearIntelOpen] = useState(false)
+  const intelTotal = useIntelligenceStore((s) => s.items.length)
   const [syncing, setSyncing] = useState(false)
 
   const exportData = async () => {
@@ -80,7 +92,7 @@ export function SettingsPage() {
     dump.tombstones = await db.table(TOMBSTONES).toArray()
     dump._meta = {
       app: 'yishu-workbench',
-      version: '0.4.0',
+      version: APP_VERSION,
       tables: BUSINESS_TABLES.length,
       exportedAt: new Date().toISOString(),
     }
@@ -93,7 +105,7 @@ export function SettingsPage() {
     a.download = `yishu-backup-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
-    toast('已导出备份 JSON（全部 23 张业务表）', 'success')
+    toast(`已导出备份 JSON（全部 ${BUSINESS_TABLES.length} 张业务表）`, 'success')
   }
 
   const clearAll = async () => {
@@ -107,8 +119,9 @@ export function SettingsPage() {
       }
       // 冲突记录与同步队列一并清空；墓碑保留 —— 它承载"清空"这一事实的跨设备传播
       await Promise.all([db.table('conflicts').clear(), db.table('syncQueue').clear()])
-      // 内存态统一重载（覆盖全部 23 个领域 store）
+      // 分类是业务数据，清空后立刻播回默认清单，否则情报/藏阁页签会全空
       await reloadAllStores()
+      await seedAllCategories()
       setClearOpen(false)
       toast('已清空全部数据，其他设备下次同步将同样清空', 'success')
     } catch (e) {
@@ -222,11 +235,18 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="大象无形" title="系统 · 配置" />
-      {/* 分组导航：一次点击定位任一设置 */}
-      <div className="switch-pill mb-5 flex w-fit gap-1 rounded-tile p-0.5">
+      {/* 分组导航：一次点击定位任一设置。
+          横滑行复用 ScrollRow —— 四个药丸在 375px 上已贴边，
+          系统字号一放大就会溢出，而溢出必须自带「右边还有」的暗示。 */}
+      <ScrollRow
+        className="switch-pill mb-5 rounded-tile p-0.5"
+        activeSelector={'[data-active="true"]'}
+        activeKey={group}
+      >
         {SETTINGS_GROUPS.map((g) => (
           <button
             key={g.key}
+            data-active={group === g.key || undefined}
             onClick={() => setGroup(g.key)}
             className={cn(
               'rounded-control px-3.5 py-1.5 text-sm transition-colors',
@@ -236,7 +256,7 @@ export function SettingsPage() {
             {g.label}
           </button>
         ))}
-      </div>
+      </ScrollRow>
       {group === 'appearance' && (<>
       <Section title="个人">
         <div className="row">
@@ -268,6 +288,76 @@ export function SettingsPage() {
               <div className="mt-0.5 text-[11px] text-ink-faint">{o.desc}</div>
             </button>
           ))}
+        </div>
+      </Section>
+
+      <Section title="移动端底栏">
+        <div className="grid max-w-lg gap-2 sm:grid-cols-2">
+          {normalizeMobileTabs(settings.mobileTabs).map((id, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="tabular w-11 shrink-0 text-[11px] text-ink-faint">第 {i + 1} 格</span>
+              <Select
+                value={id}
+                onChange={(e) => settings.setMobileTab(i, e.target.value as SectionId)}
+                aria-label={`第 ${i + 1} 格板块`}
+                className="!py-1.5 text-sm"
+              >
+                {NAV_SECTIONS.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.index} {s.label} · {s.desc}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button size="sm" variant="tertiary" onClick={() => settings.resetMobileTabs()}>
+            恢复默认
+          </Button>
+          <span className="text-[11px] text-ink-faint">第 5 格固定为「更多」，其余板块都在抽屉里</span>
+        </div>
+      </Section>
+
+      <Section title="目标">
+        <div className="row">
+          <span className="w-28 shrink-0 text-sm text-ink-muted">每日饮水目标</span>
+          <Input
+            type="number"
+            min={0}
+            step={100}
+            value={settings.waterGoalMl}
+            onChange={(e) => settings.set({ waterGoalMl: Number(e.target.value) || 0 })}
+            className="max-w-[160px]"
+          />
+          <span className="text-xs text-ink-faint">ml</span>
+        </div>
+      </Section>
+
+      {/* 低频项各归一处：手机首屏只留「改完立刻能感知」的项，其余一键展开 */}
+      <Collapse title="更多设置" hint="番茄钟 · 音效 · 通知">
+      <Section title="番茄钟">
+        <div className="row">
+          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 专注</span>
+          <Input
+            type="number"
+            min={1}
+            value={settings.pomodoroFocusMin}
+            onChange={(e) => settings.set({ pomodoroFocusMin: Number(e.target.value) || 25 })}
+            className="max-w-[160px]"
+          />
+          <span className="text-xs text-ink-faint">分钟</span>
+        </div>
+        <div className="row">
+          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 休整</span>
+          <Input
+            type="number"
+            min={1}
+            value={settings.pomodoroBreakMin}
+            onChange={(e) => settings.set({ pomodoroBreakMin: Number(e.target.value) || 5 })}
+            className="max-w-[160px]"
+          />
+          <span className="text-xs text-ink-faint">分钟</span>
         </div>
       </Section>
 
@@ -426,46 +516,62 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="目标">
-        <div className="row">
-          <span className="w-28 shrink-0 text-sm text-ink-muted">每日饮水目标</span>
-          <Input
-            type="number"
-            min={0}
-            step={100}
-            value={settings.waterGoalMl}
-            onChange={(e) => settings.set({ waterGoalMl: Number(e.target.value) || 0 })}
-            className="max-w-[160px]"
-          />
-          <span className="text-xs text-ink-faint">ml</span>
-        </div>
-        <div className="row">
-          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 专注</span>
-          <Input
-            type="number"
-            min={1}
-            value={settings.pomodoroFocusMin}
-            onChange={(e) => settings.set({ pomodoroFocusMin: Number(e.target.value) || 25 })}
-            className="max-w-[160px]"
-          />
-          <span className="text-xs text-ink-faint">分钟</span>
-        </div>
-        <div className="row">
-          <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 休整</span>
-          <Input
-            type="number"
-            min={1}
-            value={settings.pomodoroBreakMin}
-            onChange={(e) => settings.set({ pomodoroBreakMin: Number(e.target.value) || 5 })}
-            className="max-w-[160px]"
-          />
-          <span className="text-xs text-ink-faint">分钟</span>
-        </div>
-      </Section>
+      </Collapse>
 
       </>
       )}
       {group === 'data' && (
+      <Section
+        title="情报数据"
+        hint="情报是唯一会自动持续增长的表"
+      >
+        {/* 没有上限 + 没有删除入口 = 同步快照必然越滚越大，最后表现为同步莫名失败 */}
+        <div className="row flex-wrap">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">保留上限</span>
+          <Select
+            value={String(settings.intelKeepLimit)}
+            onChange={(e) => settings.set({ intelKeepLimit: Number(e.target.value) })}
+            className="!w-auto !py-1.5 text-sm"
+            aria-label="情报保留上限"
+          >
+            {KEEP_LIMIT_OPTIONS.map((n) => (
+              <option key={n} value={String(n)}>
+                {n === 0 ? '不限制' : `${n} 条`}
+              </option>
+            ))}
+          </Select>
+          <span className="flex-1 text-[11px] text-ink-faint">
+            超出后按「已读且最旧优先」清理，删除会同步到其他设备
+          </span>
+        </div>
+        <div className="row flex-wrap">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">清理</span>
+          <Button
+            size="sm"
+            variant="tertiary"
+            disabled={intelTotal === 0}
+            onClick={async () => {
+              const { removed } = await clearReadIntelligence()
+              await useIntelligenceStore.getState().load()
+              toast(removed > 0 ? `已清理 ${removed} 条已读情报` : '没有已读情报可清理', removed > 0 ? 'success' : 'info')
+            }}
+          >
+            <Trash2 size={13} /> 清理已读
+          </Button>
+          <Button
+            size="sm"
+            variant="tertiary"
+            disabled={intelTotal === 0}
+            onClick={() => setClearIntelOpen(true)}
+          >
+            <Trash2 size={13} /> 清空情报
+          </Button>
+          <span className="text-[11px] text-ink-faint">当前 {intelTotal} 条</span>
+        </div>
+      </Section>
+      )}
+
+      {group === 'data' && (<>
       <Section
         title="数据"
         hint="Local-first · 存于本机 IndexedDB"
@@ -476,9 +582,6 @@ export function SettingsPage() {
             </Button>
             <Button size="sm" variant="secondary" onClick={() => importInputRef.current?.click()}>
               <Upload size={13} /> 导入恢复
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setClearOpen(true)}>
-              <Trash2 size={13} /> 清空数据
             </Button>
           </div>
         }
@@ -524,6 +627,20 @@ export function SettingsPage() {
           数据存本机 IndexedDB；多端同步通过 GitHub 私有仓库快照（见下方「GitHub 同步」）。
         </p>
       </Section>
+
+      {/* 破坏性操作移出首屏：既让首屏变干净，也把「不可恢复」这件事藏在一层确认之后 */}
+      <Collapse title="危险操作" hint="不可恢复">
+        <div className="row flex-wrap">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">清空</span>
+          <Button size="sm" variant="danger" onClick={() => setClearOpen(true)}>
+            <Trash2 size={13} /> 清空数据
+          </Button>
+          <span className="flex-1 text-[11px] text-ink-faint">
+            删除本机全部记录（待办/笔记/喝水/番茄钟/收藏等），不可恢复；建议先「导出备份」
+          </span>
+        </div>
+      </Collapse>
+      </>
       )}
 
       {group === 'ai' && (<>
@@ -633,7 +750,13 @@ export function SettingsPage() {
           </div>
         </div>
       </Section>
-      <SourceManager />
+
+      {/* 代理留在首屏：情报页抓取失败会把用户直接指到这里，指着的人不能隔着折叠 */}
+      <ProxyConfig />
+
+      <Collapse title="情报源" hint="源列表与抓取">
+        <SourceManager />
+      </Collapse>
       </>
       )}
 
@@ -872,7 +995,7 @@ export function SettingsPage() {
       )}
 
       <p className="py-6 text-center text-[11px] tracking-[0.3em] text-ink-faint">
-        知白台 V1.6 · Local-first
+        知白台 v{APP_VERSION} · Local-first
       </p>
 
       <Dialog open={clearOpen} onClose={() => setClearOpen(false)} title="清空全部数据？">
@@ -882,6 +1005,26 @@ export function SettingsPage() {
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => setClearOpen(false)}>取消</Button>
           <Button variant="danger" onClick={clearAll}>
+            <Trash2 size={14} /> 确认清空
+          </Button>
+        </div>
+      </Dialog>
+      <Dialog open={clearIntelOpen} onClose={() => setClearIntelOpen(false)} title="清空全部情报？">
+        <p className="text-sm leading-relaxed text-ink-soft">
+          将删除本机全部 {intelTotal} 条情报，不可恢复。删除会随同步传播到其他设备；
+          情报源与分类不受影响，之后拉取会重新积累。建议先「导出备份」。
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="tertiary" onClick={() => setClearIntelOpen(false)}>取消</Button>
+          <Button
+            variant="danger"
+            onClick={async () => {
+              const { removed } = await clearAllIntelligence()
+              await useIntelligenceStore.getState().load()
+              setClearIntelOpen(false)
+              toast(`已清空 ${removed} 条情报`, 'success')
+            }}
+          >
             <Trash2 size={14} /> 确认清空
           </Button>
         </div>

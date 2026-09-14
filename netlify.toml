@@ -1,0 +1,21 @@
+# 本文件只服务于「自建代理」这一件事：App 本身部署在 GitHub Pages，
+# 这里把 Netlify 当成转发端点（*.netlify.app 国内实测可达，*.workers.dev 不可达）。
+[build]
+  functions = "netlify/functions"
+  # 纯函数站也必须给一个发布目录，否则 Netlify CLI 拒绝部署；
+  # publish 内容无关紧要，转发全部由下面的重写规则接管
+  publish = "public"
+
+# 让 /proxy 和 / 都落到转发函数：前端无论填 <基址>?url=… 还是 <基址>/proxy?url=…
+# 都能命中。force 确保重写优先于同名静态文件。
+[[redirects]]
+  from = "/proxy"
+  to = "/.netlify/functions/proxy"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/"
+  to = "/.netlify/functions/proxy"
+  status = 200
+  force = true

@@ -10,7 +10,15 @@ import { fetchViaProxy } from './rss'
 
 /* ---------------- 错误分类 ---------------- */
 
-export type FetchErrorKind = 'cors' | 'auth' | 'timeout' | 'parse' | 'empty' | 'http' | 'network'
+export type FetchErrorKind =
+  | 'config'
+  | 'cors'
+  | 'auth'
+  | 'timeout'
+  | 'parse'
+  | 'empty'
+  | 'http'
+  | 'network'
 
 export interface FetchErrorInfo {
   kind: FetchErrorKind
@@ -20,6 +28,10 @@ export interface FetchErrorInfo {
 export function classifyFetchError(e: unknown): FetchErrorInfo {
   const msg = e instanceof Error ? e.message : String(e)
   const m = msg.toLowerCase()
+  // 「没配代理」不是网络故障，而是可操作的一步：单独成一类，界面上要给入口而不是报错
+  if (msg.includes('自建代理')) {
+    return { kind: 'config', message: msg }
+  }
   if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed') || m.includes('cors')) {
     return { kind: 'cors', message: 'CORS 或网络受限：浏览器无法直接访问该源。建议改用 RSS/JSON 接口，或后续接入服务端代理。' }
   }

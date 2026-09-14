@@ -4,16 +4,19 @@
  * 每条：标题 / 摘要 / 来源 / 分类 / 时间 / 标签；操作仅保留 收藏·稍后·更多，其余进 Inspector
  */
 import { useMemo, useState } from 'react'
-import { Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, Sparkles, Trash2 } from 'lucide-react'
+import { AlertTriangle, Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, Sparkles, Star, Trash2, X } from 'lucide-react'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useSourceStore } from '../stores/useSourceStore'
-import { useSettingsStore } from '../stores/useSettingsStore'
+import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
 import { useFollowStore } from '../stores/useLifeStores'
 import { dedupeKey } from '../components/source/SourceManager'
 import {
   fetchAllFromSources,
   fetchFromSource,
+  type SourceFetchFailure,
 } from '../services/intelligence/providers/registry'
+import { classifyFetchError } from '../services/intelligence/providers/scraper'
+import { saveFetchedItems } from '../services/intelligence/retention'
 import { aiService } from '../services/ai/ai-service'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { IntelTidy } from '../components/intelligence/IntelTidy'
@@ -23,6 +26,7 @@ import { cn } from '../utils/cn'
 import { Badge, Button, Dialog, EmptyState, Input, Select, Tooltip, useToast } from '../components/ui'
 const SOURCE_OPTIONS: { value: SourceType | 'all'; label: string }[] = [
   { value: 'all', label: '全部来源' },
+  { value: 'bilibili', label: 'B 站' },
   { value: 'github', label: 'GitHub' },
   { value: 'rss', label: 'RSS' },
   { value: 'official', label: '官方' },
@@ -37,6 +41,9 @@ const TIME_OPTIONS = [
   { value: '3d', label: '近 3 天' },
   { value: '7d', label: '近 7 天' },
 ]
+
+/** 单次渲染条数：够首屏铺设，又不至于把几百条带图的行一次塞进 DOM */
+const PAGE_SIZE = 40
 
 /** 单条情报 AI 中文摘要（可折叠；外文标题/摘要 → 中文概括） */
 function FeedTranslate({ it }: { it: IntelligenceItem }) {
@@ -229,11 +236,11 @@ function FeedActions({
           <Clock size={15} />
         </button>
       </Tooltip>
-      <Tooltip label="详情">
+      <Tooltip label="详情 · 可删除">
         <button
           onClick={onOpen}
           className="touch-target rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-ink"
-          aria-label="更多"
+          aria-label="详情"
         >
           <MoreHorizontal size={15} />
         </button>
@@ -246,7 +253,9 @@ export function IntelligencePage() {
   const items = useIntelligenceStore((s) => s.items)
   const sources = useSourceStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
-  const intelCategories = useSettingsStore((s) => s.intelCategories)
+  const intelCategoryRows = useCategoryStore((s) => s.items)
+  // 分类来自业务表（跨设备同步）；派生结果在组件体内算，避免 selector 生成新引用
+  const intelCategories = useMemo(() => categoryNames(intelCategoryRows, 'intel'), [intelCategoryRows])
   const toast = useToast().toast
   const [provider, setProvider] = useState('all')
   const [tab, setTab] = useState('全部')
@@ -257,6 +266,13 @@ export function IntelligencePage() {
   const [onlyUnread, setOnlyUnread] = useState(false)
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
+  const [pageLimit, setPageLimit] = useState(PAGE_SIZE)
+  /** 最近一次抓取的结果：失败源要留在界面上，而不是只在 toast 里闪一下 */
+  const [fetchReport, setFetchReport] = useState<{
+    fetched: number
+    added: number
+    failures: SourceFetchFailure[]
+  } | null>(null)
   const [aiQuery, setAiQuery] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiAnswer, setAiAnswer] = useState<{ answer: string; sources: string[] } | null>(null)
@@ -266,14 +282,14 @@ export function IntelligencePage() {
   /** AI 问答默认收起：信息密度让位给信息流本身，入口保留 */
   const [aiOpen, setAiOpen] = useState(false)
 
-  const addCategory = () => {
-    const t = catDraft.trim()
+  const addCategoryName = (name: string) => {
+    const t = name.trim()
     if (!t) return
-    useSettingsStore.getState().addIntelCategory(t)
+    void addCategory('intel', t)
     setCatDraft('')
   }
-  const removeCategory = (name: string) => {
-    useSettingsStore.getState().removeIntelCategory(name)
+  const removeCategoryName = (name: string) => {
+    void removeCategory('intel', name)
     // 被删的正是当前页签时回到「全部」，避免停留在一个已消失的筛选上
     if (tab === name) setTab('全部')
   }
@@ -303,23 +319,55 @@ export function IntelligencePage() {
     setLoading(true)
     try {
       const sourceList = useSourceStore.getState().items
-      const fresh =
-        provider === 'all'
-          ? await fetchAllFromSources(sourceList)
-          : await fetchFromSource(sourceList.find((s) => s.id === provider) ?? sourceList[0])
+      let fresh: IntelligenceItem[] = []
+      let failures: SourceFetchFailure[] = []
+
+      if (provider === 'all') {
+        const res = await fetchAllFromSources(sourceList)
+        fresh = res.items
+        failures = res.failures
+      } else {
+        const one = sourceList.find((s) => s.id === provider) ?? sourceList[0]
+        if (one) {
+          try {
+            fresh = await fetchFromSource(one)
+          } catch (e) {
+            const info = classifyFetchError(e)
+            failures = [
+              { sourceId: one.id, sourceName: one.name, kind: info.kind, message: info.message },
+            ]
+          }
+        }
+      }
+
       // 去重：source + externalId | url | title + date
       const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
       const newItems = fresh.filter((x) => !known.has(dedupeKey(x)))
-      // P0-C 修复：此前只 setState 内存态，刷新页面即丢失。
-      // 现在 saveMany 一次性落库（时间戳由 repo 层补齐，参与同步）。
-      const ok = await useIntelligenceStore.getState().saveMany(newItems)
-      if (!ok) {
+      // 落库并顺带按上限裁剪（情报是唯一会持续自动增长的表，不裁剪会让快照无限膨胀）
+      const { added, removed } = await saveFetchedItems(newItems)
+      if (newItems.length > 0 && added === 0) {
         toast('情报已拉取但保存失败，请检查存储空间', 'danger')
         return
       }
-      toast(`拉取 ${fresh.length} 条情报（新增 ${newItems.length}）`, 'success')
-    } catch {
-      toast('拉取失败', 'danger')
+
+      // 失败原因必须留在界面上：以前失败被丢在 Promise.allSettled 里，
+      // 用户只看得到「拉取 0 条」，无从判断是没配代理还是被限流
+      setFetchReport({ fetched: fresh.length, added: newItems.length, failures })
+      if (failures.length === 0) {
+        toast(
+          removed > 0
+            ? `新增 ${newItems.length} 条 · 按上限清理 ${removed} 条旧情报`
+            : `拉取 ${fresh.length} 条情报（新增 ${newItems.length}）`,
+          'success',
+        )
+      } else {
+        toast(
+          `新增 ${newItems.length} 条 · ${failures.length} 个源失败`,
+          fresh.length === 0 ? 'danger' : 'info',
+        )
+      }
+    } catch (e) {
+      toast(`拉取失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
     } finally {
       setLoading(false)
     }
@@ -380,6 +428,22 @@ export function IntelligencePage() {
   }
 
   const mediaCount = list.filter((it) => it.image).length
+
+  /**
+   * 增量渲染：情报最多保留 500 条，一次性铺开会让手机端首屏渲染很重
+   * （每条都可能带缩略图）。筛选条件一变就回到第一页。
+   *
+   * 用渲染期守卫而不是 useEffect：effect 里同步 setState 会多一轮级联渲染
+   * （也是 oxlint 的 set-state-in-effect 规则所指的问题），
+   * 而这个仓库已有同类写法（如 NoteEditor 的表单重置）。
+   */
+  const filterKey = `${tab}|${provider}|${sourceType}|${category}|${time}|${onlyFav}|${onlyUnread}|${query}`
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey)
+  if (filterKey !== lastFilterKey) {
+    setLastFilterKey(filterKey)
+    setPageLimit(PAGE_SIZE)
+  }
+  const visible = useMemo(() => list.slice(0, pageLimit), [list, pageLimit])
   /** 任一筛选生效即视为"有明确意图"：来源入口让位 */
   const filtersActive =
     tab !== '全部' ||
@@ -406,6 +470,45 @@ export function IntelligencePage() {
           </Button>
         </div>
       </div>
+
+      {/* 抓取失败报告：失败原因、以及「要不要去配代理」一眼可见 */}
+      {fetchReport && fetchReport.failures.length > 0 && (
+        <div className="mb-3 rounded-tile border border-cinnabar/30 bg-cinnabar/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[13px] text-ink">
+            <AlertTriangle size={13} className="shrink-0 text-cinnabar" />
+            <span>
+              {fetchReport.failures.length} 个源抓取失败
+              {fetchReport.added > 0 && (
+                <span className="ml-1.5 text-ink-muted">· 另新增 {fetchReport.added} 条</span>
+              )}
+            </span>
+            <button
+              onClick={() => setFetchReport(null)}
+              className="ml-auto shrink-0 text-[11px] text-ink-faint transition-colors hover:text-ink"
+            >
+              收起
+            </button>
+          </div>
+          <div className="mt-1.5 space-y-1">
+            {fetchReport.failures.map((f) => (
+              <div key={f.sourceId} className="text-[11px] leading-relaxed text-ink-muted">
+                <span className="text-ink-soft">{f.sourceName}</span>
+                {f.kind === 'config' ? (
+                  <span className="ml-1.5 text-bronze">需要转发端点</span>
+                ) : (
+                  <span className="ml-1.5">· {f.message}</span>
+                )}
+              </div>
+            ))}
+          </div>
+          {fetchReport.failures.some((f) => f.kind === 'config') && (
+            <p className="mt-2 border-t border-cinnabar/20 pt-1.5 text-[11px] leading-relaxed text-bronze">
+              在「系统 · 情报源 · 自建代理」填入转发地址即可启用这批源（部署说明见仓库 proxy/ 与
+              cloudflare-worker/README.md）
+            </p>
+          )}
+        </div>
+      )}
 
       {/* 聚合页签（行尾 + 号就地管理分类） */}
       <div className="no-scrollbar -mx-1 mb-3 flex items-center gap-1 overflow-x-auto px-1 pb-1">
@@ -482,6 +585,42 @@ export function IntelligencePage() {
         </span>
       </div>
 
+      {/* 关注管理：关注此前只能加不能删、也看不到加了什么，是个单向入口 */}
+      {tab === '关注' && (
+        <div className="mb-3 rounded-tile border border-line bg-raised px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[13px] text-ink">
+            <Star size={13} className="shrink-0 text-bronze" />
+            已关注 {follows.length} 个关键词
+            <span className="ml-auto text-[11px] text-ink-faint">点 × 取消</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {follows.map((f) => (
+              <span
+                key={f.id}
+                className="inline-flex items-center gap-1 rounded-control border border-line bg-paper px-2 py-1 text-xs text-ink-soft"
+              >
+                {f.keyword}
+                <button
+                  onClick={() => {
+                    void useFollowStore.getState().remove(f.id)
+                    toast(`已取消关注「${f.keyword}」`)
+                  }}
+                  className="text-ink-faint transition-colors hover:text-cinnabar"
+                  aria-label={`取消关注 ${f.keyword}`}
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+            {follows.length === 0 && (
+              <span className="text-xs text-ink-faint">
+                还没有关注。在情报详情里点「关注」即可追踪某个来源或主题
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* AI 问情报：默认收起（可发现性靠入口行，信息密度让位给信息流） */}
       <div className="mb-4">
         <button
@@ -538,27 +677,38 @@ export function IntelligencePage() {
 
       {/* 信息流 */}
       {list.length > 0 ? (
-        <div className="space-y-1.5">
-          {list.map((it) =>
-            it.image ? (
-              <FeedMediaRow
-                key={it.id}
-                it={it}
-                onOpen={() => openDetail(it)}
-                onFav={() => toggleFav(it)}
-                onLater={() => markLater(it)}
-              />
-            ) : (
-              <FeedRow
-                key={it.id}
-                it={it}
-                onOpen={() => openDetail(it)}
-                onFav={() => toggleFav(it)}
-                onLater={() => markLater(it)}
-              />
-            ),
+        <>
+          <div className="space-y-1.5">
+            {visible.map((it) =>
+              it.image ? (
+                <FeedMediaRow
+                  key={it.id}
+                  it={it}
+                  onOpen={() => openDetail(it)}
+                  onFav={() => toggleFav(it)}
+                  onLater={() => markLater(it)}
+                />
+              ) : (
+                <FeedRow
+                  key={it.id}
+                  it={it}
+                  onOpen={() => openDetail(it)}
+                  onFav={() => toggleFav(it)}
+                  onLater={() => markLater(it)}
+                />
+              ),
+            )}
+          </div>
+          {list.length > visible.length && (
+            <Button
+              variant="tertiary"
+              className="mt-3 w-full"
+              onClick={() => setPageLimit((n) => n + PAGE_SIZE)}
+            >
+              加载更多（{visible.length} / {list.length}）
+            </Button>
           )}
-        </div>
+        </>
       ) : (
         <div className="rounded-paper border border-line bg-raised">
           <EmptyState
@@ -587,7 +737,7 @@ export function IntelligencePage() {
               >
                 {c}
                 <button
-                  onClick={() => removeCategory(c)}
+                  onClick={() => removeCategoryName(c)}
                   className="text-ink-faint transition-colors hover:text-cinnabar"
                   aria-label={`移除 ${c}`}
                 >
@@ -604,11 +754,11 @@ export function IntelligencePage() {
               autoFocus
               value={catDraft}
               onChange={(e) => setCatDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+              onKeyDown={(e) => e.key === 'Enter' && addCategoryName(catDraft)}
               placeholder="新增分类名…"
               className="max-w-[200px]"
             />
-            <Button size="sm" variant="secondary" onClick={addCategory} disabled={!catDraft.trim()}>
+            <Button size="sm" variant="secondary" onClick={() => addCategoryName(catDraft)} disabled={!catDraft.trim()}>
               <Plus size={13} /> 添加
             </Button>
           </div>
@@ -618,7 +768,7 @@ export function IntelligencePage() {
               size="sm"
               variant="tertiary"
               onClick={() => {
-                useSettingsStore.getState().resetIntelCategories()
+                void resetCategories('intel')
                 setTab('全部')
               }}
             >

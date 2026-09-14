@@ -30,6 +30,7 @@ import { useSourceStore } from '../../stores/useSourceStore'
 import { saveDailySignRecord } from '../../stores/useDivinationStore'
 import { dedupeKey } from '../../components/source/SourceManager'
 import { fetchAllFromSources } from '../../services/intelligence/providers/registry'
+import { saveFetchedItems } from '../../services/intelligence/retention'
 import { runSync } from '../../sync/SyncService'
 import { createId, todayISO } from '../../utils/id'
 import { cn } from '../../utils/cn'
@@ -210,13 +211,19 @@ export function CommandMenu() {
         hint: '从所有启用源拉取',
         run: async () => {
           const sources = useSourceStore.getState().items
-          const fresh = await fetchAllFromSources(sources)
+          const res = await fetchAllFromSources(sources)
           // 与情报页同一去重口径（dedupeKey），且必须经 saveMany 落库：
           // 直接 setState 只改内存，刷新即丢、也不会触发自动同步
           const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
-          const added = fresh.filter((x) => !known.has(dedupeKey(x)))
-          await useIntelligenceStore.getState().saveMany(added)
-          toast(`已拉取 ${fresh.length} 条情报（新增 ${added.length}）`, 'success')
+          const added = res.items.filter((x) => !known.has(dedupeKey(x)))
+          if (added.length > 0) await saveFetchedItems(added)
+          const failed = res.failures.length
+          toast(
+            failed === 0
+              ? `已拉取 ${res.items.length} 条情报（新增 ${added.length}）`
+              : `新增 ${added.length} 条 · ${failed} 个源失败（详情见「情」页）`,
+            failed > 0 && res.items.length === 0 ? 'danger' : 'success',
+          )
           setOpen(false)
         },
       },
@@ -327,7 +334,7 @@ export function CommandMenu() {
   const renderFlat = tab === 'search' ? results : commands
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-start justify-center p-4 pt-[12vh]">
+    <div className="fixed inset-0 z-[var(--z-command)] flex items-start justify-center p-4 pt-[12vh]">
       <div className="absolute inset-0 bg-ink/40" onClick={() => setOpen(false)} />
       <div
         role="dialog"

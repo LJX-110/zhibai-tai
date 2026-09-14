@@ -195,6 +195,18 @@
   --header-h: 60px;
   --content-max-w: 1240px;
 
+  /* 层级令牌 —— 单一事实源。
+     此前各组件各自写 z-50 / z-[60]，移动底栏（60）反而压在
+     详情弹层（50）之上，Sheet 的下半截与底部操作按钮被底栏遮死。
+     现按「顶栏 < 侧栏 < 底栏 < 弹层 < 全屏层 < 命令面板 < 提示」定序。 */
+  --z-header: 30;
+  --z-sidebar: 40;
+  --z-nav: 50;
+  --z-overlay: 60;
+  --z-immersive: 70;
+  --z-command: 80;
+  --z-toast: 90;
+
   /* 背景纸纹 */
   --bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.028'/%3E%3C/svg%3E");
 }

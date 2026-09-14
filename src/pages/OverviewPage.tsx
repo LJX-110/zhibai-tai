@@ -17,6 +17,7 @@ import { useTodayStats } from '../hooks/useTodayStats'
 import { useCultivation } from '../hooks/useCultivation'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useInspectorStore } from '../components/inspector/Inspector'
+import { useResolvedLayout } from '../layouts/useResolvedLayout'
 import { aiService } from '../services/ai/ai-service'
 import { playSound } from '../services/sound'
 import { TaskItem } from '../components/task/TaskItem'
@@ -76,17 +77,28 @@ function RingGauge({ value, max, color, size = 40 }: { value: number; max: numbe
   )
 }
 
-/** 四象节点（罗盘方位牌） */
-function QuadNode({ beast, char, dim, pos }: { beast: string; char: string; dim: QiDim; pos: 'top' | 'bottom' | 'left' | 'right' }) {
+/** 四象节点（罗盘方位牌）；窄屏用 'block' 排进 2×2 网格，不再绝对定位互挤 */
+function QuadNode({
+  beast,
+  char,
+  dim,
+  pos,
+}: {
+  beast: string
+  char: string
+  dim: QiDim
+  pos: 'top' | 'bottom' | 'left' | 'right' | 'block'
+}) {
   const color = DIM_COLOR[dim.tone]
   const posClass = {
-    top: 'left-1/2 top-0 -translate-x-1/2',
-    bottom: 'left-1/2 bottom-0 -translate-x-1/2',
-    left: 'left-0 top-1/2 -translate-y-1/2',
-    right: 'right-0 top-1/2 -translate-y-1/2',
+    top: 'absolute left-1/2 top-0 w-[120px] -translate-x-1/2',
+    bottom: 'absolute left-1/2 bottom-0 w-[120px] -translate-x-1/2',
+    left: 'absolute left-0 top-1/2 w-[120px] -translate-y-1/2',
+    right: 'absolute right-0 top-1/2 w-[120px] -translate-y-1/2',
+    block: 'w-full',
   }[pos]
   return (
-    <div className={cn('absolute flex w-[120px] flex-col items-center gap-1 rounded-[8px] border border-line bg-paper/75 px-2 py-1.5', posClass)}>
+    <div className={cn('flex flex-col items-center gap-1 rounded-[8px] border border-line bg-paper/75 px-2 py-1.5', posClass)}>
       <span className="mono-meta text-[9px] text-ink-faint">
         {char} · {beast}
       </span>
@@ -103,8 +115,11 @@ function QuadNode({ beast, char, dim, pos }: { beast: string; char: string; dim:
   )
 }
 
-/** 四象罗盘 —— 今日炁象（外环八卦固定 · 24 刻度缓转 · 四象方位牌 · 中央太极） */
+/** 四象罗盘 —— 今日炁象（外环八卦固定 · 24 刻度缓转 · 四象方位牌 · 中央太极）
+ *  窄屏收起刻度环与八卦环，四象牌改为太极下方 2×2 —— 罗盘不再独占一整屏，
+ *  四块方位牌也不会在 375px 宽下互相压字。 */
 function FourSymbolsCompass({ qiDims, gradeTitle }: { qiDims: QiDim[]; gradeTitle: string }) {
+  const compact = useResolvedLayout() === 'mobile'
   const ticks = Array.from({ length: 24 }, (_, i) => {
     const a = (i * 15 * Math.PI) / 180
     const cardinal = i % 6 === 0
@@ -120,64 +135,86 @@ function FourSymbolsCompass({ qiDims, gradeTitle }: { qiDims: QiDim[]; gradeTitl
   })
   const TRIGRAMS = ['☰', '☱', '☲', '☳', '☴', '☵', '☶', '☷']
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[460px] select-none">
-      <svg viewBox="0 0 360 360" className="absolute inset-0 h-full w-full" aria-hidden="true">
-        {/* 外环（鎏金骨架） */}
-        <circle cx="180" cy="180" r="164" fill="none" stroke="var(--color-gold-btn)" strokeWidth="1.2" opacity="0.85" />
-        <circle cx="180" cy="180" r="151" fill="none" stroke="var(--color-gold-btn)" strokeWidth="0.5" strokeDasharray="2 5" opacity="0.55" />
-        {/* 八卦环（固定，不随转） */}
-        {TRIGRAMS.map((t, i) => {
-          const a = ((i * 45 - 90) * Math.PI) / 180
-          return (
-            <text
-              key={t}
-              x={180 + 146 * Math.cos(a)}
-              y={180 + 146 * Math.sin(a)}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize="10"
-              fill="var(--color-gold-btn)"
-              opacity="0.85"
-            >
-              {t}
-            </text>
-          )
-        })}
-        {/* 24 刻度（缓转，四正位朱砂强调，余者鎏金） */}
-        <g className="compass-ring">
-          {ticks.map((t, i) => (
-            <line
-              key={i}
-              x1={t.x1}
-              y1={t.y1}
-              x2={t.x2}
-              y2={t.y2}
-              stroke={t.cardinal ? 'var(--color-cinnabar)' : 'var(--color-gold-btn)'}
-              strokeWidth={t.cardinal ? 1 : 0.7}
-              opacity={t.cardinal ? 0.85 : 0.65}
-            />
-          ))}
-        </g>
-        {/* 中环 */}
-        <circle cx="180" cy="180" r="104" fill="none" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.6" />
-        {/* 四向虚十字 */}
-        <line x1="180" y1="44" x2="180" y2="316" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
-        <line x1="44" y1="180" x2="316" y2="180" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
-      </svg>
-      {/* 中央太极：锚定 svg 真实圆心（180,180）。
-          此前用 inset-0 容器居中包住"太极+文字"纵向堆叠，
-          文字把太极顶离了圆心约 15px —— 现太极独占圆心，文字锚在其下 */}
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <Taiji size={52} className="glow-bronze" />
+    <div>
+      <div
+        className={cn(
+          'relative mx-auto aspect-square w-full select-none',
+          compact ? 'max-w-[240px]' : 'max-w-[460px]',
+        )}
+      >
+        <svg viewBox="0 0 360 360" className="absolute inset-0 h-full w-full" aria-hidden="true">
+          {/* 外环（鎏金骨架） */}
+          <circle cx="180" cy="180" r="164" fill="none" stroke="var(--color-gold-btn)" strokeWidth="1.2" opacity="0.85" />
+          <circle cx="180" cy="180" r="151" fill="none" stroke="var(--color-gold-btn)" strokeWidth="0.5" strokeDasharray="2 5" opacity="0.55" />
+          {/* 八卦环（固定，不随转；窄屏省略） */}
+          {!compact &&
+            TRIGRAMS.map((t, i) => {
+              const a = ((i * 45 - 90) * Math.PI) / 180
+              return (
+                <text
+                  key={t}
+                  x={180 + 146 * Math.cos(a)}
+                  y={180 + 146 * Math.sin(a)}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize="10"
+                  fill="var(--color-gold-btn)"
+                  opacity="0.85"
+                >
+                  {t}
+                </text>
+              )
+            })}
+          {/* 24 刻度（缓转，四正位朱砂强调，余者鎏金；窄屏省略） */}
+          {!compact && (
+            <g className="compass-ring">
+              {ticks.map((t, i) => (
+                <line
+                  key={i}
+                  x1={t.x1}
+                  y1={t.y1}
+                  x2={t.x2}
+                  y2={t.y2}
+                  stroke={t.cardinal ? 'var(--color-cinnabar)' : 'var(--color-gold-btn)'}
+                  strokeWidth={t.cardinal ? 1 : 0.7}
+                  opacity={t.cardinal ? 0.85 : 0.65}
+                />
+              ))}
+            </g>
+          )}
+          {/* 中环 */}
+          <circle cx="180" cy="180" r="104" fill="none" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.6" />
+          {/* 四向虚十字 */}
+          <line x1="180" y1="44" x2="180" y2="316" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
+          <line x1="44" y1="180" x2="316" y2="180" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
+        </svg>
+        {/* 中央太极：锚定 svg 真实圆心（180,180）。
+            此前用 inset-0 容器居中包住"太极+文字"纵向堆叠，
+            文字把太极顶离了圆心约 15px —— 现太极独占圆心，文字锚在其下 */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <Taiji size={compact ? 40 : 52} className="glow-bronze" />
+        </div>
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-[32px]">
+          <div className="scribal-title text-lg text-ink">{gradeTitle}</div>
+        </div>
+        {!compact && (
+          <>
+            {/* 四象 */}
+            <QuadNode pos="right" beast="青龙" char="东" dim={qiDims[0]} />
+            <QuadNode pos="bottom" beast="朱雀" char="南" dim={qiDims[1]} />
+            <QuadNode pos="left" beast="白虎" char="西" dim={qiDims[2]} />
+            <QuadNode pos="top" beast="玄武" char="北" dim={qiDims[3]} />
+          </>
+        )}
       </div>
-      <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-[32px]">
-        <div className="scribal-title text-lg text-ink">{gradeTitle}</div>
-      </div>
-      {/* 四象 */}
-      <QuadNode pos="right" beast="青龙" char="东" dim={qiDims[0]} />
-      <QuadNode pos="bottom" beast="朱雀" char="南" dim={qiDims[1]} />
-      <QuadNode pos="left" beast="白虎" char="西" dim={qiDims[2]} />
-      <QuadNode pos="top" beast="玄武" char="北" dim={qiDims[3]} />
+      {compact && (
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <QuadNode pos="block" beast="青龙" char="东" dim={qiDims[0]} />
+          <QuadNode pos="block" beast="朱雀" char="南" dim={qiDims[1]} />
+          <QuadNode pos="block" beast="白虎" char="西" dim={qiDims[2]} />
+          <QuadNode pos="block" beast="玄武" char="北" dim={qiDims[3]} />
+        </div>
+      )}
     </div>
   )
 }
@@ -429,22 +466,25 @@ export function OverviewPage() {
 
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
-      {/* 页头：问候 + 日期 */}
-      <div className="pb-6">
-        <p className="mono-meta text-ink-faint">
-          {date} · 周{weekdayCN(now.getDay())} · <span className="tabular">{nowHM()}</span>
-        </p>
-        <h1 className="scribal-title mt-1 text-3xl text-ink-bright">
-          {greeting(now.getHours())}
-        </h1>
-        <div className="mt-1.5 flex items-center gap-3">
-          <p className="scribal text-base text-ink-muted">道法自然，观照当下</p>
-          {/* 快捷键常驻提示：命令面板不做引导几乎无人发现；点击直接呼出 */}
+      {/* 页头：日期与题跋同排、问候语单独一行 —— 窄屏从 5 行压到 2 行 */}
+      <div className="pb-5 md:pb-6">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <p className="mono-meta text-ink-faint">
+            {date} · 周{weekdayCN(now.getDay())} · <span className="tabular">{nowHM()}</span>
+          </p>
+          <p className="scribal text-sm text-ink-muted">道法自然，观照当下</p>
+        </div>
+        <div className="mt-1 flex items-center gap-3">
+          <h1 className="scribal-title text-2xl text-ink-bright md:text-3xl">
+            {greeting(now.getHours())}
+          </h1>
+          {/* 快捷键常驻提示：命令面板不做引导几乎无人发现；点击直接呼出。
+              手机端没有物理键盘，这枚提示纯属噪音，仅桌面显示 */}
           <button
             onClick={() =>
               window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true }))
             }
-            className="flex items-center gap-1.5 rounded-control border border-line bg-raised px-2 py-0.5 text-[11px] text-ink-faint transition-colors hover:border-line-strong hover:text-ink"
+            className="hidden items-center gap-1.5 rounded-control border border-line bg-raised px-2 py-0.5 text-[11px] text-ink-faint transition-colors hover:border-line-strong hover:text-ink md:flex"
             title="呼出命令面板"
           >
             <kbd className="font-mono">Ctrl K</kbd> 命令面板
@@ -500,7 +540,8 @@ export function OverviewPage() {
           </div>
         </div>
         <FourSymbolsCompass qiDims={qiDims} gradeTitle={grade.title} />
-        <p className="mt-2 text-center text-[11px] text-ink-faint">
+        {/* 方位口诀：桌面用一句话收束罗盘；窄屏四象牌已带方位名，重复说明藏掉 */}
+        <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">
           东·行 · 南·专 · 西·学 · 北·创 —— 五行流转，今日炁象
         </p>
       </section>

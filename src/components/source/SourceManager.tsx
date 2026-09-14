@@ -2,11 +2,13 @@
  * SourceManager —— 情报源管理（系统）
  * 增删/启停/测试/立即抓取 + 推荐来源目录（本地 Provider Catalog）
  */
-import { useState } from 'react'
-import { Download, Pencil, Plus, Power, Trash2, Zap } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Download, MoreHorizontal, Pencil, Plus, Power, Trash2, Zap } from 'lucide-react'
 import { useSourceStore } from '../../stores/useSourceStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
+import { categoryNames, useCategoryStore } from '../../stores/useCategoryStore'
+import { useResolvedLayout } from '../../layouts/useResolvedLayout'
 import { PROVIDER_CATALOG, fetchFromSource, testSource } from '../../services/intelligence/providers/registry'
 import { classifyFetchError, type FetchErrorInfo } from '../../services/intelligence/providers/scraper'
 import { initIntelAutoFetch } from '../../services/intelligence/auto'
@@ -30,9 +32,11 @@ const PROVIDER_LABEL: Record<IntelligenceProviderId, string> = {
   steam: 'Steam',
   rawg: 'RAWG',
   jikan: 'Jikan',
+  bilibili: 'B 站',
 }
 
 const PROVIDER_ORDER: IntelligenceProviderId[] = [
+  'bilibili',
   'steam',
   'rawg',
   'jikan',
@@ -50,6 +54,7 @@ const PROVIDER_ORDER: IntelligenceProviderId[] = [
 ]
 
 const CONFIG_HINT: Partial<Record<IntelligenceProviderId, string>> = {
+  bilibili: 'JSON：{"keyword":"鸣潮"}（可选 order: pubdate|click，需先在下方配置自建代理）',
   steam: 'JSON：{"appid":730}（Steam 应用 ID）',
   rawg: 'JSON：{"key":"你的 RAWG key"}',
   jikan: 'JSON：{"mode":"season|top|search","type":"anime|manga","q":"关键词"}',
@@ -69,14 +74,42 @@ interface FormState {
 
 const EMPTY: FormState = { name: '', provider: 'rss', url: '', category: '科技', config: '' }
 
+/**
+ * ProxyConfig —— 自建 CORS 代理地址（单独导出，供「系统 · 智能」首屏直接挂载）
+ *
+ * 代理是情报抓取「能不能用」的唯一开关，情报页抓取失败时正是把用户指到这里。
+ * 所以它不能再当情报源区块里的一行 —— 那是折叠层，指路会把用户带到空地方。
+ * 说明文案在窄屏也保留：首屏上它是「为什么值得填」的唯一解释，不能只给桌面看。
+ */
+export function ProxyConfig() {
+  const corsProxyUrl = useSettingsStore((s) => s.corsProxyUrl)
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
+      <span className="text-sm text-ink">自建代理</span>
+      <Input
+        placeholder="https://你的站点.netlify.app（或 Cloudflare Pages）"
+        value={corsProxyUrl ?? ''}
+        onChange={(e) => useSettingsStore.getState().set({ corsProxyUrl: e.target.value.trim() || undefined })}
+        className="min-w-[220px] flex-1 !py-1 font-mono !text-xs"
+        aria-label="自建 CORS 代理地址"
+      />
+      <span className="text-[11px] leading-relaxed text-ink-faint">
+        中文源与 B 站都需要它 · 部署见仓库 proxy/（首选 Netlify）
+      </span>
+    </div>
+  )
+}
+
 export function SourceManager() {
   const sources = useSourceStore((s) => s.items)
   const intelAuto = useSettingsStore((s) => s.intelAutoFetch)
   const intelMinutes = useSettingsStore((s) => s.intelFetchMinutes)
-  const intelCategories = useSettingsStore((s) => s.intelCategories)
-  const corsProxyUrl = useSettingsStore((s) => s.corsProxyUrl)
+  const intelCategoryRows = useCategoryStore((s) => s.items)
+  const intelCategories = useMemo(() => categoryNames(intelCategoryRows, 'intel'), [intelCategoryRows])
+  const compact = useResolvedLayout() === 'mobile'
   const toast = useToast().toast
   const [open, setOpen] = useState(false)
+  const [actionFor, setActionFor] = useState<IntelligenceSource | null>(null)
   const [editing, setEditing] = useState<IntelligenceSource | null>(null)
   const [form, setForm] = useState<FormState>({ ...EMPTY })
   const [testing, setTesting] = useState<string | null>(null)
@@ -224,19 +257,6 @@ export function SourceManager() {
         </span>
       </div>
 
-      {/* 自建 CORS 代理：治本情报抓取的可用性（部署见仓库 cloudflare-worker/） */}
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
-        <span className="text-sm text-ink">自建代理</span>
-        <Input
-          placeholder="https://你的-worker.workers.dev（可选）"
-          value={corsProxyUrl ?? ''}
-          onChange={(e) => useSettingsStore.getState().set({ corsProxyUrl: e.target.value.trim() || undefined })}
-          className="min-w-[220px] flex-1 !py-1 font-mono !text-xs"
-          aria-label="自建 CORS 代理地址"
-        />
-        <span className="text-[11px] text-ink-faint">配置后优先经它转发 · 部署见 cloudflare-worker/</span>
-      </div>
-
       {sources.length > 0 ? (
         <div>
           {sources.map((s) => (
@@ -259,30 +279,48 @@ export function SourceManager() {
                   {!s.enabled && <Badge tone="plain">停用</Badge>}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-ink-faint">
-                  {s.url && <span className="truncate">{s.url}</span>}
+                  {s.url && <span className="hidden truncate md:inline">{s.url}</span>}
                   {s.lastFetchedAt && <span className="tabular">抓取于 {s.lastFetchedAt.slice(0, 16).replace('T', ' ')}</span>}
                   {s.lastError && <span className="text-cinnabar" title={s.lastError}>失败：{s.lastError.slice(0, 40)}</span>}
                 </div>
               </div>
-              <Button size="sm" variant="tertiary" onClick={() => fetchNow(s)} disabled={testing === s.id} className="!px-2">
-                <Download size={13} /> {testing === s.id ? '抓取中' : '抓取'}
-              </Button>
-              <Button size="sm" variant="tertiary" onClick={() => test(s)} disabled={testing === s.id} className="!px-2">
-                <Zap size={13} /> 测试
-              </Button>
-              <button
-                onClick={() => toggleEnabled(s)}
-                className={cn('rounded-control p-1.5 transition-colors', s.enabled ? 'text-teal' : 'text-ink-faint hover:text-teal')}
-                aria-label={s.enabled ? '停用' : '启用'}
-              >
-                <Power size={14} />
-              </button>
-              <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => openEdit(s)} aria-label="编辑">
-                <Pencil size={14} />
-              </button>
-              <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => remove(s)} aria-label="删除">
-                <Trash2 size={14} />
-              </button>
+              {compact ? (
+                /* 手机端：一行 5 个图标必然挤成一团，只留「抓取」，其余收进 ⋯ */
+                <>
+                  <Button size="sm" variant="tertiary" onClick={() => fetchNow(s)} disabled={testing === s.id} className="!px-2">
+                    <Download size={13} /> 抓取
+                  </Button>
+                  <button
+                    onClick={() => setActionFor(s)}
+                    className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-raised"
+                    aria-label="更多操作"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Button size="sm" variant="tertiary" onClick={() => fetchNow(s)} disabled={testing === s.id} className="!px-2">
+                    <Download size={13} /> {testing === s.id ? '抓取中' : '抓取'}
+                  </Button>
+                  <Button size="sm" variant="tertiary" onClick={() => test(s)} disabled={testing === s.id} className="!px-2">
+                    <Zap size={13} /> 测试
+                  </Button>
+                  <button
+                    onClick={() => toggleEnabled(s)}
+                    className={cn('rounded-control p-1.5 transition-colors', s.enabled ? 'text-teal' : 'text-ink-faint hover:text-teal')}
+                    aria-label={s.enabled ? '停用' : '启用'}
+                  >
+                    <Power size={14} />
+                  </button>
+                  <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => openEdit(s)} aria-label="编辑">
+                    <Pencil size={14} />
+                  </button>
+                  <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => remove(s)} aria-label="删除">
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -296,6 +334,58 @@ export function SourceManager() {
           }
         />
       )}
+
+      {/* 手机端单源操作：整行按钮摊不开，改为弹层集中承载 */}
+      <Dialog open={actionFor != null} onClose={() => setActionFor(null)} title={actionFor?.name}>
+        {actionFor && (
+          <div className="space-y-2">
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                const s = actionFor
+                setActionFor(null)
+                void test(s)
+              }}
+            >
+              <Zap size={14} /> 测试连接
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                const s = actionFor
+                setActionFor(null)
+                void toggleEnabled(s)
+              }}
+            >
+              <Power size={14} /> {actionFor.enabled ? '停用该源' : '启用该源'}
+            </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => {
+                const s = actionFor
+                setActionFor(null)
+                openEdit(s)
+              }}
+            >
+              <Pencil size={14} /> 编辑配置
+            </Button>
+            <Button
+              variant="danger"
+              className="w-full"
+              onClick={() => {
+                const s = actionFor
+                setActionFor(null)
+                void remove(s)
+              }}
+            >
+              <Trash2 size={14} /> 删除该源
+            </Button>
+          </div>
+        )}
+      </Dialog>
 
       {/* 推荐来源目录 */}
       <div className="mt-4">
@@ -357,7 +447,7 @@ export function SourceManager() {
             />
           )}
           <p className="text-[11px] text-ink-faint">
-            Steam/Jikan 无需 Key（Steam 需 App ID）；RAWG 需在配置填 key（绝不写源码）。GitHub 用公共搜索 API。
+            Steam/Jikan 无需 Key（Steam 需 App ID）；RAWG 需在配置填 key（绝不写源码）。GitHub 用公共搜索 API；B 站须先配置上方「自建代理」。
           </p>
         </div>
       </Dialog>
@@ -400,7 +490,7 @@ export function SourceManager() {
               <span className="seal seal--done">{preview.error.kind.toUpperCase()}</span>
               <span className="text-sm text-ink">{preview.error.message}</span>
             </div>
-            <p className="text-[11px] leading-relaxed text-ink-faint">
+            <p className="hidden text-[11px] leading-relaxed text-ink-faint md:block">
               失败分类：CORS（浏览器跨域）/ auth（认证）/ timeout（超时）/ parse（解析）/ empty（空数据）/ http（状态码）。CORS 受限时建议改用 RSS / JSON 接口，或接入服务端代理。
             </p>
           </div>

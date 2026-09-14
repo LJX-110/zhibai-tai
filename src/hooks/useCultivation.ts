@@ -22,8 +22,7 @@ export function useCultivation(): {
       waterRatio: stats.waterRatio,
       habitLogsToday: stats.habitLogs,
       bodyLogsToday: stats.bodyLogs,
-      journalToday: Boolean(stats.journal),
-      journalMood: stats.journal?.mood,
+      notesToday: stats.notesToday,
       creationsToday: stats.creations,
     })
     return { result, grade: cultivationGrade(result.total) }

@@ -1,25 +1,43 @@
 /**
  * NoteItem —— 笔记/灵感条目
+ * 整卡可点开详情：移动端此前除悬停按钮外没有任何入口，笔记只能看不能改。
  */
 import { Pencil, Pin, Trash2 } from 'lucide-react'
 import type { Note } from '../../types/entities'
 import { cn } from '../../utils/cn'
 import { Badge } from '../ui/Badge'
 import { formatHM } from '../../utils/id'
+import { noteTitle } from '../../utils/note'
 
 export interface NoteItemProps {
   note: Note
+  /** 点整卡打开详情（可选；不传则不可点） */
+  onOpen?: (note: Note) => void
   onEdit: (note: Note) => void
   onDelete: (note: Note) => void
   onTogglePin: (note: Note) => void
 }
 
-export function NoteItem({ note, onEdit, onDelete, onTogglePin }: NoteItemProps) {
+export function NoteItem({ note, onOpen, onEdit, onDelete, onTogglePin }: NoteItemProps) {
   return (
     <div
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      onClick={onOpen ? () => onOpen(note) : undefined}
+      onKeyDown={
+        onOpen
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onOpen(note)
+              }
+            }
+          : undefined
+      }
       className={cn(
         'group relative overflow-hidden rounded-tile border border-line bg-raised p-4 pl-4.5 transition-all duration-fast hover:-translate-y-px hover:shadow-soft',
         note.pinned && 'border-bronze/35 bg-paper/50',
+        onOpen && 'cursor-pointer',
       )}
     >
       {/* 左侧签条：灵感朱砂 / 笔记鎏金 */}
@@ -35,9 +53,7 @@ export function NoteItem({ note, onEdit, onDelete, onTogglePin }: NoteItemProps)
             {note.pinned && (
               <Pin size={13} className="shrink-0 text-bronze" />
             )}
-            <span className="scribal-title truncate text-base text-ink">
-              {note.title || '（无题）'}
-            </span>
+            <span className="scribal-title truncate text-base text-ink">{noteTitle(note)}</span>
           </div>
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge tone={note.kind === 'inspiration' ? 'cinnabar' : 'plain'}>
@@ -53,7 +69,12 @@ export function NoteItem({ note, onEdit, onDelete, onTogglePin }: NoteItemProps)
             </span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
+        {/* hover-reveal：仅鼠标设备悬停显现，触屏常显；点按钮不触发整卡打开 */}
+        <div
+          className="hover-reveal flex shrink-0 items-center gap-0.5"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <button className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted hover:border-bronze/50 hover:text-bronze" onClick={() => onTogglePin(note)} aria-label="置顶">
             <Pin size={13} />
           </button>

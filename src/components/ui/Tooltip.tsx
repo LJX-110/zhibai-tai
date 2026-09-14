@@ -15,7 +15,7 @@ export function Tooltip({ label, children, className }: TooltipProps) {
       {children}
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-control bg-ink px-2 py-1 text-xs text-on-dark opacity-0 shadow-float transition-opacity duration-fast group-hover:opacity-100"
+        className="pointer-events-none absolute bottom-full left-1/2 z-[var(--z-overlay)] mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-control bg-ink px-2 py-1 text-xs text-on-dark opacity-0 shadow-float transition-opacity duration-fast group-hover:opacity-100"
       >
         {label}
       </span>

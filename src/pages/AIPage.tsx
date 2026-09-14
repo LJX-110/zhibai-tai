@@ -4,7 +4,7 @@
  * 快速开始：添加第一个模型 / Skill / Agent / 导入 Prompt；空态也有完整结构
  */
 import { useState } from 'react'
-import { Bot, Box, Cpu, FileText, Hammer, Plug, Power, Plus, Search, Sparkles, Workflow } from 'lucide-react'
+import { Bot, Box, Cpu, FileText, Hammer, Plug, Plus, Power, Search, Sparkles, Trash2, Workflow } from 'lucide-react'
 import { useAIResourceStore } from '../stores/useAIStore'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { AITasks } from '../components/ai/AITasks'
@@ -141,6 +141,12 @@ export function AIPage() {
       enabled: !r.enabled,
       updatedAt: new Date().toISOString(),
     })
+  }
+
+  /** 登记进来的能力也得能删掉，否则列表只会越堆越长 */
+  const remove = async (r: AIResource) => {
+    await useAIResourceStore.getState().remove(r.id)
+    toast('已删除')
   }
 
   return (
@@ -293,6 +299,14 @@ export function AIPage() {
                   <Button size="sm" variant="tertiary" onClick={() => openEdit(r)}>
                     编辑
                   </Button>
+                  <button
+                    onClick={() => remove(r)}
+                    className="rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-cinnabar"
+                    aria-label="删除"
+                    title="删除该能力"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
             </div>

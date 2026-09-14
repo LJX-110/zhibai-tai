@@ -45,7 +45,7 @@ export function Sheet({ open, onClose, title, children, footer, className, tone 
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div className="fixed inset-0 z-[var(--z-overlay)]">
       <div
         className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_var(--ease-standard)]"
         onClick={onClose}

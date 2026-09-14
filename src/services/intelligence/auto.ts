@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useSourceStore } from '../../stores/useSourceStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { fetchAllFromSources } from './providers/registry'
+import { saveFetchedItems } from './retention'
 import { dedupeKey } from '../../components/source/SourceManager'
 import { playSound } from '../sound'
 
@@ -14,13 +15,17 @@ let timer: number | null = null
 async function runFetch(): Promise<number> {
   const sources = useSourceStore.getState().items.filter((s) => s.enabled)
   if (sources.length === 0) return 0
-  const fresh = await fetchAllFromSources(sources)
-  const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
-  const added = fresh.filter((x) => !known.has(dedupeKey(x)))
-  if (added.length > 0) {
-    // 必须经 store 落库：直接 setState 只改内存，刷新即丢、也不会触发自动同步
-    await useIntelligenceStore.getState().saveMany(added)
+  const res = await fetchAllFromSources(sources)
+  // 定时抓取不弹失败提示（会每小时烦一次）；逐源的失败原因由
+  // registry 写进 source.lastError，「系统 · 情报源」卡片上能直接看到
+  if (res.failures.length > 0) {
+    console.warn('[知白台] 定时抓取部分源失败', res.failures)
   }
+  const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
+  const added = res.items.filter((x) => !known.has(dedupeKey(x)))
+  // 经 saveFetchedItems 落库并顺带按上限裁剪：定时抓取是数据增长最快的入口，
+  // 这里漏掉裁剪，快照就会在用户毫无察觉的情况下持续膨胀
+  if (added.length > 0) await saveFetchedItems(added)
   return added.length
 }
 
@@ -35,11 +40,7 @@ export function initIntelAutoFetch(): void {
   const minutes = Math.max(10, s.intelFetchMinutes)
   timer = window.setInterval(() => {
     void runFetch().then((n) => {
-      if (n > 0) {
-        playSound('sync')
-        // 轻提示新情报
-        useIntelligenceStore.setState((prev) => ({ ...prev }))
-      }
+      if (n > 0) playSound('sync')
     })
   }, minutes * 60 * 1000)
 }

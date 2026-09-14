@@ -2,7 +2,7 @@
  * 修 —— 斩三尸 / 身体 / 喝水 / 成长
  */
 import { useMemo, useState } from 'react'
-import { Flame, Plus } from 'lucide-react'
+import { Flame, Plus, Trash2 } from 'lucide-react'
 import {
   Line,
   LineChart,
@@ -17,7 +17,6 @@ import { useWaterStore } from '../stores/useWaterStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
 import { useTaskStore } from '../stores/useTaskStore'
-import { useJournalStore } from '../stores/useJournalStore'
 import { useNoteStore } from '../stores/useNoteStore'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { computeDailyCultivation } from '../services/cultivation'
@@ -32,6 +31,7 @@ import {
   Ring,
   Section,
   Tabs,
+  useToast,
   type TabItem,
 } from '../components/ui'
 import { createId, shiftDate, todayISO } from '../utils/id'
@@ -242,6 +242,7 @@ function HabitTab() {
 function BodyTab() {
   const defs = useBodyMetricStore((s) => s.items)
   const logs = useBodyMetricLogStore((s) => s.items)
+  const toast = useToast().toast
   const today = todayISO()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -279,6 +280,16 @@ function BodyTab() {
         value: num,
       })
     }
+  }
+
+  /** 删指标要连带删它的历史记录：留着孤儿记录既占体积又会被同步带出去 */
+  const removeDef = async (d: BodyMetricDef) => {
+    const orphaned = logs.filter((l) => l.metricId === d.id)
+    for (const l of orphaned) {
+      await useBodyMetricLogStore.getState().remove(l.id)
+    }
+    await useBodyMetricStore.getState().remove(d.id)
+    toast(orphaned.length > 0 ? `已删除「${d.name}」及其 ${orphaned.length} 条记录` : `已删除「${d.name}」`)
   }
 
   return (
@@ -339,6 +350,14 @@ function BodyTab() {
                   <Button size="sm" variant="primary" onClick={() => record(d, values[d.id] ?? String(todayLog?.value ?? ''))}>
                     记
                   </Button>
+                  <button
+                    onClick={() => void removeDef(d)}
+                    className="hover-reveal rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-cinnabar"
+                    aria-label={`删除指标 ${d.name}`}
+                    title="删除该指标及其记录"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             )
@@ -453,7 +472,6 @@ function GrowthTab() {
   const waterLogs = useWaterStore((s) => s.items)
   const habitLogs = useHabitLogStore((s) => s.items)
   const bodyLogs = useBodyMetricLogStore((s) => s.items)
-  const journals = useJournalStore((s) => s.items)
   const notes = useNoteStore((s) => s.items)
   const collections = useCollectionStore((s) => s.items)
   const waterGoal = useSettingsStore((s) => s.waterGoalMl)
@@ -467,7 +485,6 @@ function GrowthTab() {
       waterLogs,
       habitLogs,
       bodyMetricLogs: bodyLogs,
-      journals,
       notes,
       collections,
       waterGoal,
@@ -499,7 +516,7 @@ function GrowthTab() {
       }
       return { label: `${d.getMonth() + 1}月`, value: Math.round(sum / days), key }
     }).reverse()
-  }, [tasks, pomo, waterLogs, habitLogs, bodyLogs, journals, notes, collections, waterGoal, granularity])
+  }, [tasks, pomo, waterLogs, habitLogs, bodyLogs, notes, collections, waterGoal, granularity])
 
   const monthly = useMemo(() => {
     const now = new Date()
@@ -559,7 +576,7 @@ function GrowthTab() {
           </ResponsiveContainer>
         </div>
         <p className="mt-1 text-[11px] text-ink-faint">
-          由完成待办 / 专注 / 喝水 / 斩三尸 / 身体记录 / 日省 / 创作 逐日聚合
+          由完成待办 / 专注 / 喝水 / 斩三尸 / 身体记录 / 记录 / 创作 逐日聚合
         </p>
       </div>
 
@@ -607,7 +624,8 @@ function GrowthTab() {
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="overflow-x-auto">
+      {/* 桌面：月度明细表（横向空间足够） */}
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[520px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line text-left text-xs text-ink-faint">
@@ -638,6 +656,28 @@ function GrowthTab() {
             ))}
           </tbody>
         </table>
+      </div>
+      {/* 移动端：同数据转卡片网格，无需横向滚动 */}
+      <div className="grid grid-cols-2 gap-2 sm:hidden">
+        {[...monthly].reverse().map((m) => (
+          <div key={m.label} className="rounded-tile border border-line bg-paper p-3">
+            <div className="mb-2 text-sm font-medium text-ink-muted">{m.label}</div>
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-ink-faint">完成待办</span>
+                <span className="tabular text-ink">{m.done}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-faint">专注分钟</span>
+                <span className="tabular text-ink">{m.focus}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-faint">饮水</span>
+                <span className="tabular text-ink">{m.water} ml</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
       <p className="mt-3 text-[11px] text-ink-faint">
         成长统计由各模块行为数据汇总，道行算法接口已预留（services/cultivation）。

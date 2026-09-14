@@ -8,6 +8,7 @@ import { useCourseStore } from '../../stores/useStudyStore'
 import { useFollowStore } from '../../stores/useLifeStores'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
+import { useConflictStore } from '../../stores/useConflictStore'
 import { dueTaskNotices, followUpdateCount, browserNotify } from '../../services/notification'
 import { playSound } from '../../services/sound'
 import { useToast } from '../ui/Toast'
@@ -17,6 +18,9 @@ export function NotificationGate() {
   const toast = useToast().toast
   const notifyEnabled = useSettingsStore((s) => s.notifyEnabled)
   const browserNotifyOn = useSettingsStore((s) => s.browserNotify)
+  const syncStatus = useSettingsStore((s) => s.syncStatus)
+  const syncError = useSettingsStore((s) => s.syncError)
+  const pendingConflicts = useConflictStore((s) => s.pendingCount)
   const tasks = useTaskStore((s) => s.items)
   const courses = useCourseStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
@@ -71,6 +75,34 @@ export function NotificationGate() {
     playSound('notification')
     if (browserNotifyOn) void browserNotify('关注更新', `你的关注对象有 ${count} 条新情报`)
   }, [follows, intel, notifyEnabled, browserNotifyOn, toast])
+
+  // 同步异常 / 冲突待处理：主动提醒（状态变化时只提醒一次，避免 30s 自动重试期间反复弹）
+  const lastSyncRef = useRef<{ status: string; error?: string; conflicts: number }>({
+    status: 'idle',
+    conflicts: 0,
+  })
+  useEffect(() => {
+    if (!notifyEnabled) return
+    const prev = lastSyncRef.current
+    const cur = { status: syncStatus, error: syncError, conflicts: pendingConflicts }
+    lastSyncRef.current = cur
+
+    // 同步失败：从非 error 进入 error 时提醒一次
+    if (syncStatus === 'error' && prev.status !== 'error' && syncError) {
+      const msg = `同步失败：${syncError}`
+      toast(msg, 'danger')
+      playSound('notification')
+      if (browserNotifyOn) void browserNotify('知白台 · 同步失败', syncError)
+      return
+    }
+    // 冲突：pending 从 0 变为 >0 时提醒一次（人工解决入口在设置页「同步」）
+    if (pendingConflicts > 0 && prev.conflicts === 0) {
+      const msg = `同步发现 ${pendingConflicts} 条待处理冲突`
+      toast(msg, 'info')
+      playSound('notification')
+      if (browserNotifyOn) void browserNotify('知白台 · 同步冲突', `${pendingConflicts} 条记录需人工选择版本`)
+    }
+  }, [syncStatus, syncError, pendingConflicts, notifyEnabled, browserNotifyOn, toast])
 
   return null
 }

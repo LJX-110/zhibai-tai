@@ -81,8 +81,36 @@ npm run build      # 生产构建（输出 dist/）
 ## 情报抓取与自建代理
 
 纯前端应用抓 RSS 会被浏览器 CORS 拦截。抓取链路为：**自建代理 → 直连 → 公共代理兜底**。
-强烈建议部署自建代理（免费额度足够个人）：见 [`cloudflare-worker/`](cloudflare-worker/README.md)，
-部署后把 Worker 地址填入「系统 · 情报源 · 自建代理」即可。
+强烈建议部署自建代理（免费额度足够个人），**部署指引见 `cloudflare-worker/README.md`**，
+部署后把地址填入「系统 · 情报源 · 自建代理」即可。
+
+### 快速部署（推荐 Netlify —— 国内可达性最好）
+
+仓库已带好全部配置文件（转发逻辑 `proxy/core.js`、`netlify.toml`、函数目录 `netlify/functions/`），
+**无需写任何代码**，两种方式二选一：
+
+```bash
+# 方式一：Netlify CLI（推荐，<site> 换成你的站点名）
+npm i -g netlify-cli
+netlify login
+netlify deploy --prod "e:\WorkSpace\work\知白台"   # 部署 src=dist 静态站亦可，函数走 netlify.toml
+
+# 方式二：Cloudflare Pages（国内稍慢但同样可用）
+npx wrangler pages deploy e:\WorkSpace\work\知白台\public --project-name=zhibaitai-proxy
+```
+
+> ⚠️ `*.workers.dev` / `*.vercel.app` 域名在国内被 DNS 污染，**不要**用 Cloudflare Workers
+> 或 Vercel 的默认域名，选 Netlify 或 Cloudflare Pages 才能连上。
+
+部署后填入知白台：
+
+| 部署形态 | 填这个地址 |
+| --- | --- |
+| Netlify（推荐） | `https://<site>.netlify.app/proxy` |
+| Cloudflare Pages | `https://<project>.pages.dev/proxy` |
+
+安全加固（可选）：在部署平台设置环境变量 `ALLOWED_HOSTS`（只放行你订阅的主机，
+`api.bilibili.com` 也要列进去）与 `ALLOWED_ORIGINS`（只放行你的应用域名）。
 
 ## 目录结构
 

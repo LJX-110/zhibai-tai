@@ -1,12 +1,15 @@
 /**
  * 藏 —— 统一个人收藏系统
- * 分类只有一套「类型」（小说/动漫/游戏/…，items 上的 type 字段），
- * 旧数据里的 category 字段仅作展示，不再提供编辑入口。
+ *
+ * 两套并存的维度，别混：
+ *  · 「类型」= 介质（小说/动漫/游戏/GitHub…，items 上的 type 字段），固定枚举；
+ *  · 「分类」= 你自建的主题标签（items 上的 category 字段），走 categories 业务表可增删、跨设备同步。
+ *  两者默认名高度重合，界面上统一加「类型 · 」「分类 · 」前缀区分。
  */
 import { useMemo, useState } from 'react'
 import { Plus, Search, Star, Pencil, Trash2, ExternalLink, Sparkles } from 'lucide-react'
 import { useCollectionStore } from '../stores/useCollectionStore'
-import { useSettingsStore } from '../stores/useSettingsStore'
+import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
 import { ProjectList } from '../components/project/ProjectList'
 import { aiService } from '../services/ai/ai-service'
 import { recordActivity } from '../services/activity'
@@ -21,6 +24,7 @@ import {
   EmptyState,
   Input,
   PageHeader,
+  ScrollRow,
   Section,
   Select,
   Textarea,
@@ -81,9 +85,15 @@ const EMPTY_FORM: FormState = {
 
 export function CollectionPage() {
   const items = useCollectionStore((s) => s.items)
-  const collectionCategories = useSettingsStore((s) => s.collectionCategories)
+  const collectionCategoryRows = useCategoryStore((s) => s.items)
+  // 分类来自业务表（跨设备同步）；派生结果在组件体内算，避免 selector 生成新引用
+  const collectionCategories = useMemo(
+    () => categoryNames(collectionCategoryRows, 'collection'),
+    [collectionCategoryRows],
+  )
   const toast = useToast().toast
   const [view, setView] = useState<'items' | 'projects'>('items')
+  const [typeFilter, setTypeFilter] = useState<CollectionType | 'all'>('all')
   const [catFilter, setCatFilter] = useState<string>('all')
   const [onlyFav, setOnlyFav] = useState(false)
   const [query, setQuery] = useState('')
@@ -97,9 +107,21 @@ export function CollectionPage() {
   const [catMgrOpen, setCatMgrOpen] = useState(false)
   const [catDraft, setCatDraft] = useState('')
 
-  /** 分类筛选：'all' | 分类名 | '其他'（无分类或分类已删除的条目） */
+  /** 只列出「确实有藏品」的类型：默认 10 种类型平铺会摆出一排 0，窄屏上纯属噪音 */
+  const typesInUse = useMemo(() => {
+    const seen = new Set(items.map((it) => it.type))
+    return TYPE_ORDER.filter((t) => seen.has(t))
+  }, [items])
+
+  /**
+   * 两个维度各自独立筛选：
+   *  · 类型（介质，固定枚举）——「这是什么」
+   *  · 分类（用途，可增删同步）——「拿它做什么」
+   * 此前两者默认名重合 7 项，界面上无法分辨，现在分两行呈现。
+   */
   const list = useMemo(() => {
     return items
+      .filter((it) => typeFilter === 'all' || it.type === typeFilter)
       .filter((it) => {
         if (catFilter === 'all') return true
         if (catFilter === '其他') return !it.category || !collectionCategories.includes(it.category)
@@ -116,16 +138,16 @@ export function CollectionPage() {
         )
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  }, [items, catFilter, onlyFav, query, collectionCategories])
+  }, [items, typeFilter, catFilter, onlyFav, query, collectionCategories])
 
-  const addCategory = () => {
-    const t = catDraft.trim()
+  const addCategoryName = (name: string) => {
+    const t = name.trim()
     if (!t) return
-    useSettingsStore.getState().addCollectionCategory(t)
+    void addCategory('collection', t)
     setCatDraft('')
   }
-  const removeCategory = (name: string) => {
-    useSettingsStore.getState().removeCollectionCategory(name)
+  const removeCategoryName = (name: string) => {
+    void removeCategory('collection', name)
     if (catFilter === name) setCatFilter('all')
   }
 
@@ -249,17 +271,51 @@ export function CollectionPage() {
         <ProjectList />
       ) : (
         <>
-      {/* 筛选条：分类体系（行尾 + 号管理，与情页一致）；类型为条目属性徽标 */}
-      <div className="flex flex-wrap items-center gap-2 pb-3">
-        <div className="flex flex-1 flex-wrap items-center gap-1">
+      {/* 两个维度分两行：类型=介质（这是什么）· 分类=用途（拿它做什么）
+          此前两者混在一行且默认名重合 7 项，界面上根本分不出区别 */}
+      <div className="pb-3">
+        <ScrollRow className="pb-1">
+          <span className="shrink-0 pr-1 text-[11px] text-ink-faint">类型</span>
           <button
-            onClick={() => setCatFilter('all')}
+            onClick={() => setTypeFilter('all')}
             className={cn(
-              'rounded-tile px-3 py-1.5 text-sm transition-colors',
-              catFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+              'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+              typeFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
             )}
           >
             全部 <span className="tabular text-xs opacity-60">{items.length}</span>
+          </button>
+          {typesInUse.map((t) => {
+            const count = items.filter((it) => it.type === t).length
+            return (
+              <button
+                key={t}
+                onClick={() => setTypeFilter(t)}
+                className={cn(
+                  'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+                  typeFilter === t ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+                )}
+              >
+                {TYPE_LABEL[t]} <span className="tabular text-xs opacity-60">{count}</span>
+              </button>
+            )
+          })}
+          {typesInUse.length === 0 && (
+            <span className="shrink-0 text-xs text-ink-faint">还没有藏品</span>
+          )}
+        </ScrollRow>
+
+        <ScrollRow className="mt-1.5 pb-1" activeSelector={'[data-active="true"]'} activeKey={catFilter}>
+          <span className="shrink-0 pr-1 text-[11px] text-ink-faint">分类</span>
+          <button
+            data-active={catFilter === 'all' || undefined}
+            onClick={() => setCatFilter('all')}
+            className={cn(
+              'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+              catFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+            )}
+          >
+            全部
           </button>
           {collectionCategories.map((c) => {
             const count =
@@ -269,9 +325,10 @@ export function CollectionPage() {
             return (
               <button
                 key={c}
+                data-active={catFilter === c || undefined}
                 onClick={() => setCatFilter(c)}
                 className={cn(
-                  'rounded-tile px-3 py-1.5 text-sm transition-colors',
+                  'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
                   catFilter === c ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
                 )}
               >
@@ -282,13 +339,13 @@ export function CollectionPage() {
           <Tooltip label="管理分类">
             <button
               onClick={() => setCatMgrOpen(true)}
-              className="rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
+              className="shrink-0 rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
               aria-label="管理分类"
             >
               <Plus size={14} />
             </button>
           </Tooltip>
-        </div>
+        </ScrollRow>
       </div>
 
       <Section
@@ -362,7 +419,9 @@ export function CollectionPage() {
                       {it.title}
                     </span>
                     {it.category && (
-                      <span className="text-[11px] text-ink-muted">{it.category}</span>
+                      /* 加「分类」前缀：默认分类名与类型名高度重合（小说/动漫/游戏…），
+                         不加前缀时无法分辨「类型 小说」与「分类 小说」 */
+                      <span className="text-[11px] text-ink-muted">分类 · {it.category}</span>
                     )}
                   </div>
                   {/* 底部：状态/标签/评级 */}
@@ -408,18 +467,25 @@ export function CollectionPage() {
       >
         <div className="space-y-3">
           <Input autoFocus placeholder="标题" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          {/* 两个下拉此前没有任何标签，窄屏上分不清哪个是哪个 —— 显式标注「类型=介质 / 分类=用途」 */}
           <div className="grid grid-cols-2 gap-3">
-            <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CollectionType })}>
-              {TYPE_ORDER.map((t) => (
-                <option key={t} value={t}>{TYPE_LABEL[t]}</option>
-              ))}
-            </Select>
-            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} aria-label="分类">
-              <option value="">不分类</option>
-              {collectionCategories.filter((c) => c !== '其他').map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </Select>
+            <label className="block">
+              <span className="mb-1 block text-[11px] text-ink-faint">类型 · 这是什么</span>
+              <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CollectionType })}>
+                {TYPE_ORDER.map((t) => (
+                  <option key={t} value={t}>{TYPE_LABEL[t]}</option>
+                ))}
+              </Select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] text-ink-faint">分类 · 拿它做什么</span>
+              <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                <option value="">不分类</option>
+                {collectionCategories.filter((c) => c !== '其他').map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </Select>
+            </label>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Input placeholder="#标签" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
@@ -437,8 +503,8 @@ export function CollectionPage() {
         {detail && (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone="cinnabar">{TYPE_LABEL[detail.type]}</Badge>
-              {detail.category && <Badge tone="teal">{detail.category}</Badge>}
+              <Badge tone="cinnabar">类型 · {TYPE_LABEL[detail.type]}</Badge>
+              {detail.category && <Badge tone="teal">分类 · {detail.category}</Badge>}
               {detail.status && <Badge>{detail.status}</Badge>}
               {detail.rating != null && (
                 <span className="tabular text-sm text-bronze">{'★'.repeat(detail.rating)}</span>
@@ -536,7 +602,7 @@ export function CollectionPage() {
                   {c}
                   <span className="tabular text-[10px] text-ink-faint">{count}</span>
                   <button
-                    onClick={() => removeCategory(c)}
+                    onClick={() => removeCategoryName(c)}
                     className="text-ink-faint transition-colors hover:text-cinnabar"
                     aria-label={`移除 ${c}`}
                   >
@@ -551,11 +617,11 @@ export function CollectionPage() {
               autoFocus
               value={catDraft}
               onChange={(e) => setCatDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+              onKeyDown={(e) => e.key === 'Enter' && addCategoryName(catDraft)}
               placeholder="新增分类名…"
               className="max-w-[200px]"
             />
-            <Button size="sm" variant="secondary" onClick={addCategory} disabled={!catDraft.trim()}>
+            <Button size="sm" variant="secondary" onClick={() => addCategoryName(catDraft)} disabled={!catDraft.trim()}>
               <Plus size={13} /> 添加
             </Button>
           </div>
@@ -565,7 +631,7 @@ export function CollectionPage() {
               size="sm"
               variant="tertiary"
               onClick={() => {
-                useSettingsStore.getState().resetCollectionCategories()
+                void resetCategories('collection')
                 setCatFilter('all')
               }}
             >

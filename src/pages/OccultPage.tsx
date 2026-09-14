@@ -1,8 +1,11 @@
 /**
- * 奇 —— 梅花易数 + 每日签 + 历史 + 常用工具
+ * 奇 —— 抽签 / 梅花 / 大衍 / 历史 四个页签
+ *
+ * 功能一项未减，只是从「一屏平铺七个 Section」改为按事分层：
+ * 手机上先把当下要做的那件事放到首屏，其余收进对应页签。
  */
 import { useState } from 'react'
-import { History, ScrollText, Sparkles, Wand2 } from 'lucide-react'
+import { History, ScrollText, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { useDivinationStore, saveDailySignRecord } from '../stores/useDivinationStore'
 import { BAGUA, signOf } from '../services/divination'
 import { castMeihua, MEIHUA_METHOD_LABEL, type MeihuaCast, type MeihuaMethod } from '../services/occult/meihua'
@@ -17,7 +20,19 @@ import { playSound } from '../services/sound'
 import type { DivinationRecord } from '../types/entities'
 import { createId, todayISO } from '../utils/id'
 import { cn } from '../utils/cn'
-import { Badge, Button, Dialog, EmptyState, Input, Section, useToast } from '../components/ui'
+import { Badge, Button, Dialog, EmptyState, Input, Section, Tabs, useToast, type TabItem } from '../components/ui'
+
+/**
+ * 四个语义分组：抽签（每日惯例）/ 梅花 / 大衍 / 历史。
+ * 原先七个 Section 平铺一屏，手机上要滚三四屏才够得着「大衍」或存档，
+ * 分组后每屏只服务一件事；页签本身复用 Tabs 的右缘渐隐 + 选中项居中。
+ */
+const TABS: TabItem[] = [
+  { key: 'sign', label: '抽签' },
+  { key: 'meihua', label: '梅花' },
+  { key: 'dayan', label: '大衍' },
+  { key: 'history', label: '历史' },
+]
 
 export function OccultPage() {
   const today = todayISO()
@@ -25,6 +40,8 @@ export function OccultPage() {
   const toast = useToast().toast
   const records = useDivinationStore((s) => s.items)
   const stats = useTodayStats()
+  const [tab, setTab] = useState('sign')
+  const [clearOpen, setClearOpen] = useState(false)
 
   const [explain, setExplain] = useState<{ title: string; body: string } | null>(null)
   const [explaining, setExplaining] = useState<string | null>(null)
@@ -184,66 +201,97 @@ export function OccultPage() {
 
   const meihuaCount = records.filter((r) => r.type === 'bagua').length
   const dayanCount = records.filter((r) => r.type === 'dayan').length
+  const signCount = records.filter((r) => r.type === 'daily_sign').length
+
+  /**
+   * 清空存档：必须走 store.clear() —— 它内部走 repo 工厂，
+   * 在同一个事务里清表并逐行写墓碑，删除才会随同步传播到其他设备。
+   * 逐条 remove 拼出来的「批量」会拆成 N 个事务与 N 次同步触发。
+   */
+  const clearArchive = async () => {
+    setClearOpen(false)
+    const ok = await useDivinationStore.getState().clear()
+    // 失败时 store 层已经给出原因提示，这里不重复播报
+    if (ok) toast('已清空全部占卜存档', 'success')
+  }
 
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
-      {/* 页头 */}
-      <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
-        <div>
-          <h1 className="scribal-title text-3xl text-ink-bright">奇 · 玄机</h1>
-          <p className="scribal mt-1.5 text-base text-ink-muted">阴阳不测之谓神</p>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-ink-faint">
-          <Badge tone="teal">梅花 {meihuaCount}</Badge>
-          <Badge tone="cinnabar">大衍 {dayanCount}</Badge>
-          <Badge tone="plain">签 {records.filter((r) => r.type === 'daily_sign').length}</Badge>
-        </div>
+      {/* 页头：三枚计数徽章原先挤在标题行右侧，窄屏上把「奇 · 玄机」压到两行；
+          计数属于「回看」场景，随存档列表一起移入「历史」页 */}
+      <div className="pb-4">
+        <h1 className="scribal-title text-3xl text-ink-bright">奇 · 玄机</h1>
+        <p className="scribal mt-1.5 text-base text-ink-muted">阴阳不测之谓神</p>
       </div>
+      <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
 
-      {/* 今日签（全宽） */}
-      <div className="grain-local rounded-paper border border-line px-4 py-5 sm:px-6">
-        <Section
-          title="今日签"
-          hint={today}
-          action={
-            <Button size="sm" variant="secondary" onClick={saveDailySign}>
-              记入档
-            </Button>
-          }
-        >
-          <div className="rounded-tile border border-line bg-paper/50 p-4">
-            <div className="flex items-start gap-4">
-              <Seal size={52} char={sign.tag} tone="cinnabar" rotate={-2} />
-              <div className="min-w-0 flex-1">
-                <div className="scribal-title text-lg text-ink">{sign.title}</div>
-                <p className="mt-1 text-sm leading-relaxed text-ink-muted">{sign.text}</p>
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                  <span className="text-teal">宜 {sign.do}</span>
-                  <span className="text-cinnabar">忌 {sign.dont}</span>
-                </div>
-                <p className="mt-1.5 text-xs text-ink-muted">{sign.advice}</p>
-              </div>
-              <div className="hidden shrink-0 sm:block">
-                <BaguaWheel />
-              </div>
-            </div>
-            {/* AI 个性化解读：生成后缓存，离线可回看 */}
-            <div className="mt-3 border-t border-line/70 pt-3">
-              {todaySignRecord?.aiReading ? (
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-                  {todaySignRecord.aiReading}
-                </p>
-              ) : (
-                <Button size="sm" variant="secondary" onClick={genSignReading} disabled={reading}>
-                  <Sparkles size={13} /> {reading ? '解读中…' : 'AI 个性化解读'}
+      {tab === 'sign' && (
+        <>
+          {/* 今日签（全宽） */}
+          <div className="grain-local rounded-paper border border-line px-4 py-5 sm:px-6">
+            <Section
+              title="今日签"
+              hint={today}
+              action={
+                <Button size="sm" variant="secondary" onClick={saveDailySign}>
+                  记入档
                 </Button>
-              )}
-            </div>
+              }
+            >
+              <div className="rounded-tile border border-line bg-paper/50 p-4">
+                <div className="flex items-start gap-4">
+                  <Seal size={52} char={sign.tag} tone="cinnabar" rotate={-2} />
+                  <div className="min-w-0 flex-1">
+                    <div className="scribal-title text-lg text-ink">{sign.title}</div>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-muted">{sign.text}</p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                      <span className="text-teal">宜 {sign.do}</span>
+                      <span className="text-cinnabar">忌 {sign.dont}</span>
+                    </div>
+                    <p className="mt-1.5 text-xs text-ink-muted">{sign.advice}</p>
+                  </div>
+                  <div className="hidden shrink-0 sm:block">
+                    <BaguaWheel />
+                  </div>
+                </div>
+                {/* AI 个性化解读：生成后缓存，离线可回看 */}
+                <div className="mt-3 border-t border-line/70 pt-3">
+                  {todaySignRecord?.aiReading ? (
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
+                      {todaySignRecord.aiReading}
+                    </p>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={genSignReading} disabled={reading}>
+                      <Sparkles size={13} /> {reading ? '解读中…' : 'AI 个性化解读'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Section>
           </div>
-        </Section>
-      </div>
+
+          {/* 常用工具：两枚快捷入口（与「今日签」同属「抽签」场景） */}
+          <div className="mt-2">
+            <Section title="常用工具" hint="快捷入口">
+              <div className="grid grid-cols-2 gap-2">
+                <ToolTile icon={ScrollText} label="记今日签" desc="签文入档" onClick={saveDailySign} />
+                <ToolTile
+                  icon={Sparkles}
+                  label="每日签"
+                  desc="今日所宜所忌"
+                  onClick={async () => {
+                    const { sign: s } = await saveDailySignRecord(today)
+                    toast(`${s.tag} · ${s.title} —— ${s.text}`)
+                  }}
+                />
+              </div>
+            </Section>
+          </div>
+        </>
+      )}
 
       {/* 梅花易数：起卦四式 → 排盘 → 解卦 → 入档 */}
+      {tab === 'meihua' && (
       <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <Section title="梅花易数" hint="体用生克 · 起卦四式">
@@ -346,8 +394,10 @@ export function OccultPage() {
           </Section>
         </div>
       </div>
+      )}
 
       {/* 大衍筮法：五十蓍草十八变成卦（《系辞》正统法） */}
+      {tab === 'dayan' && (
       <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <Section title="大衍筮法" hint="《系辞》正统 · 十八变成卦">
@@ -442,62 +492,76 @@ export function OccultPage() {
           </Section>
         </div>
       </div>
+      )}
 
-      {/* 常用工具 + 历史 */}
-      <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
-        <div className="lg:col-span-5">
-          <Section title="常用工具" hint="快捷入口">
-            <div className="grid grid-cols-2 gap-2">
-              <ToolTile icon={ScrollText} label="记今日签" desc="签文入档" onClick={saveDailySign} />
-              <ToolTile
-                icon={Sparkles}
-                label="每日签"
-                desc="今日所宜所忌"
-                onClick={async () => {
-                  const { sign: s } = await saveDailySignRecord(today)
-                  toast(`${s.tag} · ${s.title} —— ${s.text}`)
-                }}
-              />
+      {/* 历史 + 存档计数：计数原先挂在页头，属于「回看」场景，随列表一起挪进来 */}
+      {tab === 'history' && (
+      <div className="mt-2">
+        <Section
+          title="历史"
+          hint={`${records.length} 次 · 占卜存档`}
+          action={
+            <div className="flex items-center gap-2">
+              <History size={14} className="text-ink-faint" />
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => setClearOpen(true)}
+                disabled={records.length === 0}
+              >
+                <Trash2 size={13} /> 清空存档
+              </Button>
             </div>
-          </Section>
-        </div>
-        <div className="lg:col-span-7">
-          <Section
-            title="历史"
-            hint={`${records.length} 次 · 占卜存档`}
-            action={<History size={14} className="text-ink-faint" />}
-          >
-            {records.length > 0 ? (
-              <div>
-                {records
-                  .slice()
-                  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-                  .slice(0, 12)
-                  .map((r) => (
+          }
+        >
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <Badge tone="teal">梅花 {meihuaCount}</Badge>
+            <Badge tone="cinnabar">大衍 {dayanCount}</Badge>
+            <Badge tone="plain">签 {signCount}</Badge>
+          </div>
+          {records.length > 0 ? (
+            <div>
+              {records
+                .slice()
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                .slice(0, 12)
+                .map((r) => (
+                  /* 外层不再用 button 包整行：删除按钮无法嵌在 button 里（HTML 非法且点击冲突） */
+                  <div key={r.id} className="row group">
                     <button
-                      key={r.id}
                       onClick={() => useInspectorStore.getState().open('divination', r.id)}
-                      className="row w-full text-left"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
                     >
-                      <span className="tabular text-xs text-ink-faint">{r.date}</span>
-                      <span className="flex-1 truncate text-sm text-ink">{r.title}</span>
+                      <span className="tabular shrink-0 text-xs text-ink-faint">{r.date}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{r.title}</span>
                       <Badge tone={r.type === 'bagua' || r.type === 'dayan' ? 'teal' : r.type === 'daily_sign' ? 'cinnabar' : 'plain'}>
                         {r.type === 'daily_sign' ? '每日签' : r.type === 'bagua' ? '梅花' : r.type === 'dayan' ? '大衍' : r.type}
                       </Badge>
                     </button>
-                  ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={History}
-                title="暂无占卜记录"
-                desc="起卦、记签后会自动留档"
-                step="先起一卦或记一签"
-              />
-            )}
-          </Section>
-        </div>
+                    <button
+                      onClick={async () => {
+                        await useDivinationStore.getState().remove(r.id)
+                        toast('已删除该条存档')
+                      }}
+                      className="hover-reveal rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-cinnabar"
+                      aria-label="删除该条存档"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={History}
+              title="暂无占卜记录"
+              desc="起卦、记签后会自动留档"
+              step="先起一卦或记一签"
+            />
+          )}
+        </Section>
       </div>
+      )}
 
       {/* AI 解释 */}
       <Dialog
@@ -512,6 +576,26 @@ export function OccultPage() {
           {explain?.body}
         </pre>
         <p className="mt-2 text-[11px] text-ink-faint">AI 仅解释结构，卦象由算法生成，不由 AI 决定。</p>
+      </Dialog>
+
+      {/* 清空是不可逆的成批删除，必须先说清范围与后果再落刀 */}
+      <Dialog
+        open={clearOpen}
+        onClose={() => setClearOpen(false)}
+        title="清空全部存档？"
+        footer={
+          <>
+            <Button variant="tertiary" onClick={() => setClearOpen(false)}>取消</Button>
+            <Button variant="danger" onClick={clearArchive}>删除全部</Button>
+          </>
+        }
+      >
+        <p className="text-sm leading-relaxed text-ink-soft">
+          将删除本机全部 <span className="tabular font-medium text-ink">{records.length}</span> 条占卜存档，不可恢复。
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+          删除会随同步传播到其他设备。
+        </p>
       </Dialog>
     </div>
   )

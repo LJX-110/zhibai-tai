@@ -93,7 +93,7 @@ export function Dialog({
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[var(--z-overlay)] flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_var(--ease-standard)]"
         onClick={onClose}

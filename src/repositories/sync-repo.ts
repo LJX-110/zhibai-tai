@@ -6,8 +6,3 @@ import { createRepository } from './repo'
 export const syncQueueRepo =
   createRepository<SyncQueueRecord>(db.syncQueue)
 export const syncMetaRepo = createRepository<SyncMeta>(db.syncMeta)
-
-/** 待同步数量 */
-export async function pendingSyncCount(): Promise<number> {
-  return db.syncQueue.count()
-}

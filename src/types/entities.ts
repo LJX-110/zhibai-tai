@@ -31,10 +31,13 @@ export interface Task {
   completedAt?: string | null
 }
 
+/** 笔记类型：记录（内省）/ 灵感（创作） */
+export type NoteKind = 'note' | 'inspiration'
+
 /** 笔记 / 灵感（kind 区分） */
 export interface Note {
   id: ID
-  kind: 'note' | 'inspiration'
+  kind: NoteKind
   title: string
   body: string
   tags: string[]
@@ -77,6 +80,8 @@ export interface BodyMetricDef {
   target?: number | null
   order: number
   createdAt: string
+  /** 改名 / 调目标需要时间戳参与跨设备 LWW 判定 */
+  updatedAt?: string
 }
 
 /** 身体指标每日记录 */
@@ -121,6 +126,9 @@ export interface WeeklySlot {
   weekday: number
   start: string
   end: string
+  /** 上课周次（1 起）。缺省或空数组 = 每周都上；
+   *  单双周 / 前后八周不同课表靠它表达，缺了就只能拆成假课程 */
+  weeks?: number[]
 }
 
 /** 课程 */
@@ -133,6 +141,8 @@ export interface Course {
   credit: number
   note?: string
   createdAt: string
+  /** 改名 / 调排课需要时间戳参与跨设备 LWW 判定 */
+  updatedAt?: string
 }
 
 /** 作业 */
@@ -144,6 +154,7 @@ export interface Homework {
   dueDate?: string | null
   note?: string
   createdAt: string
+  updatedAt?: string
 }
 
 /** 考试 */
@@ -194,7 +205,7 @@ export interface CollectionItem {
 }
 
 /** 收藏类型 */
-export type SourceType = 'github' | 'rss' | 'official' | 'web' | 'game' | 'anime'
+export type SourceType = 'github' | 'rss' | 'official' | 'web' | 'game' | 'anime' | 'bilibili'
 
 /** 情报条目（信息中枢，统一模型） */
 export interface IntelligenceItem {
@@ -351,6 +362,7 @@ export type IntelligenceProviderId =
   | 'steam'
   | 'rawg'
   | 'jikan'
+  | 'bilibili'
 
 /** 情报源（可在「系统」管理，增删启停测试） */
 export interface IntelligenceSource {
@@ -475,13 +487,56 @@ export interface AIResource {
   updatedAt: string
 }
 
-/** 日省 / 今日记录 */
-export interface Journal {
+/**
+ * 分类体系（情报 / 藏阁共用一张表，用 scope 区分）
+ *
+ * 注册为业务表即自动获得：墓碑（删除可传播）+ LWW 合并 + 加密快照同步 + 备份导出。
+ * 此前分类存在设置项里（只落浏览器本地），永远不参与同步 ——
+ * 手机上加的分类，电脑上必然看不到。
+ */
+export type CategoryScope = 'intel' | 'collection'
+
+export interface Category {
   id: ID
-  date: string
-  content: string
-  /** 心情 0-5 */
-  mood?: number
+  scope: CategoryScope
+  name: string
+  /** 同 scope 内的排序位 */
+  order: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 参与同步的偏好设置白名单。
+ * 只收「跨设备希望一致」的项：目标、番茄钟时长、通知、代理、AI 模型配置。
+ * 不含任何密钥 / Token（那些走各自加密存储），也不含设备级偏好
+ * （主题、布局、底栏排列 —— 手机与电脑本就应该不同）。
+ */
+export interface SyncedSettings {
+  profileName?: string
+  waterGoalMl?: number
+  pomodoroFocusMin?: number
+  pomodoroBreakMin?: number
+  notifyEnabled?: boolean
+  soundEnabled?: boolean
+  soundVolume?: number
+  browserNotify?: boolean
+  intelAutoFetch?: boolean
+  intelFetchMinutes?: number
+  /** 情报保留上限（条）。0 = 不限制；超出后按「已读且最旧优先」裁剪 */
+  intelKeepLimit?: number
+  corsProxyUrl?: string
+  aiProvider?: 'local' | 'remote'
+  aiBaseUrl?: string
+  aiModel?: string
+  /** 学期起始日（课程表周次/单双周判定用） */
+  termStartDate?: string
+}
+
+/** 偏好设置行 —— 单行表，同步时以整行为单位做 LWW */
+export interface AppSettingsRow {
+  id: 'settings'
+  data: SyncedSettings
   createdAt: string
   updatedAt: string
 }

@@ -14,9 +14,11 @@ import Dexie, { type Table } from 'dexie'
 import type {
   ActivityItem,
   AIResource,
+  AppSettingsRow,
   BodyMetricDef,
   BodyMetricLog,
   Budget,
+  Category,
   CollectionItem,
   ConflictRecord,
   Course,
@@ -29,7 +31,6 @@ import type {
   Homework,
   IntelligenceItem,
   IntelligenceSource,
-  Journal,
   Note,
   PomodoroSession,
   Project,
@@ -57,7 +58,6 @@ export class WorkbenchDB extends Dexie {
   intelligenceItems!: Table<IntelligenceItem, string>
   divinationRecords!: Table<DivinationRecord, string>
   aiResources!: Table<AIResource, string>
-  journals!: Table<Journal, string>
 
   // v0.2 新增
   financeRecords!: Table<FinanceRecord, string>
@@ -79,6 +79,10 @@ export class WorkbenchDB extends Dexie {
 
   // v0.4 新增：墓碑表，让删除可在设备间传播
   tombstones!: Table<Tombstone, string>
+
+  // v0.6 新增：分类（原存于设置项，无法同步）+ 参与同步的偏好设置单行表
+  categories!: Table<Category, string>
+  appSettings!: Table<AppSettingsRow, string>
 
   constructor() {
     super('yishu-workbench')
@@ -139,6 +143,20 @@ export class WorkbenchDB extends Dexie {
       aiResources: 'id, type',
       intelligenceSources: 'id, provider, category',
       conflicts: 'id, entity, entityId, createdAt',
+    })
+    /* v0.6：新增「分类」与「偏好设置」两张业务表（仅新增，不动既有结构）。
+     * 分类此前只存在设置项里，从不参与同步；偏好设置此前也只有浏览器本地一份。
+     * 两者注册进 BUSINESS_TABLES 后才真正进入快照、墓碑与备份链路。 */
+    this.version(7).stores({
+      categories: 'id, scope, order',
+      appSettings: 'id',
+    })
+    /* 删除 journals 表：该表自建库起只有读取方（今日统计 / 成长曲线），
+     * 全仓没有任何写入路径，数据恒为空数组 —— 属预留未落地的功能，故连同读写链路一并移除。
+     * Dexie 删表必须在更高的版本号里显式声明 `表名: null`：直接删 v1 的索引既不会触发删除，
+     * 又会篡改历史版本 schema（已装用户的旧库升级时不会真正删表）。 */
+    this.version(8).stores({
+      journals: null,
     })
   }
 }

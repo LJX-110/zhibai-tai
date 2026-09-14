@@ -1,8 +1,20 @@
 /**
  * 学 —— 番茄钟 / 课程 / 作业 / 考试
  */
-import { useMemo, useState } from 'react'
-import { Pause, Play, Plus, RotateCcw, Trash2, Pencil, Eye } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Pencil,
+  Eye,
+} from 'lucide-react'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useCourseStore, useExamStore, useHomeworkStore } from '../stores/useStudyStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
@@ -23,35 +35,76 @@ import {
   Select,
   Section,
   Tabs,
+  useToast,
   type TabItem,
 } from '../components/ui'
 import { Seal } from '../components/ui/Seal'
 import { createId, friendlyDate, todayISO } from '../utils/id'
-import type { Course, Exam, Homework, PomodoroSession, Task } from '../types/entities'
+import {
+  MAX_WEEKS,
+  activeSlotsOfDay,
+  buildWeeks,
+  currentWeek,
+  describeWeeks,
+  slotsOverlap,
+  type WeeksForm,
+  type WeeksMode,
+} from '../services/study'
+import type { Course, Exam, Homework, PomodoroSession, Task, WeeklySlot } from '../types/entities'
 import { cn } from '../utils/cn'
 
+/**
+ * 页签从 6 个收到 4 个：窄屏上六个页签必然横滚，靠后的两个（考试/统计）
+ * 实际上等于「藏起来」。现在按「做什么」归组，功能一个没少：
+ *  · 课程表 —— 含「管理课程」子视图（原「课程」页签）
+ *  · 专注   —— 番茄钟 + 学习统计（原两个页签，同一件事的两面）
+ *  · 作业 / 考试 —— 各自独立，本身就是高频动作
+ */
 const TABS: TabItem[] = [
   { key: 'timetable', label: '课程表' },
-  { key: 'pomo', label: '番茄钟' },
-  { key: 'course', label: '课程' },
+  { key: 'focus', label: '专注' },
   { key: 'homework', label: '作业' },
   { key: 'exam', label: '考试' },
-  { key: 'stats', label: '统计' },
 ]
 
 export function StudyPage() {
   const [tab, setTab] = useState('timetable')
+  /** 课程表页签内的子视图：表格 / 课程管理（原「课程」页签不再是独立页签） */
+  const [managingCourses, setManagingCourses] = useState(false)
+  /** 课表空格子快速加课：带上周几与一次性 nonce，切到课程管理并直接开编辑器 */
+  const [quickAdd, setQuickAdd] = useState<{ weekday: number; nonce: number } | null>(null)
+  const openQuickAdd = (weekday: number) => {
+    setQuickAdd({ weekday, nonce: Date.now() })
+    setManagingCourses(true)
+  }
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="学而时习之，不亦说乎" title="学 · 进境" />
-      <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
+      <Tabs
+        items={TABS}
+        active={tab}
+        onChange={(k) => {
+          setTab(k)
+          // 离开课程表页签时复位子视图，回来看到的是课表本身而不是管理页
+          if (k !== 'timetable') setManagingCourses(false)
+        }}
+        className="mb-4"
+      />
       <StudyAssistant />
-      {tab === 'timetable' && <TimetableTab onGoCourse={() => setTab('course')} />}
-      {tab === 'pomo' && <PomodoroTab />}
-      {tab === 'course' && <CourseTab />}
+      {tab === 'timetable' &&
+        (managingCourses ? (
+          <CourseTab quickAdd={quickAdd} onBack={() => setManagingCourses(false)} />
+        ) : (
+          <TimetableTab onGoCourse={() => setManagingCourses(true)} onQuickAdd={openQuickAdd} />
+        ))}
+      {tab === 'focus' && (
+        <>
+          <PomodoroTab />
+          <StudyStatsTab />
+        </>
+      )}
       {tab === 'homework' && <HomeworkTab />}
       {tab === 'exam' && <ExamTab />}
-      {tab === 'stats' && <StudyStatsTab />}
     </div>
   )
 }
@@ -68,6 +121,12 @@ const SLOTS = [
 ]
 
 const WEEKDAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六']
+
+/** 常见大节的近似标注（时段自定义后仅作参考，匹配不到就不显示） */
+function sectionLabelOf(start: string): string | undefined {
+  return SLOTS.find((s) => s.start === start)?.label
+}
 
 /** 克制的课程识别色（浅底 + 强调字色 + 细边框） */
 const COURSE_COLORS = [
@@ -97,92 +156,151 @@ function barFor(id: string): string {
   return COURSE_BARS[h % COURSE_BARS.length]
 }
 
-function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
+function TimetableTab({
+  onGoCourse,
+  onQuickAdd,
+}: {
+  onGoCourse: () => void
+  onQuickAdd: (weekday: number) => void
+}) {
   const courses = useCourseStore((s) => s.items)
-  const today = new Date().getDay() // 0=周日
+  const termStartDate = useSettingsStore((s) => s.termStartDate)
   const resolvedLayout = useResolvedLayout()
-  // 移动端默认「今天」，桌面默认「本周」
-  const [mode, setMode] = useState<'today' | 'week' | 'list'>(
-    resolvedLayout === 'mobile' ? 'today' : 'week',
+  const week = useMemo(() => currentWeek(termStartDate), [termStartDate])
+  const today = new Date().getDay() // 0=周日
+  // 移动端默认「日轴」（单日纵向清单，可左右翻日）；桌面默认「周景」
+  const [mode, setMode] = useState<'day' | 'week' | 'list'>(
+    resolvedLayout === 'mobile' ? 'day' : 'week',
   )
-  /** 日列点击聚焦（null = 不聚焦；用于列头变绛红的持续态） */
+  /** 日轴当前查看的周几 */
+  const [viewDay, setViewDay] = useState(today)
+  /** 周景日列点击聚焦（null = 不聚焦；用于列头变绛红的持续态） */
   const [focusedDay, setFocusedDay] = useState<number | null>(null)
 
-  // 今天课程（按时段排序）
-  const todayCourses = courses
-    .flatMap((c) =>
-      (c.schedule ?? [])
-        .filter((s) => s.weekday === today)
-        .map((s) => ({ course: c, slot: s })),
-    )
-    .sort((a, b) => a.slot.start.localeCompare(b.slot.start))
+  const shiftDay = (delta: number) => setViewDay((d) => (d + delta + 7) % 7)
+
+  // 当前查看日的课程（已按当前周次过滤）
+  const dayCourses = useMemo(
+    () => activeSlotsOfDay(courses, viewDay, week),
+    [courses, viewDay, week],
+  )
+
+  const weeklyLoad = (wd: number) => activeSlotsOfDay(courses, wd, week).length
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className="flex items-baseline gap-2">
-            <h2 className="scribal-title text-xl text-ink">课程表</h2>
-            <span className="text-xs text-ink-faint">点击课程查看详情</span>
-          </div>
-        </div>
-        <div className="switch-pill flex gap-0.5 rounded-tile p-0.5">
-          {(
-            [
-              ['today', '今天'],
-              ['week', '本周'],
-              ['list', '课程'],
-            ] as const
-          ).map(([k, label]) => (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="scribal-title text-xl text-ink">课程表</h2>
+          {week != null ? (
             <button
-              key={k}
-              onClick={() => setMode(k)}
-              className={cn(
-                'rounded-control px-3 py-1.5 text-sm transition-colors',
-                mode === k ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
-              )}
+              type="button"
+              onClick={() => setMode('week')}
+              className="text-xs text-ink-faint transition-colors hover:text-ink"
+              title="修改学期起始日"
             >
-              {label}
+              第 {week} 周
             </button>
-          ))}
+          ) : (
+            /* 未设学期起始日就没法算周次，单双周形同虚设 —— 入口直接摆在课表上 */
+            <label className="flex items-center gap-1.5 text-xs text-ink-faint">
+              学期首周周一
+              <input
+                type="date"
+                value={termStartDate ?? ''}
+                onChange={(e) =>
+                  useSettingsStore.getState().set({ termStartDate: e.target.value || undefined })
+                }
+                className="rounded-control border border-line bg-raised px-1.5 py-0.5 text-xs text-ink"
+              />
+            </label>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="switch-pill flex gap-0.5 rounded-tile p-0.5">
+            {(
+              [
+                ['day', '单日'],
+                ['week', '周景'],
+                ['list', '课程'],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setMode(k)}
+                className={cn(
+                  'rounded-control px-3 py-1.5 text-sm transition-colors',
+                  mode === k ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* 原「课程」页签的入口：功能还在，只是收进课程表里，省一个页签 */}
+          <Button size="sm" variant="tertiary" onClick={onGoCourse} className="shrink-0">
+            <Pencil size={13} /> 管理
+          </Button>
         </div>
       </div>
 
-      {mode === 'today' && (
+      {mode === 'day' && (
         <div className="space-y-2">
-          {todayCourses.length > 0 ? (
-            todayCourses.map(({ course, slot }) => (
+          {/* 日轴翻页：单日纵向清单，左右换日 */}
+          <div className="flex items-center justify-between rounded-tile border border-line bg-raised px-2 py-1.5">
+            <button
+              onClick={() => shiftDay(-1)}
+              className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-nested hover:text-ink"
+              aria-label="前一天"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="display text-base font-medium text-ink">{WEEKDAY_NAMES[viewDay]}</span>
+              {viewDay === today && <span className="text-[11px] text-cinnabar">今天</span>}
+              <span className="text-[11px] text-ink-faint">{weeklyLoad(viewDay)} 节</span>
+            </div>
+            <button
+              onClick={() => shiftDay(1)}
+              className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-nested hover:text-ink"
+              aria-label="后一天"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+
+          {dayCourses.length > 0 ? (
+            dayCourses.map(({ course, slot }) => (
               <button
-                key={`${course.id}-${slot.start}`}
+                key={`${course.id}-${slot.start}-${(slot.weeks ?? []).join('.')}`}
                 onClick={() => useInspectorStore.getState().open('course', course.id)}
                 className="flex w-full items-center gap-4 rounded-tile border border-line bg-paper/50 px-4 py-3 text-left transition-colors hover:border-line-strong"
               >
                 <span className={cn('h-10 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
-                <div className="tabular w-20 shrink-0 text-[13px] text-ink-muted">
-                  {slot.start}–{slot.end}
-                </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium text-ink">{course.name}</div>
-                  <div className="mt-0.5 text-xs text-ink-muted">
-                    {[course.room, course.teacher, course.credit ? `${course.credit} 学分` : '']
-                      .filter(Boolean)
-                      .join(' · ')}
+                  <div className="tabular mt-0.5 text-xs text-ink-muted">
+                    {slot.start}–{slot.end}
+                    {sectionLabelOf(slot.start) && (
+                      <span className="ml-1.5 font-sans text-ink-faint">{sectionLabelOf(slot.start)}</span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-ink-faint">
+                    {[course.room, course.teacher].filter(Boolean).join(' · ') || '—'}
+                    {slot.weeks && slot.weeks.length > 0 && (
+                      <span className="ml-1.5 text-bronze">· {describeWeeks(slot.weeks)}</span>
+                    )}
                   </div>
                 </div>
-                <span className={cn('shrink-0 rounded-control border px-2 py-0.5 text-[11px]', colorFor(course.id))}>
-                  {SLOTS.find((s) => s.start === slot.start)?.label ?? slot.start}
-                </span>
               </button>
             ))
           ) : (
             <div className="rounded-paper border border-line">
               <EmptyState
-                title="今天没有排课"
-                desc="周末或休息日，可安排自主复习"
-                step="在「课程」中添加周几 + 开始时间"
+                title={viewDay === today ? '今天没有排课' : `${WEEKDAY_NAMES[viewDay]}没有排课`}
                 action={
-                  <Button size="sm" variant="secondary" onClick={onGoCourse}>
-                    <Plus size={13} /> 添加课程
+                  <Button size="sm" variant="secondary" onClick={() => onQuickAdd(viewDay)}>
+                    <Plus size={13} /> 在此日加课
                   </Button>
                 }
               />
@@ -192,72 +310,128 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
       )}
 
       {mode === 'week' && (
-        /* 立轴课表：每日一根轴，课程为垂挂轴签（B 方案） */
-        <div className="scrollbar-thin overflow-x-auto pb-1">
+        <>
+        {/* 桌面：立轴周景横滚（每日一根轴），移动端隐藏 */}
+        <div className="scrollbar-thin hidden overflow-x-auto pb-1 sm:block">
           <div className="flex min-w-[660px] gap-2.5">
             {WEEKDAY_NAMES.map((name, wd) => {
               const isToday = wd === today
-              const dayCourses = courses
-                .flatMap((c) =>
-                  (c.schedule ?? [])
-                    .filter((sl) => sl.weekday === wd)
-                    .map((sl) => ({ course: c, slot: sl })),
-                )
-                .sort((a, b) => a.slot.start.localeCompare(b.slot.start))
+              const daySlots = activeSlotsOfDay(courses, wd, week)
               return (
-                <button
-                  type="button"
+                <div
                   key={wd}
-                  onClick={() => !isToday && setFocusedDay((v) => (v === wd ? null : wd))}
                   className={cn(
                     'flex min-w-[86px] flex-1 flex-col rounded-tile border p-2 text-left transition-colors',
                     isToday
                       ? 'border-cinnabar/60 bg-cinnabar/[0.09]'
                       : focusedDay === wd
                         ? 'border-cinnabar/50 bg-cinnabar/[0.08]'
-                        : 'border-teal/40 bg-teal/[0.08] hover:border-cinnabar/50 hover:bg-cinnabar/[0.08]',
+                        : 'border-teal/40 bg-teal/[0.08]',
                   )}
                 >
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => setFocusedDay((v) => (v === wd ? null : wd))}
                     className={cn(
                       'mb-2 text-center text-xs',
-                      isToday || focusedDay === wd
-                        ? 'font-medium text-gold-btn'
-                        : 'text-ink-faint',
+                      isToday || focusedDay === wd ? 'font-medium text-gold-btn' : 'text-ink-faint',
                     )}
                   >
                     {name}
                     {isToday && ' · 今'}
-                  </div>
+                  </button>
                   <div className="flex flex-1 flex-col items-center gap-2.5">
-                    {dayCourses.length > 0 ? (
-                      dayCourses.map(({ course, slot }) => (
-                        <button
-                          key={`${course.id}-${slot.start}`}
-                          onClick={() => useInspectorStore.getState().open('course', course.id)}
-                          className={cn(
-                            'flex w-full flex-col items-center gap-2 rounded-[16px] border px-1.5 py-3.5 transition-transform hover:-translate-y-px',
-                            colorFor(course.id),
-                          )}
-                        >
-                          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
-                          <span className="vertical-slip max-h-[110px] overflow-hidden text-[13px] font-medium leading-none">
-                            {course.name}
-                          </span>
-                          <span className="tabular text-[10px] opacity-75">{slot.start}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="flex flex-1 items-center justify-center py-3">
-                        <span className="h-1 w-1 rounded-full bg-line-strong/50" />
-                      </div>
-                    )}
+                    {daySlots.map(({ course, slot }) => (
+                      <button
+                        key={`${course.id}-${slot.start}-${(slot.weeks ?? []).join('.')}`}
+                        onClick={() => useInspectorStore.getState().open('course', course.id)}
+                        className={cn(
+                          'flex w-full flex-col items-center gap-2 rounded-[16px] border px-1.5 py-3.5 transition-transform hover:-translate-y-px',
+                          colorFor(course.id),
+                        )}
+                        title={`${slot.start}–${slot.end}${slot.weeks && slot.weeks.length > 0 ? ` · ${describeWeeks(slot.weeks)}` : ''}`}
+                      >
+                        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
+                        <span className="vertical-slip max-h-[110px] overflow-hidden text-[13px] font-medium leading-none">
+                          {course.name}
+                        </span>
+                        <span className="tabular text-[10px] opacity-75">{slot.start}</span>
+                      </button>
+                    ))}
+                    {/* 空位即入口：在此日的格子里直接加课 */}
+                    <button
+                      onClick={() => onQuickAdd(wd)}
+                      className="flex w-full flex-1 items-center justify-center rounded-[12px] border border-dashed border-line-strong/60 py-3 text-ink-faint transition-colors hover:border-cinnabar/40 hover:text-cinnabar"
+                      aria-label={`在 ${name} 加课`}
+                    >
+                      <Plus size={12} />
+                    </button>
                   </div>
-                </button>
+                </div>
               )
             })}
           </div>
         </div>
+
+        {/* 移动端：横向滚动不友好，改为按月切换的每日排列表（默认今天居中导航） */}
+        <div className="space-y-2 sm:hidden">
+          {WEEKDAY_NAMES.map((name, wd) => {
+            const isToday = wd === today
+            const daySlots = activeSlotsOfDay(courses, wd, week)
+            return (
+              <div
+                key={wd}
+                className={cn(
+                  'rounded-tile border p-3 transition-colors',
+                  isToday || focusedDay === wd
+                    ? 'border-cinnabar/50 bg-cinnabar/[0.07]'
+                    : 'border-line bg-paper',
+                )}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setFocusedDay((v) => (v === wd ? null : wd))}
+                    className={cn(
+                      'text-sm',
+                      isToday || focusedDay === wd ? 'font-medium text-gold-btn' : 'text-ink',
+                    )}
+                  >
+                    {name}
+                    {isToday && ' · 今'}
+                  </button>
+                  <button
+                    onClick={() => onQuickAdd(wd)}
+                    className="flex items-center gap-0.5 rounded-control bg-nested px-1.5 py-0.5 text-[11px] text-ink-faint transition-colors hover:text-cinnabar"
+                    aria-label={`在 ${name} 加课`}
+                  >
+                    <Plus size={11} /> 加课
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {daySlots.length === 0 && (
+                    <span className="text-[11px] text-ink-faint">无课</span>
+                  )}
+                  {daySlots.map(({ course, slot }) => (
+                    <button
+                      key={`${course.id}-${slot.start}-${(slot.weeks ?? []).join('.')}`}
+                      onClick={() => useInspectorStore.getState().open('course', course.id)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-control border px-2 py-1 text-xs transition-colors',
+                        colorFor(course.id),
+                      )}
+                    >
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
+                      <span className="max-w-[9rem] truncate">{course.name}</span>
+                      <span className="tabular text-[10px] opacity-75">{slot.start}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        </>
       )}
 
       {mode === 'list' && (
@@ -273,9 +447,11 @@ function TimetableTab({ onGoCourse }: { onGoCourse: () => void }) {
                   <span className="text-sm font-medium text-ink">{c.name}</span>
                   <span className="ml-2 text-xs text-ink-faint">{c.credit} 学分</span>
                 </button>
-                <span className="text-xs text-ink-faint">
+                <span className="hidden text-xs text-ink-faint sm:inline">
                   {c.schedule?.length > 0
-                    ? c.schedule?.map((s) => `${WEEKDAY_NAMES[s.weekday]} ${s.start}`).join(' · ')
+                    ? c.schedule
+                        .map((s) => `${WEEKDAY_SHORT[s.weekday]} ${s.start}${s.weeks && s.weeks.length > 0 ? `（${describeWeeks(s.weeks)}）` : ''}`)
+                        .join(' · ')
                     : '未排课'}
                 </span>
               </div>
@@ -512,9 +688,17 @@ function MiniStat({ label, value, unit }: { label: string; value: string; unit: 
 
 /* ---------------- 课程 ---------------- */
 
-function CourseTab() {
+function CourseTab({
+  quickAdd,
+  onBack,
+}: {
+  quickAdd?: { weekday: number; nonce: number } | null
+  /** 返回课程表（本视图现在是课表的子页，不是独立页签） */
+  onBack: () => void
+}) {
   const courses = useCourseStore((s) => s.items)
   const sessions = usePomodoroStore((s) => s.items)
+  const toast = useToast().toast
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Course | null>(null)
   const [form, setForm] = useState({
@@ -524,12 +708,14 @@ function CourseTab() {
     credit: '0',
     note: '',
   })
-  const [slots, setSlots] = useState<{ weekday: number; start: string; end: string }[]>([])
+  const [slots, setSlots] = useState<WeeklySlot[]>([])
   const [slotWeekday, setSlotWeekday] = useState('1')
   const [slotStart, setSlotStart] = useState('08:00')
   const [slotEnd, setSlotEnd] = useState('09:40')
+  const [slotWeeks, setSlotWeeks] = useState<WeeksForm>({ mode: 'all', from: 1, to: 16, custom: '' })
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const openEditor = (c: Course | null) => {
+  const openEditor = (c: Course | null, presetWeekday?: number) => {
     setEditing(c)
     setForm({
       name: c?.name ?? '',
@@ -539,7 +725,20 @@ function CourseTab() {
       note: c?.note ?? '',
     })
     setSlots(c?.schedule?.map((s) => ({ ...s })) ?? [])
+    // 从课表格子进来时，带一节该周几的默认时段：打开即可改，不用再点「加一节」
+    if (!c && presetWeekday != null) {
+      setSlots([{ weekday: presetWeekday, start: '08:00', end: '09:40' }])
+      setSlotWeekday(String(presetWeekday))
+    }
+    setSlotWeeks({ mode: 'all', from: 1, to: 16, custom: '' })
     setOpen(true)
+  }
+
+  /** 课表空位 → 直接开新课程的编辑器，并预填该周几 */
+  const [lastQuickNonce, setLastQuickNonce] = useState(0)
+  if (quickAdd && quickAdd.nonce !== lastQuickNonce) {
+    setLastQuickNonce(quickAdd.nonce)
+    openEditor(null, quickAdd.weekday)
   }
 
   const save = async () => {
@@ -553,26 +752,123 @@ function CourseTab() {
       credit: Number(form.credit) || 0,
       note: form.note.trim() || undefined,
       createdAt: editing?.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     })
     setOpen(false)
   }
 
   const addSlot = () => {
-    // 自由时段：起止均可自定（此前锁死在 5 个固定大节）
     const start = slotStart || '08:00'
     const end = slotEnd || slotStart || '09:40'
-    if (end <= start) return
-    setSlots((s) => [...s, { weekday: Number(slotWeekday), start, end }])
+    if (end <= start) {
+      toast('结束时间要晚于开始时间', 'danger')
+      return
+    }
+    const weeks = buildWeeks(slotWeeks)
+    if (slotWeeks.mode === 'custom' && (!weeks || weeks.length === 0)) {
+      toast('自定义周次没解析出有效周号（用逗号分隔，如 1,2,5）', 'danger')
+      return
+    }
+    setSlots((s) => [...s, { weekday: Number(slotWeekday), start, end, weeks }])
+  }
+
+  /** 跨课程时段冲突：同一时段两门课，排课时就要看见，别等上课才发现 */
+  const conflictHints = useMemo(() => {
+    const out: string[] = []
+    for (const other of courses) {
+      if (other.id === editing?.id) continue
+      for (const mine of slots) {
+        for (const theirs of other.schedule ?? []) {
+          if (slotsOverlap(mine, theirs)) {
+            out.push(
+              `${WEEKDAY_NAMES[mine.weekday]} ${mine.start}–${mine.end} 与「${other.name}」重叠`,
+            )
+          }
+        }
+      }
+    }
+    return [...new Set(out)].slice(0, 4)
+  }, [courses, slots, editing?.id])
+
+  /** 导出课表为 JSON（换设备、留底、改坏了能回滚） */
+  const exportCourses = () => {
+    const dump = {
+      app: 'yishu-workbench',
+      kind: 'courses',
+      exportedAt: new Date().toISOString(),
+      courses,
+    }
+    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `zhibaitai-courses-${todayISO()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast(`已导出 ${courses.length} 门课程`, 'success')
+  }
+
+  /** 导入课表：同 id 覆盖、新 id 追加 */
+  const importCourses = async (file: File) => {
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown
+      const list = Array.isArray(parsed)
+        ? parsed
+        : ((parsed as { courses?: unknown }).courses ?? [])
+      if (!Array.isArray(list) || list.length === 0) throw new Error('文件里没有课程数据')
+      const now = new Date().toISOString()
+      const incoming: Course[] = list
+        .filter((c): c is Record<string, unknown> => Boolean(c) && typeof c === 'object')
+        .filter((c) => typeof c.name === 'string' && c.name.trim() !== '')
+        .map((c) => ({
+          id: typeof c.id === 'string' && c.id ? c.id : createId(),
+          name: String(c.name).trim(),
+          teacher: typeof c.teacher === 'string' ? c.teacher : undefined,
+          room: typeof c.room === 'string' ? c.room : undefined,
+          schedule: Array.isArray(c.schedule) ? (c.schedule as WeeklySlot[]) : [],
+          credit: Number(c.credit) || 0,
+          note: typeof c.note === 'string' ? c.note : undefined,
+          createdAt: typeof c.createdAt === 'string' ? c.createdAt : now,
+          updatedAt: now,
+        }))
+      if (incoming.length === 0) throw new Error('没有解析出有效课程（需含 name 字段）')
+      await useCourseStore.getState().saveMany(incoming)
+      toast(`已导入 ${incoming.length} 门课程`, 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '导入失败', 'danger')
+    }
   }
 
   return (
     <Section
-      title="课程"
+      title="课程管理"
       hint={`${courses.length} 门`}
       action={
-        <Button size="sm" variant="tertiary" onClick={() => openEditor(null)}>
-          <Plus size={14} /> 课程
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="tertiary" onClick={onBack}>
+            <ChevronLeft size={13} /> 课程表
+          </Button>
+          <Button size="sm" variant="tertiary" onClick={exportCourses} disabled={courses.length === 0}>
+            <Download size={13} /> 导出
+          </Button>
+          <Button size="sm" variant="tertiary" onClick={() => fileRef.current?.click()}>
+            <Plus size={13} /> 导入
+          </Button>
+          <Button size="sm" variant="tertiary" onClick={() => openEditor(null)}>
+            <Plus size={14} /> 课程
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) void importCourses(file)
+            }}
+          />
+        </div>
       }
     >
       {courses.length > 0 ? (
@@ -597,7 +893,10 @@ function CourseTab() {
                   {c.room && <span>室 · {c.room}</span>}
                   {c.schedule?.map((sl, i) => (
                     <span key={i} className="tabular">
-                      周{['日','一','二','三','四','五','六'][sl.weekday]} {sl.start}–{sl.end}
+                      周{WEEKDAY_SHORT[sl.weekday]} {sl.start}–{sl.end}
+                      {sl.weeks && sl.weeks.length > 0 && (
+                        <span className="ml-1 text-bronze">{describeWeeks(sl.weeks)}</span>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -631,26 +930,93 @@ function CourseTab() {
           </div>
           <Input type="number" min={0} step={0.5} placeholder="学分" value={form.credit} onChange={(e) => setForm({ ...form, credit: e.target.value })} />
 
-          {/* 排课 */}
+          {/* 排课：周几 + 起止 + 周次（单双周靠它表达） */}
           <div>
-            <div className="mb-1 text-xs text-ink-muted">排课（周几 + 开始时间）</div>
+            <div className="mb-1 text-xs text-ink-muted">排课</div>
             <div className="flex flex-wrap items-center gap-2">
               <Select value={String(slotWeekday)} onChange={(e) => setSlotWeekday(e.target.value)} className="!w-auto !py-1.5 text-sm">
                 {[1, 2, 3, 4, 5, 6, 0].map((w) => (
-                  <option key={w} value={String(w)}>周{['日', '一', '二', '三', '四', '五', '六'][w]}</option>
+                  <option key={w} value={String(w)}>周{WEEKDAY_SHORT[w]}</option>
                 ))}
               </Select>
               <Input type="time" value={slotStart} onChange={(e) => setSlotStart(e.target.value)} className="!w-auto !py-1.5 text-sm" aria-label="开始时间" />
               <Input type="time" value={slotEnd} onChange={(e) => setSlotEnd(e.target.value)} className="!w-auto !py-1.5 text-sm" aria-label="结束时间" />
               <Button size="sm" variant="secondary" onClick={addSlot}>＋ 加一节</Button>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-ink-muted">周次</span>
+              <div className="switch-pill flex gap-0.5 rounded-tile p-0.5">
+                {(
+                  [
+                    ['all', '每周'],
+                    ['odd', '单周'],
+                    ['even', '双周'],
+                    ['custom', '自定义'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setSlotWeeks((w) => ({ ...w, mode: k as WeeksMode }))}
+                    className={cn(
+                      'rounded-control px-2 py-1 text-xs transition-colors',
+                      slotWeeks.mode === k ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {slotWeeks.mode === 'odd' || slotWeeks.mode === 'even' ? (
+                <span className="flex items-center gap-1 text-[11px] text-ink-faint">
+                  第
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_WEEKS}
+                    value={slotWeeks.from}
+                    onChange={(e) => setSlotWeeks((w) => ({ ...w, from: Number(e.target.value) }))}
+                    className="w-12 rounded-control border border-line bg-raised px-1 py-0.5 text-center text-xs text-ink"
+                    aria-label="起始周"
+                  />
+                  –
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_WEEKS}
+                    value={slotWeeks.to}
+                    onChange={(e) => setSlotWeeks((w) => ({ ...w, to: Number(e.target.value) }))}
+                    className="w-12 rounded-control border border-line bg-raised px-1 py-0.5 text-center text-xs text-ink"
+                    aria-label="结束周"
+                  />
+                  周
+                </span>
+              ) : slotWeeks.mode === 'custom' ? (
+                <input
+                  value={slotWeeks.custom}
+                  onChange={(e) => setSlotWeeks((w) => ({ ...w, custom: e.target.value }))}
+                  placeholder="1,2,5,8"
+                  className="w-28 rounded-control border border-line bg-raised px-2 py-1 text-xs text-ink"
+                  aria-label="自定义周次"
+                />
+              ) : null}
+            </div>
             {slots.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {slots.map((s, i) => (
-                  <span key={i} className="seal seal--active">
-                    周{['日', '一', '二', '三', '四', '五', '六'][s.weekday]} {s.start}
+                  <span key={`${s.weekday}-${s.start}-${i}`} className="seal seal--active">
+                    周{WEEKDAY_SHORT[s.weekday]} {s.start}
+                    {s.weeks && s.weeks.length > 0 && ` · ${describeWeeks(s.weeks)}`}
                     <button onClick={() => setSlots((x) => x.filter((_, j) => j !== i))} className="ml-1 text-ink-faint hover:text-cinnabar">×</button>
                   </span>
+                ))}
+              </div>
+            )}
+            {conflictHints.length > 0 && (
+              <div className="mt-2 space-y-1 rounded-tile border border-cinnabar/30 bg-cinnabar/5 px-3 py-2">
+                {conflictHints.map((h) => (
+                  <div key={h} className="flex items-start gap-1.5 text-[11px] text-cinnabar">
+                    <AlertTriangle size={12} className="mt-0.5 shrink-0" /> {h}
+                  </div>
                 ))}
               </div>
             )}

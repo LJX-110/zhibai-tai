@@ -1,55 +1,19 @@
 /**
  * RSS Provider —— 真实数据（源驱动，url 取自 IntelligenceSource）
- * 浏览器端经 CORS 代理拉取 XML 解析。
+ * 浏览器端经转发通道拉取 XML 并解析。
  */
 import { createId } from '../../../utils/id'
 import { useSettingsStore } from '../../../stores/useSettingsStore'
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
 import type { IntelligenceProvider } from './index'
+import { proxyFetch } from './proxy'
 
 /**
- * 拉取策略：自建代理（设置里配置）→ 直连 → 公共 CORS 代理兜底。
- * 自建代理是治本方案（Cloudflare Worker，见仓库 cloudflare-worker/）——
- * 部署一次即拥有稳定的个人转发通道；
- * 直连对 RSSHub / GitHub API 等自带 CORS 头的源最快；
- * 公共代理 2026 现状：corsproxy.io 已强制 API Key（匿名一律 401，故移除）、
- * allorigins 间歇可用、cors.lol / cors.eu.org 限流（429 但活着）——
- * 多备几个、单个 8 秒快速失败，避免一个死代理拖死整条链。
+ * 拉取入口 —— 通道选择与失败语义都在 ./proxy 里（B 站 provider 共用同一条）。
+ * 这里只负责把设置里的自建代理地址取出来，保持 provider 侧调用形态不变。
  */
-const FALLBACK_PROXIES = [
-  (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  (u: string) => `https://api.cors.lol/?url=${encodeURIComponent(u)}`,
-  (u: string) => `https://cors.eu.org/${u}`,
-]
-
-function proxyChain(): ((u: string) => string)[] {
-  const chain: ((u: string) => string)[] = []
-  const self = useSettingsStore.getState().corsProxyUrl?.trim()
-  if (self) {
-    const base = self.replace(/\/+$/, '')
-    // 自建 Worker 的契约：GET <base>/?url=<encodeURIComponent(target)>
-    chain.push((u) => `${base}/?url=${encodeURIComponent(u)}`)
-  }
-  chain.push((u) => u)
-  return [...chain, ...FALLBACK_PROXIES]
-}
-
-const PROXY_TIMEOUT_MS = 8_000
-
 export async function fetchViaProxy(url: string, signal?: AbortSignal): Promise<string> {
-  let lastErr: unknown
-  for (const proxy of proxyChain()) {
-    const timeout = AbortSignal.timeout(PROXY_TIMEOUT_MS)
-    const sig = signal ? AbortSignal.any([signal, timeout]) : timeout
-    try {
-      const res = await fetch(proxy(url), { signal: sig })
-      if (res.ok) return await res.text()
-      lastErr = new Error(`HTTP ${res.status}`)
-    } catch (e) {
-      lastErr = e
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('RSS 拉取失败（所有通道均不可达）')
+  return proxyFetch(url, useSettingsStore.getState().corsProxyUrl, signal)
 }
 
 /** 解析 RSS/Atom XML → 条目 */

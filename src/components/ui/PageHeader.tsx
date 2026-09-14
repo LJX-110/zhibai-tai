@@ -15,10 +15,11 @@ export interface PageHeaderProps {
 
 export function PageHeader({ poem, title, action, className }: PageHeaderProps) {
   return (
-    <div className={cn('flex flex-wrap items-end justify-between gap-3 pb-5', className)}>
+    <div className={cn('flex flex-wrap items-end justify-between gap-3 pb-4 md:pb-5', className)}>
       <div>
-        <h1 className="scribal-title text-3xl text-ink-bright">{title}</h1>
-        {poem && <p className="mt-1.5 scribal text-base text-ink-muted">{poem}</p>}
+        {/* 窄屏收到 2xl：3xl 的书法字在 375px 上要占掉近半屏高，而页头只是路由标识 */}
+        <h1 className="scribal-title text-2xl text-ink-bright md:text-3xl">{title}</h1>
+        {poem && <p className="scribal mt-1 text-sm text-ink-muted md:mt-1.5 md:text-base">{poem}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

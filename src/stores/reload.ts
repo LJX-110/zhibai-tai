@@ -9,7 +9,6 @@ import { useDivinationStore } from './useDivinationStore'
 import { useBudgetStore, useFinanceStore, usePurchaseStore } from './useFinanceStore'
 import { useHabitLogStore, useHabitStore } from './useHabitStore'
 import { useIntelligenceStore } from './useIntelligenceStore'
-import { useJournalStore } from './useJournalStore'
 import { useNoteStore } from './useNoteStore'
 import { usePomodoroStore } from './usePomodoroStore'
 import { useProjectStore } from './useProjectStore'
@@ -18,12 +17,15 @@ import { useActivityStore, useFollowStore } from './useLifeStores'
 import { useCourseStore, useExamStore, useHomeworkStore } from './useStudyStore'
 import { useTaskStore } from './useTaskStore'
 import { useWaterStore } from './useWaterStore'
+import { useCategoryStore } from './useCategoryStore'
+import { hydrateSyncedSettings } from '../services/settings-sync'
 
 /** 重新从 IndexedDB 载入全部领域 store */
 export async function reloadAllStores(): Promise<void> {
   await Promise.allSettled([
     useTaskStore.getState().load(),
     useNoteStore.getState().load(),
+    useCategoryStore.getState().load(),
     useHabitStore.getState().load(),
     useHabitLogStore.getState().load(),
     useBodyMetricStore.getState().load(),
@@ -37,7 +39,6 @@ export async function reloadAllStores(): Promise<void> {
     useIntelligenceStore.getState().load(),
     useDivinationStore.getState().load(),
     useAIResourceStore.getState().load(),
-    useJournalStore.getState().load(),
     useFinanceStore.getState().load(),
     usePurchaseStore.getState().load(),
     useBudgetStore.getState().load(),
@@ -49,4 +50,6 @@ export async function reloadAllStores(): Promise<void> {
     // 同步/导入后不重载的话，设置页要重启才能看到新产生的冲突
     useConflictStore.getState().load(),
   ])
+  // 偏好设置存在业务表里，同步/导入后同样要回灌，否则界面还停在旧值
+  await hydrateSyncedSettings()
 }

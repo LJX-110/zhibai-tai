@@ -1,36 +1,70 @@
 /**
- * MobileWorkspace 导航 —— 顶部状态 + 底部导航（观 行 修 学 + 更多）
+ * MobileWorkspace 导航 —— 顶部状态 + 底部导航（可配置 4 格 + 更多）
  * 触控目标 ≥44px；底部标签带编号
  * 视觉：顶栏/底栏/更多抽屉与桌面侧栏同一语言（var(--sidebar)，
  * 浅色黛蓝 / 深色绛红），内容区保持宣纸白，主次分明
  */
-import { useRef, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { RefreshCw, Search } from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
+import { useSettingsStore } from '../stores/useSettingsStore'
 import {
+  ALL_SECTIONS,
   NAV_SECTIONS,
-  SYSTEM_SECTION,
+  normalizeMobileTabs,
   navSectionOf,
   type NavSection,
   type SectionId,
 } from '../app/navigation'
 import { todayISO } from '../utils/id'
 import { playSound } from '../services/sound'
-import { Sheet, ThemeToggle } from '../components/ui'
+import { Sheet, ThemeToggle, useToast } from '../components/ui'
+import { runSync } from '../sync/SyncService'
+import { isConfigured, isSyncConfigured } from '../sync/auto'
 import { cn } from '../utils/cn'
 
-/** 底部高频导航（前 4 + 更多） */
-const MOBILE_TABS: NavSection[] = NAV_SECTIONS.slice(0, 4)
-const MORE_SECTIONS: NavSection[] = [...NAV_SECTIONS.slice(4), SYSTEM_SECTION]
+/** 同步状态点：绿=成功 红=失败 金=进行中 灰=未配置 */
+function syncDotClass(status: string, configured: boolean): string {
+  if (!configured) return 'bg-on-sidebar-muted/60'
+  if (status === 'syncing') return 'bg-gold-btn'
+  if (status === 'error') return 'bg-cinnabar'
+  if (status === 'success') return 'bg-teal'
+  return 'bg-on-sidebar-muted'
+}
 
 export function MobileHeader() {
   const section = useAppStore((s) => s.section)
+  const setSection = useAppStore((s) => s.setSection)
   const current = navSectionOf(section)
   const today = todayISO()
   const [, , day] = today.split('-')
+  const syncStatus = useSettingsStore((s) => s.syncStatus)
+  // 派生布尔在 selector 内计算（只返回原始值，不生成新引用）
+  const syncConfigured = useSettingsStore((s) => isConfigured(s))
+  const toast = useToast().toast
+  const [syncing, setSyncing] = useState(false)
+
+  /** 顶栏同步入口：未配置直接带去设置，已配置则就地同步并回报结果 */
+  const onSync = async () => {
+    if (syncing) return
+    if (!isSyncConfigured()) {
+      setSection('system')
+      toast('请先在「同步」中配置仓库与密码', 'info')
+      return
+    }
+    setSyncing(true)
+    try {
+      const res = await runSync()
+      toast(res.message ?? '同步完成', 'success')
+    } catch (e) {
+      toast(`同步失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-sidebar/97 px-4 pb-2 pt-3 backdrop-blur-sm">
+    <header className="sticky top-0 z-[var(--z-header)] flex items-center justify-between border-b border-white/10 bg-sidebar/97 px-4 pb-2 pt-3 backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
         <span className="tabular text-[11px] tracking-[0.2em] text-on-sidebar-muted">{current.index}</span>
         <div>
@@ -38,9 +72,23 @@ export function MobileHeader() {
           <div className="text-[10px] tracking-[0.2em] text-on-sidebar-muted">{current.sub}</div>
         </div>
       </div>
-      <div className="flex items-center gap-1 text-on-sidebar-muted">
+      <div className="flex items-center gap-0.5 text-on-sidebar-muted">
+        <button
+          className="relative flex h-9 w-9 items-center justify-center rounded-tile hover:bg-white/10 hover:text-on-sidebar"
+          aria-label={syncing ? '同步中' : '立即同步'}
+          title={syncConfigured ? '立即同步' : '未配置同步'}
+          onClick={() => void onSync()}
+        >
+          <RefreshCw size={16} className={cn(syncing && 'animate-spin')} />
+          <span
+            className={cn(
+              'absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full',
+              syncDotClass(syncStatus, syncConfigured),
+            )}
+          />
+        </button>
         <ThemeToggle className="h-9 w-9 border border-white/15 text-on-sidebar-muted hover:bg-white/10 hover:text-on-sidebar" />
-        <span className="tabular text-sm">{day} 日</span>
+        <span className="tabular hidden text-sm min-[360px]:inline">{day} 日</span>
         <button
           className="touch-target flex items-center justify-center rounded-tile hover:bg-white/10 hover:text-on-sidebar"
           aria-label="搜索"
@@ -58,8 +106,21 @@ export function MobileHeader() {
 export function MobileNav() {
   const section = useAppStore((s) => s.section)
   const setSection = useAppStore((s) => s.setSection)
+  const mobileTabs = useSettingsStore((s) => s.mobileTabs)
   const [moreOpen, setMoreOpen] = useState(false)
-  const navRef = useRef<HTMLElement>(null)
+
+  /** 底栏常驻板块：以设置为准（规范化后一定满 4 格） */
+  const tabs: NavSection[] = useMemo(() => {
+    return normalizeMobileTabs(mobileTabs)
+      .map((id) => NAV_SECTIONS.find((s) => s.id === id))
+      .filter((s): s is NavSection => Boolean(s))
+  }, [mobileTabs])
+
+  /** 「更多」抽屉：全部板块里未上底栏的那些（含系统） */
+  const moreSections = useMemo(() => {
+    const pinned = new Set(tabs.map((s) => s.id))
+    return ALL_SECTIONS.filter((s) => !pinned.has(s.id))
+  }, [tabs])
 
   const go = (id: SectionId) => {
     if (id !== section) playSound('ui-click')
@@ -70,12 +131,11 @@ export function MobileNav() {
   return (
     <>
       <nav
-        ref={navRef}
-        className="fixed inset-x-0 bottom-0 z-[60] border-t border-white/10 bg-sidebar/97 backdrop-blur-sm pb-safe"
+        className="fixed inset-x-0 bottom-0 z-[var(--z-nav)] border-t border-white/10 bg-sidebar/97 backdrop-blur-sm pb-safe"
         style={{ height: 'var(--mobile-nav-h)' }}
       >
         <div className="mx-auto flex h-full max-w-lg items-stretch">
-          {MOBILE_TABS.map((s) => {
+          {tabs.map((s) => {
             const active = section === s.id
             return (
               <button
@@ -104,10 +164,10 @@ export function MobileNav() {
           })}
           <button
             onClick={() => setMoreOpen(true)}
-            aria-current={MORE_SECTIONS.some((m) => m.id === section) ? 'page' : undefined}
+            aria-current={moreSections.some((m) => m.id === section) ? 'page' : undefined}
             className={cn(
               'relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px]',
-              moreOpen || MORE_SECTIONS.some((m) => m.id === section)
+              moreOpen || moreSections.some((m) => m.id === section)
                 ? 'text-on-sidebar'
                 : 'text-on-sidebar-muted',
             )}
@@ -121,7 +181,7 @@ export function MobileNav() {
       {/* 更多抽屉（与侧栏同色系） */}
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="更多空间" tone="sidebar">
         <div className="grid grid-cols-1 gap-1.5">
-          {MORE_SECTIONS.map((s) => {
+          {moreSections.map((s) => {
             const active = section === s.id
             return (
               <button
@@ -141,7 +201,6 @@ export function MobileNav() {
                   </span>
                   <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">{s.sub}</span>
                 </span>
-                <span className="text-xs text-on-sidebar-muted">{s.desc}</span>
               </button>
             )
           })}

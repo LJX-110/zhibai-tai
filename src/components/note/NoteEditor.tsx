@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import type { Note } from '../../types/entities'
 import { createId } from '../../utils/id'
+import { withDerivedTitle } from '../../utils/note'
 import { Button } from '../ui/Button'
 import { Input, Textarea } from '../ui/Field'
 import { Sheet } from '../ui/Sheet'
@@ -43,16 +44,18 @@ export function NoteEditor({ open, onClose, note, defaultKind = 'note', onSave }
   const submit = () => {
     const now = new Date().toISOString()
     const tags = tagsText.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean)
-    onSave({
-      id: note?.id ?? createId(),
-      kind,
-      title: title.trim(),
-      body: body.trim(),
-      tags,
-      pinned: note?.pinned ?? false,
-      createdAt: note?.createdAt ?? now,
-      updatedAt: now,
-    })
+    onSave(
+      withDerivedTitle({
+        id: note?.id ?? createId(),
+        kind,
+        title: title.trim(),
+        body: body.trim(),
+        tags,
+        pinned: note?.pinned ?? false,
+        createdAt: note?.createdAt ?? now,
+        updatedAt: now,
+      }),
+    )
     onClose()
   }
 

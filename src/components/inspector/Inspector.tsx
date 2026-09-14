@@ -59,7 +59,7 @@ export function Inspector() {
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 z-50">
+      <div className="fixed inset-0 z-[var(--z-overlay)]">
         <div className="absolute inset-0 bg-ink/40" onClick={close} />
         <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-sheet bg-paper p-5 pb-safe shadow-overlay animate-[sheet-up_240ms_var(--ease-standard)]">
           {content}
@@ -69,7 +69,7 @@ export function Inspector() {
   }
 
   return (
-    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-30 w-[360px] overflow-y-auto border-l border-line bg-panel p-6 animate-[page-fade_160ms_var(--ease-standard)]">
+    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-[var(--z-header)] w-[360px] overflow-y-auto border-l border-line bg-panel p-6 animate-[page-fade_160ms_var(--ease-standard)]">
       {content}
     </aside>
   )
@@ -318,6 +318,16 @@ function InspectorBody({ type, id, onClose }: { type: InspectorType; id: string;
           >
             {aiRes.enabled ? '停用' : '启用'}
           </Button>
+          <Button
+            variant="danger"
+            onClick={async () => {
+              await useAIResourceStore.getState().remove(aiRes.id)
+              onClose()
+              toast('已删除')
+            }}
+          >
+            <Trash2 size={14} /> 删除
+          </Button>
         </ActionSection>
       </InspectorShell>
     )
@@ -345,6 +355,18 @@ function InspectorBody({ type, id, onClose }: { type: InspectorType; id: string;
             {divRecord.tags?.map((t) => <span key={t} className="text-xs text-ink-faint">#{t}</span>)}
           </div>
         )}
+        <ActionSection>
+          <Button
+            variant="danger"
+            onClick={async () => {
+              await useDivinationStore.getState().remove(divRecord.id)
+              onClose()
+              toast('已删除该条存档')
+            }}
+          >
+            <Trash2 size={14} /> 删除
+          </Button>
+        </ActionSection>
       </InspectorShell>
     )
   }
@@ -448,7 +470,22 @@ function IntelligenceDetail({ intel, onClose }: { intel: ReturnType<typeof useIn
 
   return (
     <InspectorShell title="情报详情" onClose={onClose}>
-      <h3 className="display text-lg font-semibold text-ink">{intel.title}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="display min-w-0 flex-1 text-lg font-semibold text-ink">{intel.title}</h3>
+        {/* 情报此前没有任何删除入口：既不能删、又没有数量上限，只能越堆越多 */}
+        <button
+          onClick={async () => {
+            await useIntelligenceStore.getState().remove(intel.id)
+            onClose()
+            toast('已删除该条情报')
+          }}
+          className="shrink-0 rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-cinnabar"
+          aria-label="删除情报"
+          title="删除这条情报"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
       {intel.summary && <p className="mt-2 text-sm leading-relaxed text-ink-soft">{intel.summary}</p>}
       {intel.aiSummary && (
         <div className="mt-2 rounded-tile border border-bronze/30 bg-bronze/8 px-3 py-2 text-xs leading-relaxed text-bronze">

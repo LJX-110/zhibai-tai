@@ -42,7 +42,7 @@ export function Onboarding() {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-paper p-4">
+    <div className="fixed inset-0 z-[var(--z-immersive)] flex items-center justify-center overflow-y-auto bg-paper p-4">
       <div className="w-full max-w-md py-8">
         {/* 步骤指示 */}
         <div className="mb-8 flex items-center justify-center gap-2">

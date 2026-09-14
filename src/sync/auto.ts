@@ -25,6 +25,25 @@ function delayFor(interval: SyncInterval): number | null {
   }
 }
 
+/** 同步目标是否配齐（纯函数，便于 selector / 组件复用，避免判定逻辑两处漂移） */
+export function isConfigured(s: {
+  syncPassword?: string
+  syncMode?: 'repo' | 'gist'
+  gistToken?: string
+  githubRepo?: string
+  githubToken?: string
+}): boolean {
+  if (!(s.syncPassword ?? '').trim()) return false
+  if ((s.syncMode ?? 'repo') === 'gist') return Boolean((s.gistToken ?? '').trim())
+  return Boolean((s.githubRepo ?? '').trim()) && Boolean((s.githubToken ?? '').trim())
+}
+
+/** 同步目标是否已配置完整 —— 未配置时自动同步静默跳过，
+ *  避免默认开启自动同步后每次数据变更都弹「请设置 Sync Password」 */
+export function isSyncConfigured(): boolean {
+  return isConfigured(useSettingsStore.getState())
+}
+
 function schedule() {
   const s = useSettingsStore.getState()
   if (!s.autoSync || s.syncInterval === 'manual') return
@@ -38,6 +57,8 @@ async function doSync() {
   if (inFlight) return
   const s = useSettingsStore.getState()
   if (!s.autoSync || !dirty) return
+  // dirty 保留：等用户配好同步参数后，下一次变更会把积压的改动一并推上去
+  if (!isSyncConfigured()) return
   inFlight = true
   try {
     await runSync()

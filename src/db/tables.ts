@@ -11,10 +11,12 @@ export interface TableMeta {
   label: string
 }
 
-/** 参与同步、备份导出与清空操作的业务表（共 23 张） */
+/** 参与同步、备份导出与清空操作的业务表（共 24 张） */
 export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'tasks', label: '待办' },
   { key: 'notes', label: '笔记/灵感' },
+  { key: 'categories', label: '分类' },
+  { key: 'appSettings', label: '偏好设置' },
   { key: 'habits', label: '斩三尸' },
   { key: 'habitLogs', label: '斩三尸记录' },
   { key: 'bodyMetrics', label: '身体指标' },
@@ -29,7 +31,6 @@ export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'intelligenceSources', label: '情报源' },
   { key: 'divinationRecords', label: '占卜' },
   { key: 'aiResources', label: 'AI 资源' },
-  { key: 'journals', label: '日志' },
   { key: 'financeRecords', label: '收支' },
   { key: 'purchases', label: '购买' },
   { key: 'budgets', label: '预算' },

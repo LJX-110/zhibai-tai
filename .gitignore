@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# vite-plugin-pwa 在 devOptions.enabled 下生成的开发期 service worker 产物：
+# 既不进版本库，也不该被 lint 扫（否则本地跑过 dev 后 lint 警告会凭空多 19 条）
+dev-dist
 *.local
 .npm-cache
 .npmrc

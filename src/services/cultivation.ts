@@ -2,8 +2,13 @@
  * 道行服务 —— 由近期行为综合得出的轨迹分
  * Phase 1：简单权重模型，不做复杂算法；接口预留后续扩展
  *
- * 五维：行 / 学 / 身 / 心 / 创
+ * 五维：行 / 学 / 身 / 心 / 创（每维 0-20，总分 0-100）
+ *
+ * 「心」的数据源是**记录类笔记**（notes 里 kind === 'note' 的今日新增），
+ * 不是已删除的 journals 表。它与「创」（灵感 + 收藏）刻意不重叠：
+ * 心 = 记录与内省，创 = 创作与收拢 —— 两件事，两种分数。
  */
+import type { NoteKind } from '../types/entities'
 
 export type DimensionKey = 'xing' | 'xue' | 'shen' | 'xin' | 'chuang'
 
@@ -30,11 +35,9 @@ export interface CultivationInput {
   habitLogsToday: number
   /** 今日身体记录条数 */
   bodyLogsToday: number
-  /** 今日是否有日省 */
-  journalToday: boolean
-  /** 今日心情 0-5 */
-  journalMood?: number
-  /** 今日新增创作（笔记/灵感/收藏） */
+  /** 今日新增的记录类笔记数（心） */
+  notesToday: number
+  /** 今日新增创作（灵感 / 收藏） */
   creationsToday: number
 }
 
@@ -51,7 +54,8 @@ export function computeCultivation(input: CultivationInput): CultivationResult {
   const shen = clamp(
     input.waterRatio * 10 + input.habitLogsToday * 2 + input.bodyLogsToday * 2,
   ) // 喝水 + 斩三尸 + 身体记录
-  const xin = input.journalToday ? (input.journalMood != null && input.journalMood >= 3 ? MAX : 12) : 0
+  // 心：记录类笔记，三档（0 / 12 / 20）—— 分值沿用原设计，等级阈值不必改动
+  const xin = clamp(input.notesToday >= 3 ? MAX : input.notesToday >= 1 ? 12 : 0)
   const chuang = clamp(Math.min(input.creationsToday, 4) * 5) // 创作，4 条封顶
 
   const dimensions: DimensionResult[] = [
@@ -86,7 +90,7 @@ export function cultivationSources(input: CultivationInput): { label: string; va
   add('饮水达标', input.waterRatio * 10)
   add('斩三尸', input.habitLogsToday * 2)
   add('身体记录', input.bodyLogsToday * 2)
-  if (input.journalToday) add('日省', input.journalMood != null && input.journalMood >= 3 ? 20 : 12)
+  add('记录', input.notesToday >= 3 ? 20 : input.notesToday >= 1 ? 12 : 0)
   add('创作', Math.min(input.creationsToday, 4) * 5)
   return out
 }
@@ -98,8 +102,7 @@ export interface DailyCultivationInput {
   waterLogs: { date: string; amountMl: number }[]
   habitLogs: { date: string }[]
   bodyMetricLogs: { date: string }[]
-  journals: { date: string; mood?: number }[]
-  notes: { kind: 'note' | 'inspiration'; createdAt: string }[]
+  notes: { kind: NoteKind; createdAt: string }[]
   collections: { createdAt: string }[]
   waterGoal: number
 }
@@ -112,7 +115,6 @@ export function computeDailyCultivation(date: string, input: DailyCultivationInp
     waterLogs,
     habitLogs,
     bodyMetricLogs,
-    journals,
     notes,
     collections,
     waterGoal,
@@ -127,7 +129,10 @@ export function computeDailyCultivation(date: string, input: DailyCultivationInp
   const waterMl = waterLogs
     .filter((w) => w.date === date)
     .reduce((s, w) => s + w.amountMl, 0)
-  const journal = journals.find((j) => j.date === date)
+  // 心 ← 记录类笔记；创 ← 灵感 + 收藏。两者刻意不重叠
+  const notesToday = notes.filter(
+    (n) => n.kind === 'note' && n.createdAt.startsWith(date),
+  ).length
   const creations =
     notes.filter((n) => n.kind === 'inspiration' && n.createdAt.startsWith(date)).length +
     collections.filter((c) => c.createdAt.startsWith(date)).length
@@ -138,8 +143,7 @@ export function computeDailyCultivation(date: string, input: DailyCultivationInp
     waterRatio: waterGoal > 0 ? Math.min(1, waterMl / waterGoal) : 0,
     habitLogsToday: habitLogs.filter((l) => l.date === date).length,
     bodyLogsToday: bodyMetricLogs.filter((l) => l.date === date).length,
-    journalToday: Boolean(journal),
-    journalMood: journal?.mood,
+    notesToday,
     creationsToday: creations,
   }).total
 }

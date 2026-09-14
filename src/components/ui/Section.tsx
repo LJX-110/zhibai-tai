@@ -18,7 +18,9 @@ export function Section({ title, hint, action, className, children }: SectionPro
     <section className={cn('pb-[var(--section-gap)] first:pt-0', className)}>
       <div className="section-title">
         <span>{title}</span>
-        {hint && <span className="hint">{hint}</span>}
+        {/* 移动端藏掉右侧提示语：窄屏上标题行本就是最拥挤的一行，
+            这类说明属于「看得懂但没必要」的噪音 */}
+        {hint && <span className="hint max-md:hidden">{hint}</span>}
         {action && <span className="ml-auto">{action}</span>}
       </div>
       <div className="pt-1">{children}</div>

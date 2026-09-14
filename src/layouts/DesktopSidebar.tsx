@@ -77,7 +77,7 @@ export function DesktopSidebar() {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-[var(--nav-w)] flex-col bg-sidebar text-on-sidebar">
+    <aside className="fixed inset-y-0 left-0 z-[var(--z-sidebar)] flex w-[var(--nav-w)] flex-col bg-sidebar text-on-sidebar">
       {/* 品牌 */}
       <div className="px-5 pb-4 pt-5">
         <div className="flex items-center gap-3">

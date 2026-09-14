@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useBodyMetricLogStore } from '../stores/useBodyStore'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { useHabitLogStore } from '../stores/useHabitStore'
-import { useJournalStore } from '../stores/useJournalStore'
 import { useNoteStore } from '../stores/useNoteStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -30,7 +29,8 @@ export interface TodayStats {
   waterRatio: number
   habitLogs: number
   bodyLogs: number
-  journal: ReturnType<typeof useJournalStore.getState>['items'][number] | undefined
+  /** 今日新增的记录类笔记数（道行「心」的数据源） */
+  notesToday: number
   creations: number
 }
 
@@ -40,7 +40,6 @@ export function useTodayStats(): TodayStats {
   const pomo = usePomodoroStore((s) => s.items)
   const habitLogs = useHabitLogStore((s) => s.items)
   const bodyLogs = useBodyMetricLogStore((s) => s.items)
-  const journals = useJournalStore((s) => s.items)
   const notes = useNoteStore((s) => s.items)
   const collections = useCollectionStore((s) => s.items)
   const waterGoal = useSettingsStore((s) => s.waterGoalMl)
@@ -84,7 +83,9 @@ export function useTodayStats(): TodayStats {
     const habitLogsToday = habitLogs.filter((l) => l.date === today).length
     const bodyLogsToday = bodyLogs.filter((l) => l.date === today).length
 
-    const journal = journals.find((j) => j.date === today)
+    const notesToday = notes.filter(
+      (n) => new Date(n.createdAt).getTime() >= todayStart && n.kind === 'note',
+    ).length
 
     const creations =
       notes.filter(
@@ -105,10 +106,10 @@ export function useTodayStats(): TodayStats {
       waterRatio,
       habitLogs: habitLogsToday,
       bodyLogs: bodyLogsToday,
-      journal,
+      notesToday,
       creations,
     }
-  }, [tasks, waterLogs, pomo, habitLogs, bodyLogs, journals, notes, collections, waterGoal, today])
+  }, [tasks, waterLogs, pomo, habitLogs, bodyLogs, notes, collections, waterGoal, today])
 }
 
 /** 当前本地日期（yyyy-mm-dd） —— 每分钟滚动一次，跨午夜后自动翻新；

@@ -20,6 +20,7 @@ export const SOURCE_TYPE_LABEL: Record<SourceType, string> = {
   web: 'Web',
   game: '游戏',
   anime: '动漫',
+  bilibili: 'B 站',
 }
 
 /** 情报分类（供筛选） */

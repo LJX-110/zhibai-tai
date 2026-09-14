@@ -59,7 +59,7 @@ export function ToastViewport() {
 
   return createPortal(
     <div
-      className="pointer-events-none fixed z-[60] flex flex-col items-center gap-2 sm:left-auto sm:right-4 sm:items-end"
+      className="pointer-events-none fixed z-[var(--z-toast)] flex flex-col items-center gap-2 sm:left-auto sm:right-4 sm:items-end"
       style={{
         left: 0,
         right: 0,

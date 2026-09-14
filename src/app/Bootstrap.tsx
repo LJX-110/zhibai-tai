@@ -13,10 +13,12 @@ import { reloadAllStores } from '../stores/reload'
 import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import { useSourceStore } from '../stores/useSourceStore'
-import { defaultSources, duplicateSourceIds, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
+import { defaultSources, duplicateSourceIds, migrateBilibiliSources, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
 import { resolveAIProvider } from '../services/ai/ai-service'
 import { initIntelAutoFetch } from '../services/intelligence/auto'
 import { initAutoSync } from '../sync/auto'
+import { initSyncedSettings } from '../services/settings-sync'
+import { seedAllCategories } from '../stores/useCategoryStore'
 
 /** 种子标记：避免 dev StrictMode 双跑导致重复播种 */
 let sourcesSeeded = false
@@ -44,6 +46,9 @@ async function seedSources(): Promise<void> {
     await useSourceStore.getState().remove(id)
   }
   if (removed.length > 0) await useSourceStore.getState().load()
+  // B 站源改写：老的 rsshub.app 地址国内必然拉不到，就地换成本地签名 provider
+  const migrated = await migrateBilibiliSources(useSourceStore.getState().items)
+  if (migrated.length > 0) await useSourceStore.getState().load()
 }
 
 /** 启动就绪状态：App 据此决定显示启动屏还是工作台 */
@@ -60,6 +65,7 @@ export const useBootStore = create<BootState>((set) => ({
 export function Bootstrap() {
   useEffect(() => {
     initAutoSync()
+    initSyncedSettings()
     initIntelAutoFetch()
     void resolveAIProvider()
     const boot = Promise.allSettled([
@@ -67,6 +73,7 @@ export function Bootstrap() {
       useSyncStore.getState().load(),
       useConflictStore.getState().load(),
       seedSources(),
+      seedAllCategories(),
     ])
     // 安全阀：正常本地 IndexedDB 毫秒级完成；若被拖住，3 秒后强制放行
     const failsafe = new Promise<void>((resolve) => setTimeout(resolve, 3000))

@@ -61,7 +61,7 @@ export function FocusMode() {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col bg-paper">
+    <div className="fixed inset-0 z-[var(--z-immersive)] flex flex-col bg-paper">
       {/* 顶栏：退出 */}
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2 text-xs tracking-[0.3em] text-ink-faint">
