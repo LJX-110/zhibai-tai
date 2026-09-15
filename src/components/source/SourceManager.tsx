@@ -33,6 +33,7 @@ const PROVIDER_LABEL: Record<IntelligenceProviderId, string> = {
   rawg: 'RAWG',
   jikan: 'Jikan',
   bilibili: 'B 站',
+  ai: 'AI',
 }
 
 const PROVIDER_ORDER: IntelligenceProviderId[] = [

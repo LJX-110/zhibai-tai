@@ -30,6 +30,7 @@ const SOURCE_OPTIONS: { value: SourceType | 'all'; label: string }[] = [
   { value: 'github', label: 'GitHub' },
   { value: 'rss', label: 'RSS' },
   { value: 'official', label: '官方' },
+  { value: 'ai', label: 'AI' },
   { value: 'web', label: 'Web' },
   { value: 'game', label: '游戏' },
   { value: 'anime', label: '动漫' },

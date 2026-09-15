@@ -5,6 +5,8 @@
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useSyncStore } from '../stores/useSyncStore'
+import { useAIChatStore } from '../components/ai/AiChatPanel'
+import { Bot } from 'lucide-react'
 import { Taiji } from '../components/ui/Taiji'
 import { NAV_SECTIONS, SYSTEM_SECTION, type SectionId } from '../app/navigation'
 import { playSound } from '../services/sound'
@@ -112,8 +114,21 @@ export function DesktopSidebar() {
         ))}
       </nav>
 
-      {/* 底部：系统 + 同步状态 */}
-      <div className="border-t border-paper/10 px-3 py-3">
+      {/* 底部：帮 AI 问问 + 系统 + 同步状态 */}
+      <div className="border-t border-paper/10 px-3 py-3 space-y-1.5">
+        <button
+          type="button"
+          onClick={() => useAIChatStore.getState().setOpen(true)}
+          className="flex w-full items-center gap-2.5 rounded-[6px] border border-teal/30 bg-teal/12 px-3 py-2 text-left transition-colors hover:border-teal/50 hover:bg-teal/18"
+        >
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal text-on-sidebar">
+            <Bot size={13} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-on-sidebar">AI 问问</span>
+            <span className="block text-[9px] text-on-sidebar-muted">问任务 / 课程 / 情报 / 收支</span>
+          </span>
+        </button>
         <NavButton
           id={SYSTEM_SECTION.id}
           index={SYSTEM_SECTION.index}

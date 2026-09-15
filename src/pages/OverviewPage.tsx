@@ -598,7 +598,7 @@ export function OverviewPage() {
                   <div key={i} className="row">
                     <span className="tabular w-16 shrink-0 text-xs text-ink-faint">{c.start}</span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-ink">{c.name}</div>
+                      <div className="truncate text-sm text-ink">{c.name?.trim() || c.room?.trim() || '课程'}</div>
                       <div className="truncate text-[11px] text-ink-faint">
                         {[c.room, c.teacher].filter(Boolean).join(' · ') || '—'}
                       </div>

@@ -54,6 +54,14 @@ import type { Course, Exam, Homework, PomodoroSession, Task, WeeklySlot } from '
 import { cn } from '../utils/cn'
 
 /**
+ * 课程名兜底：老数据或导入数据可能只有 room 而没填 name，
+ * 显示层统一回退到地点，避免课表里出现一块只有时间的空白卡片。
+ */
+function courseLabel(c: Pick<Course, 'name' | 'room'>): string {
+  return c.name?.trim() || c.room?.trim() || '未命名课程'
+}
+
+/**
  * 页签从 6 个收到 4 个：窄屏上六个页签必然横滚，靠后的两个（考试/统计）
  * 实际上等于「藏起来」。现在按「做什么」归组，功能一个没少：
  *  · 课程表 —— 含「管理课程」子视图（原「课程」页签）
@@ -281,7 +289,7 @@ function TimetableTab({
               >
                 <span className={cn('h-10 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-ink">{course.name}</div>
+                  <div className="text-sm font-medium text-ink">{courseLabel(course)}</div>
                   <div className="tabular mt-0.5 text-xs text-ink-muted">
                     {slot.start}–{slot.end}
                     {sectionLabelOf(slot.start) && (
@@ -356,7 +364,7 @@ function TimetableTab({
                       >
                         <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
                         <span className="vertical-slip max-h-[110px] overflow-hidden text-[13px] font-medium leading-none">
-                          {course.name}
+                          {courseLabel(course)}
                         </span>
                         <span className="tabular text-[10px] opacity-75">{slot.start}</span>
                       </button>
@@ -425,7 +433,7 @@ function TimetableTab({
                       )}
                     >
                       <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', barFor(course.id))} />
-                      <span className="max-w-[9rem] truncate">{course.name}</span>
+                      <span className="max-w-[9rem] truncate">{courseLabel(course)}</span>
                       <span className="tabular text-[10px] opacity-75">{slot.start}</span>
                     </button>
                   ))}
@@ -447,7 +455,7 @@ function TimetableTab({
                   onClick={() => useInspectorStore.getState().open('course', c.id)}
                   className="min-w-0 flex-1 text-left"
                 >
-                  <span className="text-sm font-medium text-ink">{c.name}</span>
+                  <span className="text-sm font-medium text-ink">{courseLabel(c)}</span>
                   <span className="ml-2 text-xs text-ink-faint">{c.credit} 学分</span>
                 </button>
                 <span className="hidden text-xs text-ink-faint sm:inline">
@@ -880,7 +888,7 @@ function CourseTab({
             <div key={c.id} className="row">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-ink">{c.name}</span>
+                  <span className="text-sm font-medium text-ink">{courseLabel(c)}</span>
                   <Badge tone="teal">{c.credit} 学分</Badge>
                   {(() => {
                     const mins = sessions

@@ -13,6 +13,7 @@ import { rssProvider } from './rss'
 import { animeProvider, customProvider, gameProvider, officialProvider } from './vertical'
 import { jikanProvider, rawgProvider, steamProvider } from './extended'
 import { bilibiliProvider } from './bilibili'
+import { aiProvider } from './ai'
 import { jsonProvider, webProvider } from './scraper'
 import { classifyFetchError, type FetchErrorKind } from './scraper'
 import type { IntelligenceProvider } from './index'
@@ -34,6 +35,7 @@ export const PROVIDERS: Record<IntelligenceProviderId, IntelligenceProvider> = {
   rawg: rawgProvider,
   jikan: jikanProvider,
   bilibili: bilibiliProvider,
+  ai: aiProvider,
 }
 
 /** 推荐来源目录（本地 Provider Catalog，点击即预填配置）—— 精选 8 个 */
@@ -52,6 +54,7 @@ export const PROVIDER_CATALOG: {
   { provider: 'steam', name: 'Steam 新闻', desc: '按 App ID 获取游戏新闻/更新/公告', category: '游戏' },
   { provider: 'web', name: '网页抓取', desc: 'CSS 选择器抽取标题/摘要/链接', category: '自定义' },
   { provider: 'json', name: 'JSON Feed', desc: 'RSS JSON 或自定义 JSON 数组', category: '自定义' },
+  { provider: 'ai', name: 'AI 情报', desc: '用已配置的远程 AI 生成近期看点（需远程 API Key）', category: 'AI' },
   { provider: 'mock', name: '示例情报', desc: '离线示例数据', category: '科技' },
 ]
 

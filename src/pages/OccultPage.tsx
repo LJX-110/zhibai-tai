@@ -49,6 +49,7 @@ export function OccultPage() {
 
   /** AI 白话解读（梅花） */
   const [mhMethod, setMhMethod] = useState<MeihuaMethod>('numbers')
+  const [mhQuestion, setMhQuestion] = useState('')
   const [mhN1, setMhN1] = useState('')
   const [mhN2, setMhN2] = useState('')
   const [mhWords, setMhWords] = useState('')
@@ -56,7 +57,12 @@ export function OccultPage() {
 
   const castMh = () => {
     try {
-      const c = castMeihua(mhMethod, { n1: Number(mhN1), n2: Number(mhN2), words: mhWords })
+      const c = castMeihua(mhMethod, {
+        question: mhQuestion,
+        n1: Number(mhN1),
+        n2: Number(mhN2),
+        words: mhWords,
+      })
       setMh(c)
       setExplain(null)
       playSound('compass')
@@ -72,7 +78,7 @@ export function OccultPage() {
     playSound('ui-open')
     try {
       const data = `本卦 ${mh.benGua.name}（${mh.benGua.xiang}），卦辞：${mh.benGua.guoci}；互卦 ${mh.huGua.name}；变卦 ${mh.bianGua.name}；动爻第 ${mh.dongYao} 爻；体${mh.ti.trigram.name}（${mh.ti.element}）、用${mh.yong.trigram.name}（${mh.yong.element}），${mh.relation}。规则断曰：${mh.verdict}`
-      const body = await aiService.occultExplain('meihua', data)
+      const body = await aiService.occultExplain('meihua', data, mh.question)
       setExplain({ title: 'AI 解卦', body })
     } catch {
       toast('AI 解释失败', 'danger')
@@ -142,6 +148,7 @@ export function OccultPage() {
 
   /** 大衍筮法：五十蓍草十八变成卦（《系辞》正统法） */
   const [dy, setDy] = useState<DayanState | null>(null)
+  const [dyQuestion, setDyQuestion] = useState('')
   const dyDone = dy?.cast ?? null
   /** 分步：推进一变（每变 = 分二→挂一→揲四→归奇） */
   const nextBian = () => {
@@ -172,8 +179,8 @@ export function OccultPage() {
       const movingText = dyDone.dongYao
         ? `第 ${dyDone.dongYao} 爻（${yaoTitle(dyDone.dongYao, dyDone.lines[dyDone.dongYao - 1].value)}）动，之 ${dyDone.bianGua!.name} 卦`
         : '六爻安静'
-      const data = `本卦 ${dyDone.benGua.name}，卦辞：${dyDone.benGua.guoci}；${movingText}。`
-      const body = await aiService.occultExplain('dayan', data)
+      const data = `本卦 ${dyDone.benGua.name}，卦辞：${dyDone.benGua.guoci}；${movingText}。${dyQuestion ? `所占之事：${dyQuestion}` : ''}`
+      const body = await aiService.occultExplain('dayan', data, dyQuestion)
       setExplain({ title: 'AI 解卦', body })
     } catch {
       toast('AI 解释失败', 'danger')
@@ -290,12 +297,19 @@ export function OccultPage() {
         </>
       )}
 
-      {/* 梅花易数：起卦四式 → 排盘 → 解卦 → 入档 */}
+      {/* 梅花易数：先问事 → 起卦四式 → 排盘 → 解卦 → 入档 */}
       {tab === 'meihua' && (
       <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
         <div className="lg:col-span-5">
-          <Section title="梅花易数" hint="体用生克 · 起卦四式">
+          <Section title="梅花易数" hint="先问一事，再起卦">
             <div className="space-y-3">
+              {/* 所问之事：先有问，才有占；传参给排盘与 AI 解卦 */}
+              <Input
+                placeholder="所占之事（如：这次面试顺利吗）"
+                value={mhQuestion}
+                onChange={(e) => setMhQuestion(e.target.value)}
+                maxLength={60}
+              />
               <div className="switch-pill flex flex-wrap gap-1 rounded-tile p-0.5">
                 {(Object.keys(MEIHUA_METHOD_LABEL) as MeihuaMethod[]).map((m) => (
                   <button
@@ -358,6 +372,12 @@ export function OccultPage() {
                   ))}
                 </div>
                 <div className="rounded-tile border border-line bg-paper/50 px-3 py-2.5 text-sm">
+                  {/* 所占之事：问卦回看时仍有据可循 */}
+                  {mh.question && (
+                    <p className="mb-1.5 border-b border-line/60 pb-1.5 text-[12px] text-ink-muted">
+                      所占：<span className="text-ink">{mh.question}</span>
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="text-ink">
                       体 <span className="font-medium text-teal">{mh.ti.trigram.name}·{mh.ti.element}</span>
@@ -405,6 +425,14 @@ export function OccultPage() {
               <p className="text-[11px] leading-relaxed text-ink-faint">
                 大衍之数五十，其用四十九。每爻分二、挂一、揲四、归奇，三变得一爻，十八变而成卦——起卦最繁复，亦最庄重。
               </p>
+              {/* 所占之事：建局前先问事（AI 解卦会结合此问） */}
+              <Input
+                placeholder="所占之事（如：这学期该修哪门课）"
+                value={dyQuestion}
+                onChange={(e) => setDyQuestion(e.target.value)}
+                maxLength={60}
+                disabled={Boolean(dy)}
+              />
               {!dy && (
                 <Button variant="ritual" onClick={startDy} className="w-full">
                   <Wand2 size={14} /> 建局（其用四十九）
@@ -427,6 +455,11 @@ export function OccultPage() {
           <Section title="大衍排盘" hint={dyDone ? `十八变毕 · 六爻成卦` : dy ? `进行中 · ${dy.steps.length} / 18 变` : '尚未建局'}>
             {dyDone ? (
               <div className="space-y-3">
+                {dyQuestion && (
+                  <p className="rounded-tile border border-line bg-paper/50 px-3 py-2 text-[12px] text-ink-muted">
+                    所占：<span className="text-ink">{dyQuestion}</span>
+                  </p>
+                )}
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-tile border border-cinnabar/40 bg-paper/50 p-3 text-center">
                     <div className="text-[10px] tracking-[0.2em] text-ink-faint">本卦</div>

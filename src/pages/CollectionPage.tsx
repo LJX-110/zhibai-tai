@@ -272,8 +272,10 @@ export function CollectionPage() {
       ) : (
         <>
       {/* 两个维度分两行：类型=介质（这是什么）· 分类=用途（拿它做什么）
-          此前两者混在一行且默认名重合 7 项，界面上根本分不出区别 */}
+          此前两者混在一行且默认名重合 7 项，界面上根本分不出区别。
+          空数据时隐藏类型行：下方空态已提示「添加第一件」，不必再铺一行「全部 0」 */}
       <div className="pb-3">
+        {items.length > 0 && (
         <ScrollRow className="pb-1">
           <span className="shrink-0 pr-1 text-[11px] text-ink-faint">类型</span>
           <button
@@ -300,10 +302,8 @@ export function CollectionPage() {
               </button>
             )
           })}
-          {typesInUse.length === 0 && (
-            <span className="shrink-0 text-xs text-ink-faint">还没有藏品</span>
-          )}
         </ScrollRow>
+        )}
 
         <ScrollRow className="mt-1.5 pb-1" activeSelector={'[data-active="true"]'} activeKey={catFilter}>
           <span className="shrink-0 pr-1 text-[11px] text-ink-faint">分类</span>

@@ -1,8 +1,15 @@
 /**
- * GitHub Provider —— 真实数据（公共搜索 API，无需 Token，受速率限制）
+ * GitHub Provider —— 真实数据（公共搜索 API，无需 Token）
+ *
+ * 通道选择沿用全站统一的 proxyFetch 双通道：
+ *  · api.github.com 属于 DIRECT_HOSTS（自带 CORS），直连优先；
+ *  · 国内网络直连不通时，若已配置自建代理则自动经代理转发兜底。
+ * 此前这里用原生 fetch 直连：没配代理时国内必然超时 → 「GitHub 0 条」。
  * 搜索词从源 config 读取（JSON：{ queries: string[] }），不硬编码。
  */
 import { createId } from '../../../utils/id'
+import { useSettingsStore } from '../../../stores/useSettingsStore'
+import { proxyFetch } from './proxy'
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
 import type { IntelligenceProvider } from './index'
 
@@ -20,12 +27,8 @@ interface GHItem {
 
 async function searchRepos(query: string, signal?: AbortSignal): Promise<GHItem[]> {
   const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=8`
-  const res = await fetch(url, {
-    headers: { Accept: 'application/vnd.github+json' },
-    signal,
-  })
-  if (!res.ok) throw new Error(`GitHub API ${res.status}`)
-  const data = (await res.json()) as { items: GHItem[] }
+  const text = await proxyFetch(url, useSettingsStore.getState().corsProxyUrl, signal)
+  const data = JSON.parse(text) as { items?: GHItem[] }
   return data.items ?? []
 }
 

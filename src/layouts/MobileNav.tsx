@@ -5,7 +5,7 @@
  * 浅色黛蓝 / 深色绛红），内容区保持宣纸白，主次分明
  */
 import { useMemo, useState } from 'react'
-import { RefreshCw, Search } from 'lucide-react'
+import { Bot, RefreshCw, Search } from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import {
@@ -19,6 +19,7 @@ import {
 import { todayISO } from '../utils/id'
 import { playSound } from '../services/sound'
 import { Sheet, ThemeToggle, useToast } from '../components/ui'
+import { useAIChatStore } from '../components/ai/AiChatPanel'
 import { runSync } from '../sync/SyncService'
 import { isConfigured, isSyncConfigured } from '../sync/auto'
 import { cn } from '../utils/cn'
@@ -107,6 +108,7 @@ export function MobileNav() {
   const section = useAppStore((s) => s.section)
   const setSection = useAppStore((s) => s.setSection)
   const mobileTabs = useSettingsStore((s) => s.mobileTabs)
+  const setAIChatOpen = useAIChatStore((s) => s.setOpen)
   const [moreOpen, setMoreOpen] = useState(false)
 
   /** 底栏常驻板块：以设置为准（规范化后一定满 4 格） */
@@ -188,30 +190,50 @@ export function MobileNav() {
 
       {/* 更多抽屉（与侧栏同色系） */}
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="更多空间" tone="sidebar">
-        <div className="grid grid-cols-1 gap-1.5">
-          {moreSections.map((s) => {
-            const active = section === s.id
-            return (
-              <button
-                key={s.id}
-                onClick={() => go(s.id)}
-                className={cn(
-                  'flex min-h-[52px] items-center gap-3 rounded-paper border px-3 py-2 text-left transition-colors',
-                  active
-                    ? 'border-gold-btn/50 bg-white/10'
-                    : 'border-white/10 hover:border-white/25 hover:bg-white/5',
-                )}
-              >
-                <span className="tabular w-7 text-right text-[11px] text-on-sidebar-muted">{s.index}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="display block text-base font-semibold text-on-sidebar">
-                    {s.label}
+        <div className="space-y-2">
+          {/* AI 问问：全局对话入口（抽屉常驻首位，不随板块配置变化） */}
+          <button
+            onClick={() => {
+              setMoreOpen(false)
+              setAIChatOpen(true)
+            }}
+            className="flex w-full items-center gap-3 rounded-paper border border-teal/40 bg-teal/10 px-3 py-2.5 text-left transition-colors hover:border-teal/60 hover:bg-teal/15"
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal text-on-sidebar">
+              <Bot size={14} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="display block text-base font-semibold text-on-sidebar">AI 问问</span>
+              <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">
+                问任务 / 课程 / 情报 / 收支
+              </span>
+            </span>
+          </button>
+          <div className="grid grid-cols-1 gap-1.5">
+            {moreSections.map((s) => {
+              const active = section === s.id
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => go(s.id)}
+                  className={cn(
+                    'flex min-h-[52px] items-center gap-3 rounded-paper border px-3 py-2 text-left transition-colors',
+                    active
+                      ? 'border-gold-btn/50 bg-white/10'
+                      : 'border-white/10 hover:border-white/25 hover:bg-white/5',
+                  )}
+                >
+                  <span className="tabular w-7 text-right text-[11px] text-on-sidebar-muted">{s.index}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="display block text-base font-semibold text-on-sidebar">
+                      {s.label}
+                    </span>
+                    <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">{s.sub}</span>
                   </span>
-                  <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">{s.sub}</span>
-                </span>
-              </button>
-            )
-          })}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </Sheet>
     </>

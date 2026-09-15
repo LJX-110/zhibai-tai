@@ -205,7 +205,7 @@ export interface CollectionItem {
 }
 
 /** 收藏类型 */
-export type SourceType = 'github' | 'rss' | 'official' | 'web' | 'game' | 'anime' | 'bilibili'
+export type SourceType = 'github' | 'rss' | 'official' | 'web' | 'game' | 'anime' | 'bilibili' | 'ai'
 
 /** 情报条目（信息中枢，统一模型） */
 export interface IntelligenceItem {
@@ -363,6 +363,7 @@ export type IntelligenceProviderId =
   | 'rawg'
   | 'jikan'
   | 'bilibili'
+  | 'ai'
 
 /** 情报源（可在「系统」管理，增删启停测试） */
 export interface IntelligenceSource {
