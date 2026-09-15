@@ -53,13 +53,7 @@ const TYPE_ICON: Record<AIResourceType, typeof Bot> = {
   workflow: Workflow,
 }
 
-/** 快速开始（空态产品入口） */
-const QUICK_START: { type: AIResourceType; label: string; desc: string; icon: typeof Bot }[] = [
-  { type: 'model', label: '添加第一个模型', desc: '登记本地或云端模型', icon: Cpu },
-  { type: 'skill', label: '添加 Skill', desc: '沉淀可复用的技能', icon: Sparkles },
-  { type: 'agent', label: '添加 Agent', desc: '定义你的智能体', icon: Bot },
-  { type: 'prompt', label: '导入 Prompt', desc: '保存常用提示词', icon: FileText },
-]
+/** 快速开始（空态产品入口）—— 已精简：不必一张张铺开，一次「登记能力」即可开始 */
 
 export function AIPage() {
   const resources = useAIResourceStore((s) => s.items)
@@ -220,33 +214,19 @@ export function AIPage() {
         />
       </div>
 
-      {/* 空态：完整工作台结构 */}
+      {/* 空态：一句引导 + 登记入口（不再铺一大排快速开始卡） */}
       {resources.length === 0 && (
         <div className="talisman talisman--line p-6">
           <EmptyState
             icon={Box}
-            title="你的术还没有收藏任何能力"
-            desc="模型、Skill、Agent、Prompt、Workflow 都可以登记到这里，形成可复用的 AI 能力库"
-            step="从下面任一入口开始"
+            title="术库还是空的"
+            desc="模型、Tool、Skill、Agent、Prompt 都可以登记到这里，形成可复用的 AI 能力库"
+            action={
+              <Button variant="primary" onClick={() => openNew()}>
+                <Plus size={13} /> 登记能力
+              </Button>
+            }
           />
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
-            {QUICK_START.map((q) => {
-              const Icon = q.icon
-              return (
-                <button
-                  key={q.type}
-                  onClick={() => openNew(q.type)}
-                  className="group flex flex-col items-start gap-2 rounded-tile border border-line bg-paper/70 px-4 py-3.5 text-left transition-colors hover:border-cinnabar/40 hover:bg-cinnabar/5"
-                >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-line bg-raised text-ink-muted group-hover:text-cinnabar">
-                    <Icon size={15} />
-                  </span>
-                  <span className="text-sm font-medium text-ink">{q.label}</span>
-                  <span className="text-[11px] text-ink-faint">{q.desc}</span>
-                </button>
-              )
-            })}
-          </div>
         </div>
       )}
 

@@ -15,6 +15,7 @@ import { useResolvedLayout } from '../layouts/useResolvedLayout'
 import { FINANCE_CATEGORIES, categoryLabel } from '../services/finance'
 import { recordActivity } from '../services/activity'
 import { browserNotify } from '../services/notification'
+import { playSound } from '../services/sound'
 import type { FinanceCategory, FinanceRecord, Purchase } from '../types/entities'
 import { createId, todayISO } from '../utils/id'
 import { Ring } from '../components/ui/Ring'
@@ -115,7 +116,8 @@ function LedgerTab() {
   const [form, setForm] = useState({
     kind: 'expense' as 'income' | 'expense',
     amount: '',
-    category: 'dining' as FinanceCategory,
+    category: 'dining' as FinanceCategory | 'custom',
+    customCategory: '',
     merchant: '',
     note: '',
     isPurchase: false,
@@ -142,15 +144,17 @@ function LedgerTab() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ kind: 'expense', amount: '', category: 'dining', merchant: '', note: '', isPurchase: false })
+    setForm({ kind: 'expense', amount: '', category: 'dining' as FinanceCategory | 'custom', customCategory: '', merchant: '', note: '', isPurchase: false })
     setEditorOpen(true)
   }
   const openEdit = (r: FinanceRecord) => {
     setEditing(r)
+    const known = FINANCE_CATEGORIES.some((c) => c.value === r.category)
     setForm({
       kind: r.kind,
       amount: String(r.amount),
-      category: r.category,
+      category: known ? (r.category as FinanceCategory | 'custom') : 'custom',
+      customCategory: known ? '' : r.category,
       merchant: r.merchant ?? '',
       note: r.note ?? '',
       isPurchase: r.isPurchase,
@@ -163,12 +167,17 @@ function LedgerTab() {
       toast('金额需为大于 0 的数字', 'danger')
       return
     }
+    // 自定义分类：下拉选「自定义」时以输入值为准；未填则回落「其他」
+    const finalCategory: string =
+      form.category === 'custom'
+        ? form.customCategory.trim() || '其他'
+        : form.category
     const now = new Date().toISOString()
     const rec: FinanceRecord = {
       id: editing?.id ?? createId(),
       kind: form.kind,
       amount: amt,
-      category: form.category,
+      category: finalCategory,
       date: todayISO(),
       merchant: form.merchant.trim() || undefined,
       note: form.note.trim() || undefined,
@@ -327,11 +336,16 @@ function LedgerTab() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Input autoFocus type="number" step="0.01" placeholder="金额" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as FinanceCategory })}>
-              {FINANCE_CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </Select>
+            {form.category === 'custom' ? (
+              <Input placeholder="自定义分类，如：宠物" value={form.customCategory} onChange={(e) => setForm({ ...form, customCategory: e.target.value })} />
+            ) : (
+              <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as FinanceCategory | 'custom' })}>
+                {FINANCE_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+                <option value="custom">自定义…</option>
+              </Select>
+            )}
           </div>
           <Input placeholder="商家/来源（可选）" value={form.merchant} onChange={(e) => setForm({ ...form, merchant: e.target.value })} />
           <Input placeholder="备注（可选）" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
@@ -399,7 +413,8 @@ function BuyTab() {
   const [buyForm, setBuyForm] = useState({
     title: '',
     price: '',
-    category: 'shopping' as FinanceCategory,
+    category: 'shopping' as string | 'custom',
+    customCategory: '',
     url: '',
     note: '',
     status: 'want' as Purchase['status'],
@@ -415,15 +430,17 @@ function BuyTab() {
 
   const openNew = () => {
     setEditingBuy(null)
-    setBuyForm({ title: '', price: '', category: 'shopping', url: '', note: '', status: 'want' })
+    setBuyForm({ title: '', price: '', category: 'shopping', customCategory: '', url: '', note: '', status: 'want' })
     setBuyOpen(true)
   }
   const openEdit = (p: Purchase) => {
     setEditingBuy(p)
+    const known = FINANCE_CATEGORIES.some((c) => c.value === p.category)
     setBuyForm({
       title: p.title,
       price: String(p.price),
-      category: p.category,
+      category: known ? p.category : 'custom',
+      customCategory: known ? '' : p.category,
       url: p.url ?? '',
       note: p.note ?? '',
       status: p.status ?? 'want',
@@ -431,7 +448,8 @@ function BuyTab() {
     setBuyOpen(true)
   }
   const save = async () => {
-    const price = parsePositiveAmount(buyForm.price)
+    // 价格非必填：想买清单可以只记"想买什么"，下单后再补价
+    const price = buyForm.price.trim() ? parsePositiveAmount(buyForm.price) : 0
     if (!buyForm.title.trim()) {
       toast('请填写商品名', 'danger')
       return
@@ -440,13 +458,17 @@ function BuyTab() {
       toast('价格需为大于 0 的数字', 'danger')
       return
     }
+    const finalCategory: string =
+      buyForm.category === 'custom'
+        ? buyForm.customCategory.trim() || '其他'
+        : buyForm.category
     const now = new Date().toISOString()
     const prev = editingBuy
     const next: Purchase = {
       id: editingBuy?.id ?? createId(),
       title: buyForm.title.trim(),
       price,
-      category: buyForm.category,
+      category: finalCategory,
       date: editingBuy?.date ?? todayISO(),
       url: buyForm.url.trim() || undefined,
       note: buyForm.note.trim() || undefined,
@@ -460,6 +482,7 @@ function BuyTab() {
       void browserNotify('知白台 · 取件提醒', `「${next.title}」已下单，记得收快递取件`)
     }
     setBuyOpen(false)
+    playSound('purchase')
     toast(prev ? '已更新' : '已记入想买清单', 'success')
   }
   const remove = async (p: Purchase) => {
@@ -597,17 +620,22 @@ function BuyTab() {
         footer={
           <>
             <Button variant="tertiary" onClick={() => setBuyOpen(false)}>取消</Button>
-            <Button variant="primary" onClick={save} disabled={!buyForm.title.trim() || parsePositiveAmount(buyForm.price) === null}>保存</Button>
+            <Button variant="primary" onClick={save} disabled={!buyForm.title.trim() || (buyForm.price.trim() !== '' && parsePositiveAmount(buyForm.price) === null)}>保存</Button>
           </>
         }
       >
         <div className="space-y-3">
           <Input autoFocus placeholder="商品名" value={buyForm.title} onChange={(e) => setBuyForm({ ...buyForm, title: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">
-            <Input type="number" step="0.01" placeholder="价格（必填）" value={buyForm.price} onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })} />
-            <Select value={buyForm.category} onChange={(e) => setBuyForm({ ...buyForm, category: e.target.value as FinanceCategory })}>
-              {FINANCE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </Select>
+            <Input type="number" step="0.01" placeholder="价格（可留空）" value={buyForm.price} onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })} />
+            {buyForm.category === 'custom' ? (
+              <Input placeholder="自定义分类，如：家电" value={buyForm.customCategory} onChange={(e) => setBuyForm({ ...buyForm, customCategory: e.target.value })} />
+            ) : (
+              <Select value={buyForm.category} onChange={(e) => setBuyForm({ ...buyForm, category: e.target.value as string | 'custom' })}>
+                {FINANCE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                <option value="custom">自定义…</option>
+              </Select>
+            )}
           </div>
           <div>
             <div className="mb-1.5 text-[11px] text-ink-faint">状态</div>

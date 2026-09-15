@@ -260,16 +260,8 @@ export interface DivinationRecord {
   updatedAt?: string
 }
 
-/** 收支分类 */
-export type FinanceCategory =
-  | 'dining'
-  | 'transport'
-  | 'study'
-  | 'fun'
-  | 'shopping'
-  | 'subscription'
-  | 'salary'
-  | 'other'
+/** 支出收入分类：预设常用分类，也允许用户自填（Category 是自由文本） */
+export type FinanceCategory = string
 
 /** 收支记录 */
 export interface FinanceRecord {

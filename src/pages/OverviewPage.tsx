@@ -2,8 +2,8 @@
  * 观 —— 知白台首页（今日炁象 + 今日案台 + AI 今日简报）
  * 打开即知今天：四维状态（非堆数字）→ 今日任务/课程/到期 → AI 一句话简报
  */
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Bell, CheckCircle2, Plus, RefreshCw, Sparkles } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ArrowRight, Bell, CheckCircle2, Plus, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
 import { useTaskStore } from '../stores/useTaskStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
@@ -17,12 +17,11 @@ import { useCultivation } from '../hooks/useCultivation'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
-import { aiService } from '../services/ai/ai-service'
-import { playSound } from '../services/sound'
+import { useAIChatStore } from '../components/ai/AiChatPanel'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
-import { Section, EmptyState, Timeline, Button, Sheet, Taiji, Dialog } from '../components/ui'
-import { formatHM, nowHM, todayISO, weekdayCN } from '../utils/id'
+import { Section, EmptyState, Timeline, Button, Sheet, Taiji, PageHeader } from '../components/ui'
+import { formatHM, todayISO } from '../utils/id'
 import { cn } from '../utils/cn'
 import type { Task } from '../types/entities'
 
@@ -322,16 +321,9 @@ export function OverviewPage() {
   const courses = useCourseStore((s) => s.items)
   const activities = useActivityStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
-  const weekTasks = useTaskStore((s) => s.items)
-  const weekPomos = usePomodoroStore((s) => s.items)
   const [editing, setEditing] = useState<Task | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [allTraceOpen, setAllTraceOpen] = useState(false)
-  const [brief, setBrief] = useState('')
-  const [briefLoading, setBriefLoading] = useState(false)
-  const [weekOpen, setWeekOpen] = useState(false)
-  const [week, setWeek] = useState('')
-  const [weekLoading, setWeekLoading] = useState(false)
 
   const now = new Date()
   const date = todayISO()
@@ -380,49 +372,6 @@ export function OverviewPage() {
 
   const urgent = [...stats.todayDue, ...stats.upcoming].slice(0, 5)
 
-  // 道行周报（本周聚合：周一为起点）
-  const weekStart = new Date(now)
-  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7))
-  weekStart.setHours(0, 0, 0, 0)
-  const weekTasksDone = weekTasks.filter(
-    (t) => t.done && t.completedAt && new Date(t.completedAt) >= weekStart,
-  ).length
-  const weekFocusMin = weekPomos
-    .filter((p) => p.type === 'focus' && new Date(p.startAt) >= weekStart)
-    .reduce((a, p) => a + p.durationMin, 0)
-  const ACTIVITY_LABEL: Record<string, string> = {
-    task: '待办', pomodoro: '专注', finance: '收支', collection: '收藏',
-    water: '饮水', divination: '占卜', note: '笔记', intelligence: '情报',
-  }
-  const weekTop = Object.entries(
-    activities
-      .filter((a) => new Date(a.timestamp) >= weekStart)
-      .reduce<Record<string, number>>((m, a) => {
-        m[a.entityType] = (m[a.entityType] ?? 0) + 1
-        return m
-      }, {}),
-  )
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([k]) => ACTIVITY_LABEL[k] ?? k)
-
-  const loadWeek = async () => {
-    setWeekOpen(true)
-    setWeekLoading(true)
-    try {
-      const body = await aiService.weeklyReport({
-        range: `本周（${weekStart.toISOString().slice(0, 10)} 起）`,
-        tasksDone: weekTasksDone,
-        focusMin: weekFocusMin,
-        creations: 0,
-        topActivity: weekTop,
-      })
-      setWeek(body)
-    } finally {
-      setWeekLoading(false)
-    }
-  }
-
   // 下一件事：今天下一节课 / 最近到期任务（打开首页即获行动指令）
   const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const nextClass = todayClasses.find((c) => c.start > nowHMStr)
@@ -439,53 +388,10 @@ export function OverviewPage() {
     ]
   }, [stats, todayClasses])
 
-  // AI 今日简报（一句话）
-  const loadBrief = async () => {
-    setBriefLoading(true)
-    try {
-      const b = await aiService.overviewBrief({
-        tasksToday: stats.highPriorityOpen.length + stats.todayDue.length,
-        classesToday: todayClasses.length,
-        dueSoon: urgent.length,
-        focusMin: stats.focusMinutes,
-      })
-      setBrief(b)
-    } finally {
-      setBriefLoading(false)
-    }
-  }
-  useEffect(() => {
-    void loadBrief()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
-      {/* 页头：日期与题跋同排、问候语单独一行 —— 窄屏从 5 行压到 2 行 */}
-      <div className="pb-5 md:pb-6">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <p className="mono-meta text-ink-faint">
-            {date} · 周{weekdayCN(now.getDay())} · <span className="tabular">{nowHM()}</span>
-          </p>
-          <p className="scribal text-sm text-ink-muted">道法自然，观照当下</p>
-        </div>
-        <div className="mt-1 flex items-center gap-3">
-          <h1 className="scribal-title text-2xl text-ink-bright md:text-3xl">
-            {greeting(now.getHours())}
-          </h1>
-          {/* 快捷键常驻提示：命令面板不做引导几乎无人发现；点击直接呼出。
-              手机端没有物理键盘，这枚提示纯属噪音，仅桌面显示 */}
-          <button
-            onClick={() =>
-              window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, cancelable: true }))
-            }
-            className="hidden items-center gap-1.5 rounded-control border border-line bg-raised px-2 py-0.5 text-[11px] text-ink-faint transition-colors hover:border-line-strong hover:text-ink md:flex"
-            title="呼出命令面板"
-          >
-            <kbd className="font-mono">Ctrl K</kbd> 命令面板
-          </button>
-        </div>
-      </div>
+      {/* 页头：与其他板块统一（书法大标题 + 引首诗句） */}
+      <PageHeader poem={greeting(now.getHours())} title="观 · 观照" />
 
       {/* 下一件事：时序感的第一入口 */}
       {(nextClass || nextDue) && (
@@ -657,34 +563,20 @@ export function OverviewPage() {
         </Section>
       </div>
 
-      {/* AI 今日简报 */}
+      {/* 今日简报入口：一键打开天机（简报/周报/问答已收编于天机） */}
       <section className="mt-2 rounded-paper border border-line px-6 py-5">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2 mono-meta text-teal">
-            <Sparkles size={13} /> AI 今日简报 · BRIEF
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => void loadWeek()}
-              className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-xs text-bronze transition-colors hover:bg-bronze/10"
-            >
-              道行周报
-            </button>
-            <button
-              onClick={() => {
-                playSound('ui-click')
-                void loadBrief()
-              }}
-              disabled={briefLoading}
-              className="flex items-center gap-1 rounded-[6px] px-2 py-1 text-xs text-teal transition-colors hover:bg-teal/10 disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={cn(briefLoading && 'animate-spin')} /> 重新生成
-            </button>
-          </div>
-        </div>
-        <p className="text-[15px] leading-relaxed text-ink-soft">
-          {briefLoading ? '正在梳理今日…' : brief || '正在生成今日简报…'}
-        </p>
+        <button
+          onClick={() => useAIChatStore.getState().setOpen(true)}
+          className="flex w-full items-center gap-3 text-left"
+        >
+          <span className="flex shrink-0 items-center justify-center gap-2 mono-meta text-teal">
+            <Sparkles size={15} /> 天机
+          </span>
+          <span className="min-w-0 flex-1 text-[13px] leading-relaxed text-ink-muted">
+            今日简报 · 道行周报 · 直接提问 —— 点击打开天机
+          </span>
+          <ArrowRight size={14} className="shrink-0 text-ink-faint" />
+        </button>
       </section>
 
 
@@ -698,18 +590,6 @@ export function OverviewPage() {
         task={editing}
         onSave={taskActions.save}
       />
-
-      {/* 道行周报 */}
-      <Dialog open={weekOpen} onClose={() => setWeekOpen(false)} title="道行周报">
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
-          {weekLoading ? '正在汇总本周…' : week || '本周暂无可汇总的数据。'}
-        </p>
-        {week && (
-          <p className="mt-3 border-t border-line pt-3 text-[11px] text-ink-faint">
-            本周完成 {weekTasksDone} 项 · 专注 {weekFocusMin} 分钟 · 高频：{weekTop.join('、') || '—'}
-          </p>
-        )}
-      </Dialog>
 
       {/* 全部轨迹 Sheet */}
       <Sheet open={allTraceOpen} onClose={() => setAllTraceOpen(false)} title="个人轨迹">

@@ -40,19 +40,17 @@ import {
 import type { Note, Task } from '../types/entities'
 
 const TABS: TabItem[] = [
-  { key: 'today', label: '今日' },
   { key: 'todo', label: '待办' },
   { key: 'calendar', label: '日历' },
   { key: 'notes', label: '记事本' },
 ]
 
 export function ActionPage() {
-  const [tab, setTab] = useState('today')
+  const [tab, setTab] = useState('todo')
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="千里之行，始于足下" title="行 · 践行" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
-      {tab === 'today' && <TodayTab />}
       {tab === 'todo' && <TodoTab />}
       {tab === 'calendar' && <CalendarTab />}
       {tab === 'notes' && <NotesTab />}
@@ -81,24 +79,15 @@ function useTaskEditor() {
   }
 }
 
-/** 今日 —— 今日要做的（含每月固定今日到期）+ 快捷添加 */
-function TodayTab() {
+/** 待办 —— 今日快捷添加 + 未完成清单 + 每月固定提醒（合并原「今日」页签） */
+function TodoTab() {
   const tasks = useTaskStore((s) => s.items)
   const actions = useTaskActions()
   const editor = useTaskEditor()
-  const today = todayISO()
+  const [query, setQuery] = useState('')
+  const [showDone, setShowDone] = useState(false)
   const [quick, setQuick] = useState('')
-
-  const regular = tasks
-    .filter(
-      (t) => !t.done && t.monthlyDay == null && (t.dueDate === today || diffDays(t.dueDate ?? '9999') < 0),
-    )
-    .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
-  // 每月固定且今天到期（本月未完成）
-  const monthlyToday = tasks.filter(
-    (t) => !t.done && t.monthlyDay != null && monthlyDueToday(t) && !monthlyDoneThisMonth(t),
-  )
-  const openToday = [...regular, ...monthlyToday]
+  const today = todayISO()
 
   const quickAdd = async () => {
     if (!quick.trim()) return
@@ -121,55 +110,6 @@ function TodayTab() {
     })
     setQuick('')
   }
-
-  return (
-    <Section
-      title="今日"
-      hint={`${openToday.length} 项待处理`}
-      action={
-        <Button size="sm" variant="tertiary" onClick={editor.openNew}>
-          <Plus size={14} /> 添加
-        </Button>
-      }
-    >
-      <div className="mb-3 flex gap-2">
-        <Input
-          placeholder="快速记一条今天要做的事，回车即加…"
-          value={quick}
-          onChange={(e) => setQuick(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && quickAdd()}
-        />
-        <Button variant="primary" onClick={quickAdd} disabled={!quick.trim()}>
-          <Plus size={14} />
-        </Button>
-      </div>
-      {openToday.length > 0 ? (
-        <div>
-          {openToday.map((t) => (
-            <TaskItem
-              key={t.id}
-              task={t}
-              onToggle={actions.toggle}
-              onEdit={editor.openEdit}
-              onDelete={actions.remove}
-            />
-          ))}
-        </div>
-      ) : (
-        <EmptyState title="今日无待办" desc="可在上方快捷添加，或去「待办」查看全部与每月固定提醒" />
-      )}
-      <TaskEditor open={editor.open} onClose={editor.close} task={editor.editing} onSave={actions.save} />
-    </Section>
-  )
-}
-
-/** 待办 —— 未完成清单 + 每月固定提醒（简单直接，不做复杂分组） */
-function TodoTab() {
-  const tasks = useTaskStore((s) => s.items)
-  const actions = useTaskActions()
-  const editor = useTaskEditor()
-  const [query, setQuery] = useState('')
-  const [showDone, setShowDone] = useState(false)
 
   const q = query.trim().toLowerCase()
   const match = (t: Task) =>
@@ -205,6 +145,18 @@ function TodoTab() {
         </Button>
       }
     >
+      <div className="mb-3 flex gap-2">
+        <Input
+          placeholder="快速记一条待办，回车即加…"
+          value={quick}
+          onChange={(e) => setQuick(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && quickAdd()}
+        />
+        <Button variant="primary" onClick={quickAdd} disabled={!quick.trim()}>
+          <Plus size={14} />
+        </Button>
+      </div>
+
       <div className="relative mb-3">
         <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
         <Input

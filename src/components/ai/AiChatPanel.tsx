@@ -19,6 +19,8 @@ import { useCourseStore, useExamStore, useHomeworkStore } from '../../stores/use
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useWaterStore } from '../../stores/useWaterStore'
+import { useHabitLogStore } from '../../stores/useHabitStore'
+import { useBodyMetricLogStore } from '../../stores/useBodyStore'
 import { useTodayStats } from '../../hooks/useTodayStats'
 import { cultivationSources } from '../../services/cultivation'
 import type { Task, IntelligenceItem, FinanceRecord, Course } from '../../types/entities'
@@ -41,7 +43,8 @@ export const useAIChatStore = create<AIChatState>((set) => ({
   setOpen: (open) => set({ open }),
 }))
 
-/** 收集本机数据上下文：任务 / 课程 / 情报 / 收支 / 偏好（读取快照，不订阅） */
+/** 收集本机数据上下文：任务 / 课程 / 情报 / 收支 / 修 / 学 / 偏好（读取快照，不订阅）。
+ *  天机 = 智能管家：管到各板块的实时状态，不只是回答"有什么任务"。 */
 function buildContext(): string {
   const today = todayISO()
   const tasks: Task[] = useTaskStore.getState().items
@@ -49,22 +52,41 @@ function buildContext(): string {
   const items: IntelligenceItem[] = useIntelligenceStore.getState().items
   const fins: FinanceRecord[] = useFinanceStore.getState().items
   const goals = useSettingsStore.getState().waterGoalMl
+  const projects = useProjectStore.getState().items
+  const homeworks = useHomeworkStore.getState().items
+  const exams = useExamStore.getState().items
+  const habitLogs = useHabitLogStore.getState().items
+  const bodyLogs = useBodyMetricLogStore.getState().items
+  const waterLogs = useWaterStore.getState().items
 
   const open = tasks.filter((t) => !t.done)
   const todayTasks = open.filter((t) => t.dueDate?.startsWith(today))
+  const overdue = open.filter((t) => t.dueDate && t.dueDate < today)
   const month = today.slice(0, 7)
   const income = fins.filter((f) => f.kind === 'income' && f.date.startsWith(month)).reduce((s, f) => s + f.amount, 0)
   const expense = fins.filter((f) => f.kind === 'expense' && f.date.startsWith(month)).reduce((s, f) => s + f.amount, 0)
+  const waterToday = waterLogs.filter((w) => w.date === today).reduce((s, w) => s + w.amountMl, 0)
+  const doneTodayTasks = tasks.filter((t) => t.done && t.completedAt?.startsWith(today)).length
 
   const lines: string[] = []
   lines.push(`今天日期：${today}`)
   if (todayTasks.length > 0) lines.push(`今日任务：${todayTasks.slice(0, 8).map((t: Task) => t.title).join('、')}`)
   else if (open.length > 0) lines.push(`待办共 ${open.length} 项（今日无明确到期），最近：${open.slice(0, 5).map((t: Task) => t.title).join('、')}`)
   else lines.push('暂无待办')
+  if (overdue.length > 0) lines.push(`已逾期 ${overdue.length} 项：${overdue.slice(0, 4).map((t: Task) => t.title).join('、')}`)
+  if (doneTodayTasks > 0) lines.push(`今日已完成 ${doneTodayTasks} 项待办`)
   lines.push(`课程 ${courses.length} 门：${courses.slice(0, 8).map((c: Course) => c.name).join('、') || '未添加'}`)
-  if (items.length > 0) lines.push(`近期情报 ${items.length} 条，最新：${items.slice(0, 5).map((i: IntelligenceItem) => i.title).join('、')}`)
-  lines.push(`本月收入 ¥${income.toFixed(2)} · 支出 ¥${expense.toFixed(2)}（项目内可追问明细）`)
-  if (goals) lines.push(`今日饮水目标 ${goals}ml`)
+  if (homeworks.filter((h) => !h.done).length > 0) {
+    lines.push(`未交作业 ${homeworks.filter((h) => !h.done).length} 项`)
+  }
+  if (exams.length > 0) {
+    const nextExam = [...exams].sort((a, b) => a.date.localeCompare(b.date))[0]
+    lines.push(`最近考试：${nextExam.title}（${nextExam.date}）`)
+  }
+  if (projects.length > 0) lines.push(`项目 ${projects.length} 个，进行中：${projects.filter((p) => p.status === 'developing').map((p) => p.name).join('、') || '—'}`)
+  if (items.length > 0) lines.push(`近期情报 ${items.length} 条（未读 ${items.filter((it) => !it.read).length}），最新：${items.slice(0, 5).map((i: IntelligenceItem) => i.title).join('、')}`)
+  lines.push(`本月收入 ¥${income.toFixed(2)} · 支出 ¥${expense.toFixed(2)}（可追问明细）`)
+  lines.push(`今日饮水 ${waterToday}/${goals}ml · 斩三尸打卡 ${habitLogs.filter((l) => l.date === today).length} 次 · 身体记录 ${bodyLogs.filter((l) => l.date === today).length} 条`)
   return lines.join('\n')
 }
 
@@ -163,19 +185,90 @@ export async function runTianjiCapability(
   }
 }
 
-function WelcomeHints({ onPick }: { onPick: (q: string) => void }) {
-  const hints = ['我今天还有哪些事？', '这月花了多少钱？', '最近在关注什么？', '帮我规划今天下午']
+/** 空会话看板：实时状态（各板块脉搏）+ 能力胶囊 + 快捷问句。
+ *  管家先亮出"我已经看到什么"，再给一键动作 —— 不堆 2×2 大卡占屏。 */
+function WelcomeBoard({
+  stats,
+  onPick,
+  onRunCap,
+}: {
+  stats: ReturnType<typeof useTodayStats>
+  onPick: (q: string) => void
+  onRunCap: (key: TianjiCapabilityKey) => void
+}) {
+  const today = todayISO()
+  const tasks = useTaskStore((s) => s.items)
+  const items = useIntelligenceStore((s) => s.items)
+  const fins = useFinanceStore((s) => s.items)
+  const courses = useCourseStore((s) => s.items)
+
+  const openCount = tasks.filter((t) => !t.done).length
+  const dueSoon = tasks.filter((t) => !t.done && t.dueDate && t.dueDate <= today).length
+  const unreadIntel = items.filter((it) => !it.read).length
+  const month = today.slice(0, 7)
+  const expense = fins
+    .filter((f) => f.kind === 'expense' && f.date.startsWith(month))
+    .reduce((s, f) => s + f.amount, 0)
+
+  const pulse: { label: string; value: string; tone: 'cinnabar' | 'teal' | 'bronze' | 'plain' }[] = [
+    { label: '待办', value: openCount > 0 ? `${openCount} 项` : '清空', tone: openCount > 0 ? 'cinnabar' : 'teal' },
+    { label: '近日到期', value: dueSoon > 0 ? `${dueSoon} 项` : '无', tone: dueSoon > 0 ? 'cinnabar' : 'plain' },
+    { label: '课程', value: courses.length > 0 ? `${courses.length} 门` : '未设', tone: 'teal' },
+    { label: '情报未读', value: unreadIntel > 0 ? `${unreadIntel} 条` : '无', tone: unreadIntel > 0 ? 'bronze' : 'plain' },
+    { label: '本月支出', value: expense > 0 ? `¥${Math.round(expense).toLocaleString()}` : '—', tone: 'bronze' },
+    { label: '今日专注', value: stats.focusMinutes > 0 ? `${stats.focusMinutes}m` : '—', tone: 'teal' },
+  ]
+
   return (
-    <div className="flex flex-wrap gap-1.5 px-4 pb-3">
-      {hints.map((h) => (
-        <button
-          key={h}
-          onClick={() => onPick(h)}
-          className="rounded-tile border border-line bg-raised px-2.5 py-1.5 text-[12px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
-        >
-          {h}
-        </button>
-      ))}
+    <div className="border-t border-line px-4 pb-3 pt-3">
+      {/* 实时状态：一眼看到全局（管家已接管各板块） */}
+      <div className="mb-2 text-[11px] tracking-[0.18em] text-ink-faint">实时状态 · 各板块脉搏</div>
+      <div className="mb-3 grid grid-cols-3 gap-1.5">
+        {pulse.map((p) => (
+          <div key={p.label} className="rounded-tile border border-line bg-paper/50 px-2.5 py-1.5">
+            <div className="text-[10px] text-ink-faint">{p.label}</div>
+            <div
+              className={cn(
+                'mt-0.5 truncate text-[13px] font-medium',
+                p.tone === 'cinnabar' ? 'text-cinnabar' : p.tone === 'teal' ? 'text-teal' : p.tone === 'bronze' ? 'text-bronze' : 'text-ink',
+              )}
+            >
+              {p.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 能力胶囊：一行横滚，不再 2×2 占屏 */}
+      <div className="mb-2 text-[11px] tracking-[0.18em] text-ink-faint">一键能力</div>
+      <div className="no-scrollbar -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        {TIANJI_CAPABILITIES.map((c) => {
+          const Icon = c.icon
+          return (
+            <button
+              key={c.key}
+              onClick={() => onRunCap(c.key)}
+              className="flex shrink-0 items-center gap-1.5 rounded-tile border border-line bg-paper/70 px-3 py-1.5 text-[12px] text-ink-muted transition-colors hover:border-teal/40 hover:text-teal"
+            >
+              <Icon size={13} className="text-ink-faint" />
+              {c.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* 快捷问句 */}
+      <div className="flex flex-wrap gap-1.5">
+        {['我今天还有哪些事？', '这月花了多少钱？', '最近在关注什么？', '帮我规划今天下午'].map((h) => (
+          <button
+            key={h}
+            onClick={() => onPick(h)}
+            className="rounded-tile border border-line bg-raised px-2.5 py-1.5 text-[12px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+          >
+            {h}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -314,32 +407,19 @@ export function AiChatPanel() {
           )}
         </div>
 
-        {/* 空会话：快捷能力 + 欢迎语 */}
+        {/* 空会话：实时状态看板 + 能力 + 问句（管家形态） */}
         {messages.length === 0 && (
-          <div className="border-t border-line px-4 pb-3 pt-3">
-            <div className="mb-2 text-[11px] tracking-[0.18em] text-ink-faint">快捷能力 · 一键生成</div>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-              {TIANJI_CAPABILITIES.map((c) => {
-                const Icon = c.icon
-                return (
-                  <button
-                    key={c.key}
-                    onClick={() => void runCap(c.key)}
-                    disabled={busy}
-                    className="group flex flex-col items-start gap-1 rounded-tile border border-line bg-paper/50 px-3 py-2.5 text-left transition-colors hover:border-teal/40 hover:bg-teal/5 disabled:opacity-50"
-                  >
-                    <Icon size={14} className="text-ink-muted group-hover:text-teal" />
-                    <span className="text-[12px] font-medium text-ink">{c.label}</span>
-                    <span className="text-[10px] leading-tight text-ink-faint">{c.desc}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          <WelcomeBoard
+            stats={stats}
+            onPick={(q) => {
+              setInput(q)
+              void send(q)
+            }}
+            onRunCap={(key) => void runCap(key)}
+          />
         )}
 
-        {/* 快捷提问 + 输入 */}
-        {messages.length === 0 && <WelcomeHints onPick={(q) => { setInput(q); void send(q) }} />}
+        {/* 输入 */}
         <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
           <CornerDownLeft size={13} className="shrink-0 text-ink-faint" />
           <input

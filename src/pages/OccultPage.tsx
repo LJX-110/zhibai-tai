@@ -20,7 +20,7 @@ import { playSound } from '../services/sound'
 import type { DivinationRecord } from '../types/entities'
 import { createId, todayISO } from '../utils/id'
 import { cn } from '../utils/cn'
-import { Badge, Button, Dialog, EmptyState, Input, Section, Tabs, useToast, type TabItem } from '../components/ui'
+import { Badge, Button, Dialog, EmptyState, Input, PageHeader, Section, Tabs, useToast, type TabItem } from '../components/ui'
 
 /**
  * 四个语义分组：抽签（每日惯例）/ 梅花 / 大衍 / 历史。
@@ -224,12 +224,8 @@ export function OccultPage() {
 
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
-      {/* 页头：三枚计数徽章原先挤在标题行右侧，窄屏上把「奇 · 玄机」压到两行；
-          计数属于「回看」场景，随存档列表一起移入「历史」页 */}
-      <div className="pb-4">
-        <h1 className="scribal-title text-3xl text-ink-bright">奇 · 玄机</h1>
-        <p className="scribal mt-1.5 text-base text-ink-muted">阴阳不测之谓神</p>
-      </div>
+      {/* 页头：与其他板块统一 */}
+      <PageHeader poem="阴阳不测之谓神" title="奇 · 玄机" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
 
       {tab === 'sign' && (

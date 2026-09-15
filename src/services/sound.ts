@@ -18,6 +18,10 @@ export type SoundEvent =
   | 'success'
   | 'error'
   | 'notification'
+  | 'task-done'
+  | 'intel-new'
+  | 'purchase'
+  | 'levelup'
 
 /** 当前音量（0-1），从设置实时读取 */
 function currentVolume(): number {
@@ -122,6 +126,28 @@ const PATTERNS: Record<SoundEvent, (c: AudioContext, v: number) => void> = {
     tone(c, 520, { dur: 0.08, vol: 0.2 * v, type: 'sine' })
     tone(c, 700, { dur: 0.12, vol: 0.16 * v, type: 'sine', delay: 0.09 })
   },
+  'task-done': (c, v) => {
+    // 待办完成：上行三音（短促、明晰，与传统"完成感"一致）
+    tone(c, 587, { dur: 0.07, vol: 0.22 * v, type: 'triangle' })
+    tone(c, 784, { dur: 0.09, vol: 0.2 * v, type: 'triangle', delay: 0.06 })
+    tone(c, 988, { dur: 0.16, vol: 0.16 * v, type: 'triangle', delay: 0.12, decay: 0.2 })
+  },
+  'intel-new': (c, v) => {
+    // 新情报：纸页轻翻 + 一声提示（纸面气质，不惊扰）
+    paperNoise(c, { dur: 0.08, vol: 0.16 * v })
+    tone(c, 640, { dur: 0.08, vol: 0.16 * v, type: 'sine', delay: 0.04 })
+  },
+  purchase: (c, v) => {
+    // 购买/取件：两声"收放"（铜钱感，中频）
+    tone(c, 720, { dur: 0.06, vol: 0.2 * v, type: 'sine' })
+    tone(c, 540, { dur: 0.16, vol: 0.18 * v, type: 'sine', delay: 0.08, decay: 0.22 })
+  },
+  levelup: (c, v) => {
+    // 成长升级：柔和上扬与一声铃（克制不夸张）
+    tone(c, 520, { dur: 0.1, vol: 0.18 * v, type: 'sine' })
+    tone(c, 660, { dur: 0.12, vol: 0.16 * v, type: 'sine', delay: 0.08 })
+    tone(c, 880, { dur: 0.24, vol: 0.14 * v, type: 'sine', delay: 0.16, decay: 0.3 })
+  },
 }
 
 /** 播放一次音效（尊重开关与音量） */
@@ -172,6 +198,10 @@ export const sfx = {
   success: () => playSound('success'),
   error: () => playSound('error'),
   notification: () => playSound('notification'),
+  taskDone: () => playSound('task-done'),
+  intelNew: () => playSound('intel-new'),
+  purchase: () => playSound('purchase'),
+  levelup: () => playSound('levelup'),
 }
 
 /* ---------------- 环境音（极轻，默认关） ---------------- */

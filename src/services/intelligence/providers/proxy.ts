@@ -108,3 +108,53 @@ export async function proxyFetch(
   }
   throw new Error(`自建代理不可达：${detail}`)
 }
+
+/**
+ * 通用代理请求（Gist 同步等需要自定义方法 / 头 / body 的场景复用）。
+ * 与 proxyFetch 同一候选链语义：目标自带 CORS 直连优先，其余走自建代理。
+ * 返回 { ok, status, text } —— 调用方自行决定 404 等状态语义。
+ */
+export interface ProxyRequestInit {
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+  signal?: AbortSignal
+}
+
+export async function proxyRequest(
+  url: string,
+  selfProxyUrl?: string,
+  init: ProxyRequestInit = {},
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const configured = proxyCandidates(selfProxyUrl)
+  const chain = isDirectFriendly(url)
+    ? configured.filter((c) => !c.self).concat(configured.filter((c) => c.self))
+    : configured
+
+  const problems: string[] = []
+  for (const candidate of chain) {
+    try {
+      const res = await fetch(candidate.build(url), {
+        method: init.method ?? 'GET',
+        headers: init.headers,
+        body: init.body,
+        signal: timeoutSignal(candidate.timeoutMs, init.signal),
+      })
+      return { ok: res.ok, status: res.status, text: await res.text() }
+    } catch (e) {
+      const reason =
+        e instanceof Error
+          ? e.name === 'TimeoutError' || e.name === 'AbortError'
+            ? '超时'
+            : e.message
+          : '未知错误'
+      problems.push(`${candidate.label} ${reason}`)
+    }
+  }
+
+  const detail = problems.join('；')
+  if (!selfProxyUrl?.trim()) {
+    throw new Error(`${NEEDS_PROXY_MESSAGE}（${detail}）`)
+  }
+  throw new Error(`自建代理不可达：${detail}`)
+}

@@ -8,6 +8,7 @@
 import type { Task } from '../types/entities'
 import { useTaskStore } from '../stores/useTaskStore'
 import { recordActivity } from '../services/activity'
+import { playSound } from '../services/sound'
 import { createId } from '../utils/id'
 import { useToast } from '../components/ui/Toast'
 
@@ -61,6 +62,7 @@ export function useTaskActions() {
   const toggle = async (task: Task) => {
     const { done, createdNext } = await toggleTaskCore(task)
     if (done) {
+      playSound('task-done')
       // 重复任务：完成后自动生成下一周期
       toast(createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 道行有进', 'success')
     }

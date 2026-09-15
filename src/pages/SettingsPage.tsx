@@ -51,9 +51,11 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string; icon: type
 ]
 
 /** AI Provider 预设：一键填 baseUrl+model（OpenAI 兼容协议），
- *  拿到 Agnes API 信息后点预设 → 填 Key → 测试连接即可用 */
+ *  拿到 Agnes API 信息后点预设 → 填 Key → 测试连接即可用。
+ *  Agnes 模型名以服务端实际返回为准（实测当前为 agnes-2.5-pro-alpha，
+ *  旧名 agnes-2.5-flash 已下线；填错模型名时测试连接会直接报错）。 */
 const AI_PRESETS: { name: string; baseUrl: string; model: string }[] = [
-  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash' },
+  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-pro-alpha' },
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
   { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -873,6 +875,10 @@ export function SettingsPage() {
           <p className="flex items-center gap-1.5 pt-1 text-[11px] text-cinnabar">
             <span className="h-1.5 w-1.5 rounded-full bg-cinnabar" />
             Token 经 AES-GCM 加密后仅存本机；创建 Token 时勾选 <code className="rounded-control bg-nested px-1">gist</code> 权限即可。
+          </p>
+          <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-bronze">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-bronze" />
+            国内网络直连 api.github.com 常超时。若同步一直失败，请在「智能 · 情报源 · 自建代理」填入转发地址——同步会自动走代理（Gist 已支持 PATCH/POST 透传）。
           </p>
           </>)}
           <div className="row">

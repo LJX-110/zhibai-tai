@@ -18,7 +18,7 @@ import {
 } from '../app/navigation'
 import { todayISO } from '../utils/id'
 import { playSound } from '../services/sound'
-import { Sheet, ThemeToggle, useToast } from '../components/ui'
+import { Sheet, useToast } from '../components/ui'
 import { useAIChatStore } from '../components/ai/AiChatPanel'
 import { runSync } from '../sync/SyncService'
 import { isConfigured, isSyncConfigured } from '../sync/auto'
@@ -50,7 +50,14 @@ export function MobileHeader() {
     if (syncing) return
     if (!isSyncConfigured()) {
       setSection('system')
-      toast('请先在「同步」中配置仓库与密码', 'info')
+      const s = useSettingsStore.getState()
+      const mode = s.syncMode ?? 'repo'
+      toast(
+        mode === 'gist'
+          ? '请先配置 Gist Token 与同步口令'
+          : '请先配置同步目标（仓库 + Token + 口令）',
+        'info',
+      )
       return
     }
     setSyncing(true)
@@ -88,7 +95,6 @@ export function MobileHeader() {
             )}
           />
         </button>
-        <ThemeToggle className="h-9 w-9 border border-white/15 text-on-sidebar-muted hover:bg-white/10 hover:text-on-sidebar" />
         <span className="tabular hidden text-sm min-[360px]:inline">{day} 日</span>
         <button
           className="touch-target flex items-center justify-center rounded-tile hover:bg-white/10 hover:text-on-sidebar"

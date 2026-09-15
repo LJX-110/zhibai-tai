@@ -304,8 +304,11 @@ async function runSyncOnce(): Promise<SyncRunResult> {
       throw new Error('请先配置 Gist Token（仅需 gist 权限）')
     }
     settings.set({ syncStatus: 'syncing', syncError: undefined })
-    provider = new GistSnapshotProvider(gistToken, settings.gistId ?? '', (id) =>
-      useSettingsStore.getState().set({ gistId: id }),
+    provider = new GistSnapshotProvider(
+      gistToken,
+      settings.gistId ?? '',
+      (id) => useSettingsStore.getState().set({ gistId: id }),
+      settings.corsProxyUrl,
     )
   } else {
     const repo = (settings.githubRepo ?? '').trim()

@@ -419,9 +419,7 @@ export function CollectionPage() {
                       {it.title}
                     </span>
                     {it.category && (
-                      /* 加「分类」前缀：默认分类名与类型名高度重合（小说/动漫/游戏…），
-                         不加前缀时无法分辨「类型 小说」与「分类 小说」 */
-                      <span className="text-[11px] text-ink-muted">分类 · {it.category}</span>
+                      <span className="text-[11px] text-ink-muted">{it.category}</span>
                     )}
                   </div>
                   {/* 底部：状态/标签/评级 */}
@@ -504,7 +502,7 @@ export function CollectionPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="cinnabar">类型 · {TYPE_LABEL[detail.type]}</Badge>
-              {detail.category && <Badge tone="teal">分类 · {detail.category}</Badge>}
+              {detail.category && <Badge tone="teal">{detail.category}</Badge>}
               {detail.status && <Badge>{detail.status}</Badge>}
               {detail.rating != null && (
                 <span className="tabular text-sm text-bronze">{'★'.repeat(detail.rating)}</span>

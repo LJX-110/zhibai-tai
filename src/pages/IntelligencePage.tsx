@@ -4,7 +4,7 @@
  * 每条：标题 / 摘要 / 来源 / 分类 / 时间 / 标签；操作仅保留 收藏·稍后·更多，其余进 Inspector
  */
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, SlidersHorizontal, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useSourceStore } from '../stores/useSourceStore'
 import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
@@ -16,6 +16,7 @@ import {
 } from '../services/intelligence/providers/registry'
 import { saveFetchedItems } from '../services/intelligence/retention'
 import { aiService } from '../services/ai/ai-service'
+import { playSound } from '../services/sound'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { IntelTidy } from '../components/intelligence/IntelTidy'
 import type { IntelligenceItem, SourceType } from '../types/entities'
@@ -272,14 +273,9 @@ export function IntelligencePage() {
     added: number
     failures: SourceFetchFailure[]
   } | null>(null)
-  const [aiQuery, setAiQuery] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiAnswer, setAiAnswer] = useState<{ answer: string; sources: string[] } | null>(null)
   /** 分类管理弹层：分类在使用的页签处就地增删（不再放设置页） */
   const [catMgrOpen, setCatMgrOpen] = useState(false)
   const [catDraft, setCatDraft] = useState('')
-  /** AI 问答默认收起：信息密度让位给信息流本身，入口保留 */
-  const [aiOpen, setAiOpen] = useState(false)
 
   const addCategoryName = (name: string) => {
     const t = name.trim()
@@ -291,22 +287,6 @@ export function IntelligencePage() {
     void removeCategory('intel', name)
     // 被删的正是当前页签时回到「全部」，避免停留在一个已消失的筛选上
     if (tab === name) setTab('全部')
-  }
-
-  /** AI 问情报：基于近期情报用中文回答用户问题 */
-  const askAI = async () => {
-    const q = aiQuery.trim()
-    if (!q || aiLoading) return
-    setAiLoading(true)
-    try {
-      const res = await aiService.queryIntelligence(q, items)
-      setAiAnswer(res)
-      toast('AI 已回答', 'success')
-    } catch {
-      toast('AI 问答失败', 'danger')
-    } finally {
-      setAiLoading(false)
-    }
   }
 
   /** 聚合页签（自定义分类可增删） */
@@ -338,6 +318,7 @@ export function IntelligencePage() {
       // 失败原因必须留在界面上：以前失败被丢在 Promise.allSettled 里，
       // 用户只看得到「拉取 0 条」，无从判断是没配代理还是被限流
       setFetchReport({ fetched: fresh.length, added: newItems.length, failures })
+      if (newItems.length > 0) playSound('intel-new')
       if (failures.length === 0) {
         toast(
           removed > 0
@@ -442,10 +423,10 @@ export function IntelligencePage() {
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       {/* 页头 */}
-      <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 pb-4 md:pb-5">
         <div>
-          <h1 className="scribal-title text-3xl text-ink-bright">情报流</h1>
-          <p className="scribal mt-1.5 text-base text-ink-muted">世事洞明皆学问</p>
+          <h1 className="scribal-title text-2xl text-ink-bright md:text-3xl">情 · 汇流</h1>
+          <p className="scribal mt-1 text-sm text-ink-muted md:mt-1.5 md:text-base">世事洞明皆学问</p>
         </div>
         <div className="flex items-center gap-2">
           <IntelTidy />
@@ -624,60 +605,6 @@ export function IntelligencePage() {
           </div>
         </div>
       )}
-
-      {/* AI 问情报：默认收起（可发现性靠入口行，信息密度让位给信息流） */}
-      <div className="mb-4">
-        <button
-          onClick={() => setAiOpen((v) => !v)}
-          className={cn(
-            'flex w-full items-center gap-2 rounded-tile border px-3 py-2 text-sm transition-colors',
-            aiOpen ? 'border-teal/30 bg-teal/5 text-ink' : 'border-line bg-raised text-ink-muted hover:text-ink',
-          )}
-          aria-expanded={aiOpen}
-        >
-          <Sparkles size={14} className="text-bronze" />
-          AI 问情报 · 用中文问近期动态
-          <span className="ml-auto flex items-center gap-2 text-[11px] text-ink-faint">
-            {items.filter((it) => !it.read).length > 0 && (
-              <span className="rounded-full bg-cinnabar/10 px-1.5 py-0.5 tabular text-cinnabar">
-                {items.filter((it) => !it.read).length} 条未读
-              </span>
-            )}
-            {aiOpen ? '收起' : '展开'}
-          </span>
-        </button>
-        {aiOpen && (
-          <div className="mt-2">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Sparkles size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-bronze" />
-                <Input
-                  placeholder="用 AI 问情报，例如：最近有什么 AI 模型新进展？"
-                  value={aiQuery}
-                  onChange={(e) => setAiQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && askAI()}
-                  className="!pl-8"
-                />
-              </div>
-              <Button variant="ritual" size="md" onClick={askAI} disabled={aiLoading || !aiQuery.trim()}>
-                {aiLoading ? '思考中…' : '问 AI'}
-              </Button>
-            </div>
-            {aiAnswer && (
-              <div className="mt-2 rounded-tile border border-teal/25 bg-teal/5 p-3">
-                <pre className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-                  {aiAnswer.answer}
-                </pre>
-                {aiAnswer.sources.length > 0 && (
-                  <div className="mt-2 border-t border-line/60 pt-2 text-[11px] text-ink-faint">
-                    来源：{aiAnswer.sources.join(' · ')}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* 信息流 */}
       {list.length > 0 ? (

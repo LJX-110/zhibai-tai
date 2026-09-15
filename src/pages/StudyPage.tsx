@@ -23,7 +23,6 @@ import { useTaskStore } from '../stores/useTaskStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
-import { StudyAssistant } from '../components/study/StudyAssistant'
 import {
   Badge,
   Button,
@@ -97,7 +96,7 @@ export function StudyPage() {
         }}
         className="mb-4"
       />
-      <StudyAssistant />
+      
       {tab === 'timetable' &&
         (managingCourses ? (
           <CourseTab quickAdd={quickAdd} onBack={() => setManagingCourses(false)} />

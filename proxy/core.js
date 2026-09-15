@@ -44,7 +44,7 @@ function corsHeaders(origin, env) {
   // 配置了 → 只回显白名单内的来源，其余不发 ACAO，让浏览器自行拦截
   const value = allowed.length === 0 ? '*' : allowed.includes(origin) ? origin : null
   const headers = {
-    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PATCH, PUT, DELETE',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   }
@@ -96,8 +96,9 @@ export async function handleProxy(request, env = {}) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: cors })
   }
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return json({ error: '仅支持 GET/HEAD' }, 405, cors)
+  const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE'])
+  if (!ALLOWED_METHODS.has(request.method)) {
+    return json({ error: `不支持的方法：${request.method}` }, 405, cors)
   }
 
   const reqUrl = new URL(request.url)
@@ -137,21 +138,37 @@ export async function handleProxy(request, env = {}) {
     return json({ error: `目标主机不在白名单: ${target.hostname}` }, 403, cors)
   }
 
-  // 只带抓取必需的三个头。浏览器会自动附带 Cookie / Authorization，
-  // 原样转发等于把用户凭据交给第三方站点
+  // 只带抓取必需的几个头。浏览器会自动附带 Cookie / Authorization，
+  // 原样转发等于把用户凭据交给任意第三方站点 —— 仅对白名单内的授权主机转发。
+  // 当前用途：Gist 同步需要带 Authorization 打到 api.github.com（ALLOWED_HOSTS 里
+  // 若能命中且主机以 github 相关域结尾时放行），其余一律剥掉。
   const headers = new Headers()
-  for (const name of ['Accept', 'Range']) {
+  for (const name of ['Accept', 'Range', 'Content-Type']) {
     const value = request.headers.get(name)
     if (value) headers.set(name, value)
   }
   headers.set('User-Agent', request.headers.get('User-Agent') || DEFAULT_USER_AGENT)
   headers.set('Referer', REFERER_OVERRIDES[target.hostname] ?? target.origin)
 
+  const auth = request.headers.get('Authorization')
+  const authHostAllowed =
+    allowHosts.length === 0
+      ? target.hostname === 'api.github.com' || target.hostname === 'gist.github.com'
+      : allowHosts.includes(target.hostname)
+  if (auth && authHostAllowed) headers.set('Authorization', auth)
+
+  // body 透传（GET/HEAD 天然无 body；PATCH/POST 同步场景需要）
+  let body
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    body = await request.text().catch(() => undefined)
+  }
+
   let upstream
   try {
     upstream = await fetch(target, {
       method: request.method,
       headers,
+      body: body ?? undefined,
       redirect: 'follow',
       ...UPSTREAM_CACHE_INIT,
     })
