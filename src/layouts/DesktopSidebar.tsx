@@ -114,7 +114,7 @@ export function DesktopSidebar() {
         ))}
       </nav>
 
-      {/* 底部：帮 AI 问问 + 系统 + 同步状态 */}
+      {/* 底部：帮 天机 + 系统 + 同步状态 */}
       <div className="border-t border-paper/10 px-3 py-3 space-y-1.5">
         <button
           type="button"
@@ -125,8 +125,8 @@ export function DesktopSidebar() {
             <Bot size={13} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-on-sidebar">AI 问问</span>
-            <span className="block text-[9px] text-on-sidebar-muted">问任务 / 课程 / 情报 / 收支</span>
+            <span className="block text-sm font-medium text-on-sidebar">天机</span>
+            <span className="block text-[9px] text-on-sidebar-muted">问 / 简报 / 计划 / 摘要 · 总掌数据</span>
           </span>
         </button>
         <NavButton

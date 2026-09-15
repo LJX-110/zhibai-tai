@@ -4,7 +4,6 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Bell, CheckCircle2, Plus, RefreshCw, Sparkles } from 'lucide-react'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts'
 import { useAppStore } from '../stores/useAppStore'
 import { useTaskStore } from '../stores/useTaskStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
@@ -293,26 +292,22 @@ function WeekReview() {
           </div>
         ))}
       </div>
-      <div className="mt-3 h-36 rounded-tile border border-line bg-raised p-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data.trend} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 11, fill: 'var(--color-ink-muted)' }}
-              axisLine={{ stroke: 'var(--color-line)' }}
-              tickLine={false}
-            />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--color-paper)',
-                border: '1px solid var(--color-line-strong)',
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-            />
-            <Bar dataKey="done" name="完成待办" fill="var(--color-gold-btn)" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="mt-3 rounded-tile border border-line bg-raised p-3">
+        <div className="mb-1.5 text-[11px] text-ink-faint">近 4 周完成待办</div>
+        <div className="space-y-1.5">
+          {data.trend.map((t) => (
+            <div key={t.label} className="flex items-center gap-2">
+              <span className="w-12 shrink-0 text-[11px] text-ink-muted">{t.label}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-nested">
+                <div
+                  className="h-full rounded-full bg-gold-btn"
+                  style={{ width: `${Math.min(100, (t.done / Math.max(1, ...data.trend.map((x) => x.done))) * 100)}%` }}
+                />
+              </div>
+              <span className="tabular w-8 shrink-0 text-right text-[11px] text-ink-soft">{t.done}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </Section>
   )

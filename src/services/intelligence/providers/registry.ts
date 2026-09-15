@@ -38,26 +38,6 @@ export const PROVIDERS: Record<IntelligenceProviderId, IntelligenceProvider> = {
   ai: aiProvider,
 }
 
-/** 推荐来源目录（本地 Provider Catalog，点击即预填配置）—— 精选 8 个 */
-export const PROVIDER_CATALOG: {
-  provider: IntelligenceProviderId
-  name: string
-  desc: string
-  category: string
-  config?: string
-}[] = [
-  { provider: 'github', name: 'GitHub 热榜', desc: '按搜索词拉取热门仓库', category: 'GitHub' },
-  { provider: 'bilibili', name: 'B 站搜索追更', desc: '按关键词拉最新投稿（需自建代理）', category: '游戏' },
-  { provider: 'rss', name: 'RSS 源', desc: '任意 RSS/Atom 订阅', category: '科技' },
-  { provider: 'jikan', name: 'Jikan 新番', desc: 'MyAnimeList 当季新番/评分榜（无需 Key）', category: '动漫' },
-  { provider: 'jikan', name: 'Jikan 漫画', desc: 'MyAnimeList 漫画榜', category: '动漫' },
-  { provider: 'steam', name: 'Steam 新闻', desc: '按 App ID 获取游戏新闻/更新/公告', category: '游戏' },
-  { provider: 'web', name: '网页抓取', desc: 'CSS 选择器抽取标题/摘要/链接', category: '自定义' },
-  { provider: 'json', name: 'JSON Feed', desc: 'RSS JSON 或自定义 JSON 数组', category: '自定义' },
-  { provider: 'ai', name: 'AI 情报', desc: '用已配置的远程 AI 生成近期看点（需远程 API Key）', category: 'AI' },
-  { provider: 'mock', name: '示例情报', desc: '离线示例数据', category: '科技' },
-]
-
 /** 拉取单个源（记录 lastFetchedAt / lastError；失败向上抛出，由调用方决定提示方式） */
 export async function fetchFromSource(
   source: IntelligenceSource,

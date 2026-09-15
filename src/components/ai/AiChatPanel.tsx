@@ -1,23 +1,26 @@
 /**
- * AI 对话 —— 全局入口（手机全屏 / 桌面居中卡片）
+ * 天机 —— AI 总调度（全局入口：手机全屏 / 桌面居中卡片）
  *
- * 定位：把散落各处的 AI 按钮（学习计划/今日简报/AI整理/任务拆解）收编为一个
- * 「直接提问」的统一入口。提问时自动携带本机关键数据上下文（今日任务 / 课程 /
- * 待办到期 / 近期情报 / 本月收支），让 AI 能回答「我今天还有什么事」「这月花了
- * 多少」「最近关注什么」这类需要看数据的问题。
+ * 定位：知白台唯一的 AI 入口。把散落各处的 AI 按钮（今日简报 / 学习计划 /
+ * 项目摘要 / 总结情报 / 解卦）收编为「快捷能力」，既可直接自由对话，也可一键
+ * 点能力卡片，由天机自动携带本机数据（任务 / 课程 / 情报 / 收支）生成结果。
  *
  * 远程未就绪时回退本地规则概述（不假装智能）；远程就绪则完整问答。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, CornerDownLeft, Send, Sparkles, X } from 'lucide-react'
+import { Bot, CalendarDays, CornerDownLeft, FileText, GraduationCap, NotebookPen, Send, Sparkles, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { aiService } from '../../services/ai/ai-service'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useFinanceStore } from '../../stores/useFinanceStore'
-import { useCourseStore } from '../../stores/useStudyStore'
+import { useCourseStore, useExamStore, useHomeworkStore } from '../../stores/useStudyStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
+import { useProjectStore } from '../../stores/useProjectStore'
+import { useWaterStore } from '../../stores/useWaterStore'
+import { useTodayStats } from '../../hooks/useTodayStats'
+import { cultivationSources } from '../../services/cultivation'
 import type { Task, IntelligenceItem, FinanceRecord, Course } from '../../types/entities'
 import { todayISO } from '../../utils/id'
 import { cn } from '../../utils/cn'
@@ -77,7 +80,87 @@ async function ask(prompt: string): Promise<string> {
       // 远程失败（超时/限流）降级为本地概述
     }
   }
-  return `（本地规则 · 未接入远程 AI）基于你的数据：\n${ctx}\n\n你问的是：「${prompt}」\n\n在「系统 · 智能情报」配置远程 AI（Base URL / 模型 / Key）后，可针对你的数据得到完整的分析与建议。`
+  return `（本地规则 · 未接入远程 AI）基于你的数据：\n${ctx}\n\n你问的是：「${prompt}」\n\n在「系统 · AI Core」配置远程 AI（Base URL / 模型 / Key）后，可针对你的数据得到完整的分析与建议。`
+}
+
+/** 快捷能力：一键运行结构化 AI 任务（今日简报 / 学习计划 / 项目摘要 / 总结情报） */
+export type TianjiCapabilityKey = 'brief' | 'plan' | 'project' | 'intel'
+
+export const TIANJI_CAPABILITIES: {
+  key: TianjiCapabilityKey
+  label: string
+  desc: string
+  icon: typeof Bot
+}[] = [
+  { key: 'brief', label: '今日简报', desc: '汇总今日完成/专注/饮水/道行', icon: CalendarDays },
+  { key: 'plan', label: '学习计划', desc: '按课程/作业/考试生成建议', icon: GraduationCap },
+  { key: 'project', label: '项目摘要', desc: '项目进度与里程碑摘要', icon: NotebookPen },
+  { key: 'intel', label: '总结情报', desc: '最新情报的摘要/标签/重要度', icon: FileText },
+]
+
+/** 运行快捷能力，返回 (标题, 正文)；失败时抛错由调用方降级处理 */
+export async function runTianjiCapability(
+  key: TianjiCapabilityKey,
+  stats: ReturnType<typeof useTodayStats>,
+): Promise<{ title: string; body: string }> {
+  const water = useWaterStore.getState().items
+  const waterGoal = useSettingsStore.getState().waterGoalMl
+  const courses = useCourseStore.getState().items
+  const homeworks = useHomeworkStore.getState().items
+  const exams = useExamStore.getState().items
+  const projects = useProjectStore.getState().items
+  const intel = useIntelligenceStore.getState().items
+
+  if (key === 'brief') {
+    const date = todayISO()
+    const waterMl = water.filter((w) => w.date === date).reduce((s, w) => s + w.amountMl, 0)
+    const body = await aiService.dailyBrief({
+      date,
+      tasksDone: stats.tasksDone,
+      focusMin: stats.focusMinutes,
+      waterMl,
+      goal: waterGoal,
+      sources: cultivationSources({
+        tasksDoneToday: stats.tasksDone,
+        focusMinutesToday: stats.focusMinutes,
+        waterRatio: stats.waterRatio,
+        habitLogsToday: stats.habitLogs,
+        bodyLogsToday: stats.bodyLogs,
+        notesToday: stats.notesToday,
+        creationsToday: stats.creations,
+      }),
+    })
+    return { title: '今日简报', body }
+  }
+  if (key === 'plan') {
+    const body = await aiService.studyPlan({
+      courses: courses.map((c) => ({ name: c.name })),
+      undone: homeworks.filter((h) => !h.done).length,
+      exams: exams.map((e) => ({ title: e.title, date: e.date })),
+    })
+    return { title: '学习计划', body }
+  }
+  if (key === 'project') {
+    const p = projects[0]
+    if (!p) {
+      return { title: '项目摘要', body: '还没有项目。去「藏 · 项目中心」新建一个项目，天机会为你生成摘要。' }
+    }
+    const body = await aiService.projectSummary(p)
+    return { title: '项目摘要', body }
+  }
+  const it = [...intel].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+  if (!it) {
+    return { title: '情报摘要', body: '还没有情报。去「情」拉取一些情报后，天机会为最新一条生成摘要与标签。' }
+  }
+  const [summary, tags, rank] = await Promise.all([
+    aiService.summarize(it),
+    aiService.tag(it),
+    aiService.rank(it),
+  ])
+  return {
+    title: '情报摘要',
+    body: `标题：${it.title}\n摘要：${summary}\n标签：${tags.join('、')}\n重要度：${rank}`,
+  }
 }
 
 function WelcomeHints({ onPick }: { onPick: (q: string) => void }) {
@@ -104,6 +187,7 @@ export function AiChatPanel() {
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const stats = useTodayStats()
 
   useEffect(() => {
     if (!open) return
@@ -147,6 +231,23 @@ export function AiChatPanel() {
     }
   }
 
+  /** 快捷能力：以「能力名 + 结果」的对话形式入流 */
+  const runCap = async (key: TianjiCapabilityKey) => {
+    if (busy) return
+    const cap = TIANJI_CAPABILITIES.find((c) => c.key === key)
+    if (!cap) return
+    setMessages((m) => [...m, { role: 'user', content: `${cap.label}（天机一键运行）` }])
+    setBusy(true)
+    try {
+      const { title, body } = await runTianjiCapability(key, stats)
+      setMessages((m) => [...m, { role: 'ai', content: `【${title}】\n\n${body}` }])
+    } catch {
+      setMessages((m) => [...m, { role: 'ai', content: `${cap.label} 生成失败，请检查远程 AI 配置后重试。` }])
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!open) return null
 
   return createPortal(
@@ -155,7 +256,7 @@ export function AiChatPanel() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="AI 对话"
+        aria-label="天机"
         className={cn(
           'relative flex flex-col bg-paper shadow-overlay animate-[page-fade_150ms_var(--ease-standard)]',
           'w-full h-full',
@@ -164,18 +265,18 @@ export function AiChatPanel() {
       >
         {/* 头部 */}
         <div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-teal/12 text-teal">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal/12 text-teal">
             <Bot size={15} />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="display text-sm font-semibold text-ink">AI 问问</div>
+            <div className="display text-sm font-semibold text-ink">天机</div>
             <div className="truncate text-[10px] text-ink-faint">
-              {remoteReady ? '已接入远程 AI · 可回答你的数据相关问题' : '未配置远程 AI · 当前仅本地规则概览'}
+              {remoteReady ? '已接入远程 AI · 总掌全局，可问可点' : '未配置远程 AI · 当前仅本地规则概览'}
             </div>
           </div>
           <button
             onClick={() => setOpen(false)}
-            aria-label="关闭 AI 对话"
+            aria-label="关闭天机"
             className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-ink"
           >
             <X size={16} />
@@ -187,7 +288,7 @@ export function AiChatPanel() {
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 pb-10 text-center">
               <Sparkles size={22} className="text-bronze" />
-              <p className="text-sm text-ink-muted">想说点什么？关于任务、课程、情报或收支都可以直接问。</p>
+              <p className="text-sm text-ink-muted">天机运转前，先告诉我你要什么——任务、课程、情报或收支都可以直接问。</p>
             </div>
           ) : (
             messages.map((m, i) => (
@@ -208,10 +309,34 @@ export function AiChatPanel() {
           {busy && (
             <div className="flex items-center gap-1.5 px-1 text-[11px] text-ink-faint">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-bronze" />
-              正在思考…
+              天机推演中…
             </div>
           )}
         </div>
+
+        {/* 空会话：快捷能力 + 欢迎语 */}
+        {messages.length === 0 && (
+          <div className="border-t border-line px-4 pb-3 pt-3">
+            <div className="mb-2 text-[11px] tracking-[0.18em] text-ink-faint">快捷能力 · 一键生成</div>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {TIANJI_CAPABILITIES.map((c) => {
+                const Icon = c.icon
+                return (
+                  <button
+                    key={c.key}
+                    onClick={() => void runCap(c.key)}
+                    disabled={busy}
+                    className="group flex flex-col items-start gap-1 rounded-tile border border-line bg-paper/50 px-3 py-2.5 text-left transition-colors hover:border-teal/40 hover:bg-teal/5 disabled:opacity-50"
+                  >
+                    <Icon size={14} className="text-ink-muted group-hover:text-teal" />
+                    <span className="text-[12px] font-medium text-ink">{c.label}</span>
+                    <span className="text-[10px] leading-tight text-ink-faint">{c.desc}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* 快捷提问 + 输入 */}
         {messages.length === 0 && <WelcomeHints onPick={(q) => { setInput(q); void send(q) }} />}

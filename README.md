@@ -45,7 +45,7 @@
 
 - **前端**：React 19 · TypeScript · Vite 8 · Tailwind CSS 4
 - **状态/数据**：Zustand · Dexie（IndexedDB）· Zod（校验）
-- **图表**：Recharts
+- **图表**：轻量 SVG 模块（Ring 圆环 / 迷你折线，无重量级图表库）
 - **工程化**：Vitest · oxlint · vite-plugin-pwa
 
 ## 快速开始

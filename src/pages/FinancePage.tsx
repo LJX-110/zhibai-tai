@@ -1,21 +1,23 @@
 /**
- * 财 —— 流水 / 预算 / 统计
+ * 财 —— 记账 / 购买 / 预算 / 统计
  *
- * 手机是主场景，五个页签在 375px 下必然横向溢出：看不到的页签等于不存在。
- * 「购买」本就不是与收支并列的维度（购买是流水的一种），单独立页签只是
- * 让记录、清单、预算三处都要各滑一次。现按使用频率分三层：
- * 流水（记 / 改 / 删，购买收进筛选）、预算（设置与进度）、统计（图表）。
+ * 精简原则（按频率分层）：
+ *  · 记账：收入与支出同源一屏，不再分「收入」「支出」两个板块
+ *  · 购买：独立板块，记录「准备买的东西 + 到手状态」，含取件提醒
+ *  · 预算：月度口径 + 圆环进度
+ *  · 统计：分类占比用圆环（Ring）呈现，比柱状更直观、也更省空间
  */
 import { useMemo, useState } from 'react'
-import { Eye, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
-import { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts'
+import { BellRing, Eye, MoreHorizontal, Package, Pencil, Plus, ShoppingCart, Trash2 } from 'lucide-react'
 import { useBudgetStore, useFinanceStore, usePurchaseStore } from '../stores/useFinanceStore'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
 import { FINANCE_CATEGORIES, categoryLabel } from '../services/finance'
 import { recordActivity } from '../services/activity'
+import { browserNotify } from '../services/notification'
 import type { FinanceCategory, FinanceRecord, Purchase } from '../types/entities'
 import { createId, todayISO } from '../utils/id'
+import { Ring } from '../components/ui/Ring'
 import { Seal } from '../components/ui/Seal'
 import { parsePositiveAmount } from '../utils/validate'
 import { cn } from '../utils/cn'
@@ -36,26 +38,22 @@ import {
   type TabItem,
 } from '../components/ui'
 
-/** 图表配色跟随主题令牌（五行模块色，深浅主题自动切换） */
-const PIE_COLORS = [
-  'var(--module-1)',
-  'var(--module-2)',
-  'var(--module-3)',
-  'var(--module-4)',
-  'var(--module-5)',
-  'var(--line-strong)',
-  'var(--accent-deep)',
-  'var(--cinnabar-light)',
+const money = (n: number) =>
+  n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/** 购买状态三态：想买 → 已下单/待取件 → 已到手 */
+const BUY_STATUS: { key: Purchase['status']; label: string; desc: string }[] = [
+  { key: 'want', label: '想买', desc: '收藏清单 · 还没下单' },
+  { key: 'ordered', label: '待取', desc: '已下单 · 记得取件' },
+  { key: 'done', label: '到手', desc: '已收到' },
 ]
 
 const TABS: TabItem[] = [
-  { key: 'ledger', label: '流水' },
+  { key: 'ledger', label: '记账' },
+  { key: 'buy', label: '购买' },
   { key: 'budget', label: '预算' },
   { key: 'stats', label: '统计' },
 ]
-
-const money = (n: number) =>
-  n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function FinancePage() {
   const [tab, setTab] = useState('ledger')
@@ -64,6 +62,7 @@ export function FinancePage() {
       <PageHeader poem="君子爱财，取之有道" title="财 · 度支" />
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       {tab === 'ledger' && <LedgerTab />}
+      {tab === 'buy' && <BuyTab />}
       {tab === 'budget' && <BudgetTab />}
       {tab === 'stats' && <StatsTab />}
     </div>
@@ -84,38 +83,26 @@ function useMonthSummary() {
   }, [records, budgets, month])
 }
 
-type LedgerFilter = 'all' | 'expense' | 'income' | 'purchase'
+type LedgerFilter = 'all' | 'expense' | 'income'
 
 const LEDGER_FILTERS: { key: LedgerFilter; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'expense', label: '支出' },
   { key: 'income', label: '收入' },
-  { key: 'purchase', label: '购买' },
 ]
 
-/**
- * 流水 —— 收支与购买同源
- *
- * 购买清单与流水共用「本月概览」和一条筛选行：勾了「这是购买物品」的流水
- * 会同步进购买表（带 financeId 回指），因此两个列表本就该在同一屏里切换，
- * 而不是分居两个页签各存一份。
- */
+/** 记账 —— 收支同源一屏，购买物品照常入账（勾选后同步进购买清单） */
 function LedgerTab() {
   const records = useFinanceStore((s) => s.items)
-  const purchases = usePurchaseStore((s) => s.items)
   const { income, expense, balance, budget } = useMonthSummary()
   const toast = useToast().toast
   const [filter, setFilter] = useState<LedgerFilter>('all')
   const [month, setMonth] = useState(todayISO().slice(0, 7))
 
   const compact = useResolvedLayout() === 'mobile'
-  // 手机竖屏一屏只放得下十来行；一次全渲染会把「本月概览」顶到很远
   const pageSize = compact ? 10 : 20
   const [listLimit, setListLimit] = useState(pageSize)
-  // 手机端单行的操作收进弹层：由父层持一个实例，避免每行各挂一个 Dialog
   const [actionFor, setActionFor] = useState<FinanceRecord | null>(null)
-  // 换筛选口径 / 月份 / 布局即回到第一页。用渲染期守卫而不是 useEffect：
-  // 在 effect 里同步 setState 会多一次级联渲染，并触发 set-state-in-effect 告警
   const listKey = `${filter}|${month}|${pageSize}`
   const [lastKey, setLastKey] = useState(listKey)
   if (listKey !== lastKey) {
@@ -123,7 +110,6 @@ function LedgerTab() {
     setListLimit(pageSize)
   }
 
-  // 流水编辑
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<FinanceRecord | null>(null)
   const [form, setForm] = useState({
@@ -135,28 +121,15 @@ function LedgerTab() {
     isPurchase: false,
   })
 
-  // 购买编辑：购买记录可独立于流水增删改（不勾流水也能直接记一件）
-  const [buyOpen, setBuyOpen] = useState(false)
-  const [editingBuy, setEditingBuy] = useState<Purchase | null>(null)
-  const [buyForm, setBuyForm] = useState({
-    title: '',
-    price: '',
-    category: 'shopping' as FinanceCategory,
-    url: '',
-    note: '',
-  })
-
   const months = useMemo(() => {
     const set = new Set(records.map((r) => r.date.slice(0, 7)))
     return [...set].sort().reverse()
   }, [records])
-  // 当月可能还没有流水，补进选项，否则默认值在下拉里找不到对应项
   const monthOptions = useMemo(() => {
     const cur = todayISO().slice(0, 7)
     return months.includes(cur) ? months : [cur, ...months]
   }, [months])
 
-  const isPurchase = filter === 'purchase'
   const list = useMemo(
     () =>
       records
@@ -165,12 +138,7 @@ function LedgerTab() {
         .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)),
     [records, month, filter],
   )
-  const buyList = purchases.slice().sort((a, b) => b.date.localeCompare(a.date))
-  const buyTotal = buyList.reduce((s, p) => s + p.price, 0)
   const shownList = list.slice(0, listLimit)
-  const shownBuyList = buyList.slice(0, listLimit)
-  const total = isPurchase ? buyList.length : list.length
-  const shownCount = isPurchase ? shownBuyList.length : shownList.length
 
   const openNew = () => {
     setEditing(null)
@@ -190,7 +158,6 @@ function LedgerTab() {
     setEditorOpen(true)
   }
   const save = async () => {
-    // P1：此前 `if (!amt) return` 静默拦截，负数照样入库且无提示
     const amt = parsePositiveAmount(form.amount)
     if (amt === null) {
       toast('金额需为大于 0 的数字', 'danger')
@@ -209,7 +176,6 @@ function LedgerTab() {
       createdAt: editing?.createdAt ?? now,
     }
     await useFinanceStore.getState().save(rec)
-    // 若是购买物品，同步到购买表（带来源流水 id，取消勾选时可联动清理）
     if (rec.isPurchase) {
       await usePurchaseStore.getState().add({
         id: createId(),
@@ -218,11 +184,11 @@ function LedgerTab() {
         category: rec.category,
         date: rec.date,
         note: rec.note,
+        status: 'ordered',
         financeId: rec.id,
         createdAt: now,
       })
     } else if (editing?.isPurchase) {
-      // 编辑流水时取消了「购买」：删除此前由该流水自动生成的购买记录，避免孤儿数据
       const orphaned = usePurchaseStore
         .getState()
         .items.filter((p) => p.financeId === rec.id)
@@ -241,75 +207,19 @@ function LedgerTab() {
     toast('已删除')
   }
 
-  const openNewBuy = () => {
-    setEditingBuy(null)
-    setBuyForm({ title: '', price: '', category: 'shopping', url: '', note: '' })
-    setBuyOpen(true)
-  }
-  const openEditBuy = (p: Purchase) => {
-    setEditingBuy(p)
-    setBuyForm({
-      title: p.title,
-      price: String(p.price),
-      category: p.category,
-      url: p.url ?? '',
-      note: p.note ?? '',
-    })
-    setBuyOpen(true)
-  }
-  const saveBuy = async () => {
-    const price = parsePositiveAmount(buyForm.price)
-    if (!buyForm.title.trim()) {
-      toast('请填写商品名', 'danger')
-      return
-    }
-    if (price === null) {
-      toast('价格需为大于 0 的数字', 'danger')
-      return
-    }
-    const now = new Date().toISOString()
-    await usePurchaseStore.getState().save({
-      id: editingBuy?.id ?? createId(),
-      title: buyForm.title.trim(),
-      price,
-      category: buyForm.category,
-      date: editingBuy?.date ?? todayISO(),
-      url: buyForm.url.trim() || undefined,
-      note: buyForm.note.trim() || undefined,
-      createdAt: editingBuy?.createdAt ?? now,
-    })
-    setBuyOpen(false)
-    toast('已保存', 'success')
-  }
-  const removeBuy = async (p: Purchase) => {
-    await usePurchaseStore.getState().remove(p.id)
-    toast('已删除')
-  }
-
   return (
     <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-12">
       <div className="lg:col-span-7">
         <Section
-          title={isPurchase ? '购买清单' : '流水'}
-          hint={isPurchase ? `${buyList.length} 件 · 合计 ${money(buyTotal)}` : `${list.length} 条`}
+          title="记账"
+          hint={`${list.length} 条`}
           action={
-            isPurchase ? (
-              <Button size="sm" variant="primary" onClick={openNewBuy}>
-                <Plus size={13} /> 添加
-              </Button>
-            ) : (
-              <Button size="sm" variant="primary" onClick={openNew}>
-                <Plus size={13} /> 记一笔
-              </Button>
-            )
+            <Button size="sm" variant="primary" onClick={openNew}>
+              <Plus size={13} /> 记一笔
+            </Button>
           }
         >
-          {/* 筛选行横滚：只放四个口径，375px 下能整行放下不裁切 */}
-          <ScrollRow
-            className="pb-2"
-            activeSelector={'[data-active="true"]'}
-            activeKey={filter}
-          >
+          <ScrollRow className="pb-2" activeSelector={'[data-active="true"]'} activeKey={filter}>
             {LEDGER_FILTERS.map((f) => (
               <button
                 key={f.key}
@@ -325,54 +235,20 @@ function LedgerTab() {
             ))}
           </ScrollRow>
 
-          {/* 月份另起一行：塞进上面那行会把「购买」挤出屏外 */}
-          {!isPurchase && (
-            <div className="pb-3">
-              <Select
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="!w-auto !py-1.5 text-sm"
-              >
-                <option value="all">全部月份</option>
-                {monthOptions.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </Select>
-            </div>
-          )}
+          <div className="pb-3">
+            <Select
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="!w-auto !py-1.5 text-sm"
+            >
+              <option value="all">全部月份</option>
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </Select>
+          </div>
 
-          {isPurchase ? (
-            buyList.length > 0 ? (
-              <div>
-                {shownBuyList.map((p) => (
-                  <div key={p.id} className="row group">
-                    <Seal size={30} char="购" tone="bronze" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm text-ink">{p.title}</span>
-                        <Badge tone="plain">{categoryLabel(p.category)}</Badge>
-                      </div>
-                      {(p.note || p.date) && (
-                        <div className="mt-0.5 flex gap-2 text-[11px] text-ink-faint">
-                          <span className="tabular">{p.date}</span>
-                          {p.note && <span className="truncate">{p.note}</span>}
-                        </div>
-                      )}
-                    </div>
-                    <span className="tabular text-sm font-medium text-ink">{money(p.price)}</span>
-                    <button className="hover-reveal rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => openEditBuy(p)} aria-label="编辑">
-                      <Pencil size={13} />
-                    </button>
-                    <button className="hover-reveal rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => removeBuy(p)} aria-label="删除">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="还没有购买记录" action={<Button variant="primary" onClick={openNewBuy}><Plus size={13} /> 添加</Button>} />
-            )
-          ) : list.length > 0 ? (
+          {list.length > 0 ? (
             <div>
               {shownList.map((r) => (
                 <FinanceRow
@@ -389,11 +265,10 @@ function LedgerTab() {
             <EmptyState title="该范围内无流水" desc="记下第一笔收支" action={<Button variant="primary" onClick={openNew}><Plus size={13} /> 记一笔</Button>} />
           )}
 
-          {/* 分页：让「本月概览」不至于被几十条记录顶到屏外 */}
-          {listLimit < total && (
+          {listLimit < list.length && (
             <div className="pt-2">
               <Button variant="secondary" className="w-full" onClick={() => setListLimit((n) => n + pageSize)}>
-                加载更多（已显示 {shownCount} / {total}）
+                加载更多（已显示 {shownList.length} / {list.length}）
               </Button>
             </div>
           )}
@@ -412,13 +287,22 @@ function LedgerTab() {
               tone="bronze"
             />
           </div>
+          {budget > 0 && (
+            <div className="mt-3 rounded-paper bg-raised px-3 py-2.5">
+              <div className="mb-1 flex justify-between text-xs text-ink-muted">
+                <span>本月预算</span>
+                <span className="tabular">{Math.min(100, Math.round((expense / budget) * 100))}%</span>
+              </div>
+              <Progress value={expense} max={budget} bronze={expense > budget * 0.8} />
+            </div>
+          )}
         </Section>
       </div>
 
       <Dialog
         open={editorOpen}
         onClose={() => setEditorOpen(false)}
-        title={editing ? '改流水' : '记一笔'}
+        title={editing ? '改记账' : '记一笔'}
         footer={
           <>
             <Button variant="tertiary" onClick={() => setEditorOpen(false)}>取消</Button>
@@ -458,31 +342,6 @@ function LedgerTab() {
         </div>
       </Dialog>
 
-      <Dialog
-        open={buyOpen}
-        onClose={() => setBuyOpen(false)}
-        title={editingBuy ? '改购买' : '记一件购买'}
-        footer={
-          <>
-            <Button variant="tertiary" onClick={() => setBuyOpen(false)}>取消</Button>
-            <Button variant="primary" onClick={saveBuy} disabled={!buyForm.title.trim() || parsePositiveAmount(buyForm.price) === null}>保存</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <Input autoFocus placeholder="商品名" value={buyForm.title} onChange={(e) => setBuyForm({ ...buyForm, title: e.target.value })} />
-          <div className="grid grid-cols-2 gap-3">
-            <Input type="number" step="0.01" placeholder="价格" value={buyForm.price} onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })} />
-            <Select value={buyForm.category} onChange={(e) => setBuyForm({ ...buyForm, category: e.target.value as FinanceCategory })}>
-              {FINANCE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </Select>
-          </div>
-          <Input placeholder="链接（可选）" value={buyForm.url} onChange={(e) => setBuyForm({ ...buyForm, url: e.target.value })} />
-          <Input placeholder="备注（可选）" value={buyForm.note} onChange={(e) => setBuyForm({ ...buyForm, note: e.target.value })} />
-        </div>
-      </Dialog>
-
-      {/* 手机端流水行的分层操作：右侧只留「金额 + ⋯」，三个动作收进弹层集中承载 */}
       <Dialog
         open={actionFor != null}
         onClose={() => setActionFor(null)}
@@ -530,6 +389,252 @@ function LedgerTab() {
   )
 }
 
+/** 购买 —— 想买清单 + 待取快递提醒 */
+function BuyTab() {
+  const purchases = usePurchaseStore((s) => s.items)
+  const toast = useToast().toast
+  const [status, setStatus] = useState<'all' | Purchase['status']>('all')
+  const [buyOpen, setBuyOpen] = useState(false)
+  const [editingBuy, setEditingBuy] = useState<Purchase | null>(null)
+  const [buyForm, setBuyForm] = useState({
+    title: '',
+    price: '',
+    category: 'shopping' as FinanceCategory,
+    url: '',
+    note: '',
+    status: 'want' as Purchase['status'],
+  })
+
+  const buyList = useMemo(() => {
+    const sorted = purchases.slice().sort((a, b) => b.date.localeCompare(a.date))
+    return status === 'all' ? sorted : sorted.filter((p) => (p.status ?? 'want') === status)
+  }, [purchases, status])
+
+  const orderedCount = purchases.filter((p) => p.status === 'ordered').length
+  const wantCount = purchases.filter((p) => !p.status || p.status === 'want').length
+
+  const openNew = () => {
+    setEditingBuy(null)
+    setBuyForm({ title: '', price: '', category: 'shopping', url: '', note: '', status: 'want' })
+    setBuyOpen(true)
+  }
+  const openEdit = (p: Purchase) => {
+    setEditingBuy(p)
+    setBuyForm({
+      title: p.title,
+      price: String(p.price),
+      category: p.category,
+      url: p.url ?? '',
+      note: p.note ?? '',
+      status: p.status ?? 'want',
+    })
+    setBuyOpen(true)
+  }
+  const save = async () => {
+    const price = parsePositiveAmount(buyForm.price)
+    if (!buyForm.title.trim()) {
+      toast('请填写商品名', 'danger')
+      return
+    }
+    if (price === null) {
+      toast('价格需为大于 0 的数字', 'danger')
+      return
+    }
+    const now = new Date().toISOString()
+    const prev = editingBuy
+    const next: Purchase = {
+      id: editingBuy?.id ?? createId(),
+      title: buyForm.title.trim(),
+      price,
+      category: buyForm.category,
+      date: editingBuy?.date ?? todayISO(),
+      url: buyForm.url.trim() || undefined,
+      note: buyForm.note.trim() || undefined,
+      status: buyForm.status,
+      financeId: editingBuy?.financeId,
+      createdAt: editingBuy?.createdAt ?? now,
+    }
+    await usePurchaseStore.getState().save(next)
+    // 状态刚变为「待取」→ 提醒取件（浏览器通知 + 应用内 toast 双保险）
+    if (next.status === 'ordered' && prev?.status !== 'ordered') {
+      void browserNotify('知白台 · 取件提醒', `「${next.title}」已下单，记得收快递取件`)
+    }
+    setBuyOpen(false)
+    toast(prev ? '已更新' : '已记入想买清单', 'success')
+  }
+  const remove = async (p: Purchase) => {
+    await usePurchaseStore.getState().remove(p.id)
+    toast('已删除')
+  }
+  /** 状态快捷流转：想买→下单（提醒）/ 下单→到手 */
+  const advance = async (p: Purchase) => {
+    const cur = p.status ?? 'want'
+    const nxt: Purchase['status'] = cur === 'want' ? 'ordered' : cur === 'ordered' ? 'done' : 'done'
+    await usePurchaseStore.getState().update(p.id, { status: nxt, updatedAt: new Date().toISOString() })
+    if (nxt === 'ordered') void browserNotify('知白台 · 取件提醒', `「${p.title}」已下单，记得取件`)
+    toast(nxt === 'ordered' ? '已标记下单 · 记得取件' : '已标记到手', 'success')
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 顶部概览：想买 / 待取件 / 合计 */}
+      <div className="grid grid-cols-3 gap-2">
+        <SummaryCell label="想买清单" value={`${wantCount} 件`} tone="ink" />
+        <SummaryCell label="待取快递" value={`${orderedCount} 件`} tone="bronze" />
+        <SummaryCell label="合计" value={money(purchases.reduce((s, p) => s + p.price, 0))} tone="teal" />
+      </div>
+
+      <Section
+        title="购买"
+        hint="记录想买的 · 追踪到手"
+        action={
+          <Button size="sm" variant="primary" onClick={openNew}>
+            <Plus size={13} /> 添加
+          </Button>
+        }
+      >
+        <ScrollRow className="pb-2" activeSelector={'[data-active="true"]'} activeKey={status}>
+          <button
+            data-active={status === 'all' || undefined}
+            onClick={() => setStatus('all')}
+            className={cn(
+              'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+              status === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+            )}
+          >
+            全部
+          </button>
+          {BUY_STATUS.map((s) => (
+            <button
+              key={s.key}
+              data-active={status === s.key || undefined}
+              onClick={() => setStatus(s.key)}
+              className={cn(
+                'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+                status === s.key ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+              )}
+            >
+              {s.label}
+              <span className="ml-1 tabular text-[11px] opacity-60">
+                {purchases.filter((p) => (p.status ?? 'want') === s.key).length}
+              </span>
+            </button>
+          ))}
+        </ScrollRow>
+
+        {buyList.length > 0 ? (
+          <div>
+            {buyList.map((p) => {
+              const st = p.status ?? 'want'
+              return (
+                <div key={p.id} className="row group">
+                  <Seal size={30} char="购" tone={st === 'done' ? 'teal' : st === 'ordered' ? 'bronze' : 'cinnabar'} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="truncate text-sm text-ink">{p.title}</span>
+                      <Badge tone="plain">{categoryLabel(p.category)}</Badge>
+                      <Badge tone={st === 'done' ? 'teal' : st === 'ordered' ? 'bronze' : 'plain'}>
+                        {BUY_STATUS.find((s) => s.key === st)?.label}
+                      </Badge>
+                    </div>
+                    {(p.note || p.date) && (
+                      <div className="mt-0.5 flex gap-2 text-[11px] text-ink-faint">
+                        <span className="tabular">{p.date}</span>
+                        {p.note && <span className="truncate">{p.note}</span>}
+                      </div>
+                    )}
+                  </div>
+                  <span className="tabular text-sm font-medium text-ink">{money(p.price)}</span>
+                  {st !== 'done' && (
+                    <button
+                      onClick={() => void advance(p)}
+                      className="shrink-0 rounded-control px-2 py-1 text-xs text-teal transition-colors hover:bg-teal/10"
+                      aria-label={st === 'want' ? '标记下单' : '标记到手'}
+                      title={st === 'want' ? '下单了 · 提醒取件' : '已到手'}
+                    >
+                      {st === 'want' ? <ShoppingCart size={13} /> : <Package size={13} />}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised"
+                    aria-label="编辑"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    onClick={() => remove(p)}
+                    className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-cinnabar"
+                    aria-label="删除"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            icon={ShoppingCart}
+            title={status === 'all' ? '还没有购买记录' : '该状态暂无记录'}
+            desc="记录想买的东西，下单后标记待取，到了不会忘"
+            action={<Button variant="primary" onClick={openNew}><Plus size={13} /> 添加</Button>}
+          />
+        )}
+
+        {orderedCount > 0 && (
+          <div className="mt-3 flex items-center gap-2 rounded-tile border border-bronze/30 bg-bronze/5 px-3 py-2 text-[12px] text-bronze">
+            <BellRing size={13} className="shrink-0" />
+            有 {orderedCount} 件等待取件，到手后点「✓」完成
+          </div>
+        )}
+      </Section>
+
+      <Dialog
+        open={buyOpen}
+        onClose={() => setBuyOpen(false)}
+        title={editingBuy ? '改购买' : '记一件想买的'}
+        footer={
+          <>
+            <Button variant="tertiary" onClick={() => setBuyOpen(false)}>取消</Button>
+            <Button variant="primary" onClick={save} disabled={!buyForm.title.trim() || parsePositiveAmount(buyForm.price) === null}>保存</Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Input autoFocus placeholder="商品名" value={buyForm.title} onChange={(e) => setBuyForm({ ...buyForm, title: e.target.value })} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input type="number" step="0.01" placeholder="价格（必填）" value={buyForm.price} onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })} />
+            <Select value={buyForm.category} onChange={(e) => setBuyForm({ ...buyForm, category: e.target.value as FinanceCategory })}>
+              {FINANCE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </Select>
+          </div>
+          <div>
+            <div className="mb-1.5 text-[11px] text-ink-faint">状态</div>
+            <div className="grid grid-cols-3 gap-2">
+              {BUY_STATUS.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => setBuyForm({ ...buyForm, status: s.key })}
+                  className={cn(
+                    'rounded-tile border px-2 py-1.5 text-xs transition-colors',
+                    buyForm.status === s.key ? 'border-cinnabar/50 bg-cinnabar/5 text-ink' : 'border-line text-ink-muted',
+                  )}
+                  title={s.desc}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Input placeholder="链接（可选）" value={buyForm.url} onChange={(e) => setBuyForm({ ...buyForm, url: e.target.value })} />
+          <Input placeholder="备注（可选）" value={buyForm.note} onChange={(e) => setBuyForm({ ...buyForm, note: e.target.value })} />
+        </div>
+      </Dialog>
+    </div>
+  )
+}
+
 function SummaryCell({ label, value, tone }: { label: string; value: string; tone: 'cinnabar' | 'teal' | 'ink' | 'bronze' }) {
   const toneClass = { cinnabar: 'text-cinnabar', teal: 'text-teal', ink: 'text-ink', bronze: 'text-bronze' }[tone]
   return (
@@ -548,13 +653,11 @@ function FinanceRow({
   onDelete,
 }: {
   r: FinanceRecord
-  /** 手机端：右侧只留「金额 + ⋯」，详情/编辑/删除由 onMore 唤起弹层承载 */
   compact: boolean
   onMore: () => void
   onEdit: (r: FinanceRecord) => void
   onDelete: (r: FinanceRecord) => void
 }) {
-  // 收/支专用圆形符箓（印文收·支，印色随性质）
   return (
     <div className="row group">
       <Seal
@@ -580,7 +683,6 @@ function FinanceRow({
         {r.kind === 'income' ? '+' : '-'}{money(r.amount)}
       </span>
       {compact ? (
-        /* 手机端：金额 + 详情 + 编辑 + 删除四个元素常显会把商家名挤没，收成一个 ⋯ */
         <button
           onClick={onMore}
           className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-raised"
@@ -591,16 +693,16 @@ function FinanceRow({
       ) : (
         <>
           <button
-            className="hover-reveal rounded-control p-1.5 text-ink-muted hover:bg-raised"
+            className="rounded-control p-1.5 text-ink-muted hover:bg-raised"
             onClick={() => useInspectorStore.getState().open('finance', r.id)}
             aria-label="详情"
           >
             <Eye size={13} />
           </button>
-          <button className="hover-reveal rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => onEdit(r)} aria-label="编辑">
+          <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => onEdit(r)} aria-label="编辑">
             <Pencil size={13} />
           </button>
-          <button className="hover-reveal rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => onDelete(r)} aria-label="删除">
+          <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => onDelete(r)} aria-label="删除">
             <Trash2 size={13} />
           </button>
         </>
@@ -635,6 +737,8 @@ function BudgetTab() {
     toast('预算已保存', 'success')
   }
 
+  const usedPct = current && current.amount > 0 ? Math.min(100, (expense / current.amount) * 100) : 0
+
   return (
     <Section title="月度预算" hint={month}>
       <div className="max-w-md">
@@ -643,15 +747,19 @@ function BudgetTab() {
           <Button variant="primary" onClick={save} disabled={parsePositiveAmount(value) === null}>保存</Button>
         </div>
         {current && current.amount > 0 && (
-          <div className="mt-4">
-            <div className="mb-1 flex justify-between text-xs text-ink-muted">
-              <span>已用 {money(expense)} / {money(current.amount)}</span>
-              <span className="tabular">{Math.round((expense / current.amount) * 100)}%</span>
+          <div className="mt-4 flex items-center gap-4">
+            <Ring percent={usedPct} size={104} stroke={8}>
+              <span className="tabular text-lg font-semibold text-ink">{Math.round(usedPct)}%</span>
+              <span className="text-[10px] text-ink-faint">已用</span>
+            </Ring>
+            <div className="flex-1 text-sm text-ink-muted">
+              <div className="flex justify-between gap-2">
+                <span>已用 {money(expense)} / {money(current.amount)}</span>
+              </div>
+              <p className="mt-2 text-[11px] text-ink-faint">
+                {expense > current.amount ? '已超预算，留意支出。' : `剩余预算 ${money(current.amount - expense)}`}
+              </p>
             </div>
-            <Progress value={expense} max={current.amount} bronze={expense > current.amount * 0.8} />
-            <p className="mt-2 text-[11px] text-ink-faint">
-              {expense > current.amount ? '已超预算，留意支出。' : `剩余预算 ${money(current.amount - expense)}`}
-            </p>
           </div>
         )}
       </div>
@@ -659,7 +767,7 @@ function BudgetTab() {
   )
 }
 
-/** 统计（Recharts） */
+/** 统计 —— 分类占比用圆环：一眼看懂钱花在哪 */
 function StatsTab() {
   const records = useFinanceStore((s) => s.items)
   const month = todayISO().slice(0, 7)
@@ -675,48 +783,45 @@ function StatsTab() {
       .sort((a, b) => b.value - a.value)
   }, [records])
 
-  const monthlyTrend = useMemo(() => {
-    const now = new Date()
-    const out: { label: string; expense: number; income: number }[] = []
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      const inMonth = records.filter((r) => r.date.startsWith(key))
-      out.push({
-        label: `${d.getMonth() + 1}月`,
-        expense: Math.round(inMonth.filter((r) => r.kind === 'expense').reduce((s, r) => s + r.amount, 0)),
-        income: Math.round(inMonth.filter((r) => r.kind === 'income').reduce((s, r) => s + r.amount, 0)),
-      })
-    }
-    return out
-  }, [records])
+  const expenseTotal = byCategory.reduce((s, c) => s + c.value, 0)
+  const { income } = useMonthSummary()
+
+  /** 圆环配色：主环用当月支出总额，占比按分类逐段着色（CSS 变量跟随主题） */
+  const RING_COLORS = [
+    'var(--module-1)',
+    'var(--module-2)',
+    'var(--module-3)',
+    'var(--module-4)',
+    'var(--module-5)',
+    'var(--line-strong)',
+    'var(--accent-deep)',
+    'var(--cinnabar-light)',
+  ]
 
   return (
     <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-12">
       <div className="lg:col-span-5">
-        <Section title="支出构成" hint="按分类">
-          {byCategory.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <div className="h-44 w-44 shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={byCategory} dataKey="value" nameKey="name" innerRadius={42} outerRadius={72} paddingAngle={2}>
-                      {byCategory.map((_, i) => (
-                        <Cell key={i} style={{ fill: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: 'var(--color-paper)', border: '1px solid var(--color-line-strong)', borderRadius: 8, fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+        <Section title="本月支出" hint={month}>
+          {expenseTotal > 0 ? (
+            <div className="flex items-center gap-5">
+              <Ring percent={income > 0 ? Math.min(100, (expenseTotal / income) * 100) : 0} size={120} stroke={10}>
+                <span className="tabular text-lg font-semibold text-ink">¥{expenseTotal.toLocaleString()}</span>
+                <span className="text-[10px] text-ink-faint">共支出</span>
+              </Ring>
               <div className="flex-1 space-y-1.5">
-                {byCategory.slice(0, 6).map((c, i) => (
+                {byCategory.slice(0, 5).map((c, i) => (
                   <div key={c.name} className="flex items-center gap-2 text-xs">
-                    <span className="h-2 w-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                    <span className="h-2 w-2 rounded-full" style={{ background: RING_COLORS[i % RING_COLORS.length] }} />
                     <span className="text-ink-muted">{c.name}</span>
                     <span className="tabular ml-auto text-ink">{money(c.value)}</span>
+                    <span className="tabular w-9 text-right text-[11px] text-ink-faint">
+                      {Math.round((c.value / expenseTotal) * 100)}%
+                    </span>
                   </div>
                 ))}
+                {byCategory.length > 5 && (
+                  <p className="pt-1 text-[11px] text-ink-faint">另有 {byCategory.length - 5} 个分类未展示</p>
+                )}
               </div>
             </div>
           ) : (
@@ -724,19 +829,20 @@ function StatsTab() {
           )}
         </Section>
       </div>
+
       <div className="lg:col-span-7">
-        <Section title="月度趋势" hint="近 6 个月">
-          <div className="h-52 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyTrend} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--color-ink-muted)' }} axisLine={{ stroke: 'var(--color-line)' }} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--color-ink-faint)' }} axisLine={false} tickLine={false} width={44} />
-                <Tooltip contentStyle={{ background: 'var(--color-paper)', border: '1px solid var(--color-line-strong)', borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="expense" name="支出" fill="var(--color-cinnabar)" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="income" name="收入" fill="var(--color-bronze)" radius={[3, 3, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        <Section title="收支概览" hint="本月">
+          <div className="grid grid-cols-2 gap-3">
+            <SummaryCell label="收入" value={money(income)} tone="teal" />
+            <SummaryCell label="支出" value={money(expenseTotal)} tone="cinnabar" />
+            <SummaryCell label="结余" value={money(income - expenseTotal)} tone="ink" />
+            <SummaryCell label="记录数" value={`${records.length} 条`} tone="bronze" />
           </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+            {income > 0
+              ? `结余率 ${Math.round(((income - expenseTotal) / income) * 100)}%${expenseTotal > income ? '，支出已超收入' : '，总体健康'}`
+              : '记下收入后即可看到结余率'}
+          </p>
         </Section>
       </div>
     </div>

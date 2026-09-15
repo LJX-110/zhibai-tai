@@ -1,25 +1,16 @@
 /**
  * 修 —— 斩三尸 / 身体 / 喝水 / 成长
+ * 成长页只留「今日五维道行 + 等级」单屏信息：历史曲线/月份明细这类
+ * 沉重建图下沉到「观」首页需要时再看，这里不堆图表 —— 少即是多。
  */
 import { useMemo, useState } from 'react'
 import { Flame, Plus, Trash2 } from 'lucide-react'
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { useHabitLogStore, useHabitStore } from '../stores/useHabitStore'
 import { useBodyMetricLogStore, useBodyMetricStore } from '../stores/useBodyStore'
 import { useWaterStore } from '../stores/useWaterStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
-import { usePomodoroStore } from '../stores/usePomodoroStore'
-import { useTaskStore } from '../stores/useTaskStore'
-import { useNoteStore } from '../stores/useNoteStore'
-import { useCollectionStore } from '../stores/useCollectionStore'
-import { computeDailyCultivation } from '../services/cultivation'
+import { useTodayStats } from '../hooks/useTodayStats'
+import { computeCultivation, cultivationGrade } from '../services/cultivation'
 import { recordActivity } from '../services/activity'
 import {
   Button,
@@ -356,7 +347,7 @@ function BodyTab() {
                   </Button>
                   <button
                     onClick={() => void removeDef(d)}
-                    className="hover-reveal rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-cinnabar"
+                    className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-cinnabar"
                     aria-label={`删除指标 ${d.name}`}
                     title="删除该指标及其记录"
                   >
@@ -468,224 +459,70 @@ function WaterTab() {
   )
 }
 
-/* ---------------- 成长 ---------------- */
+/* ---------------- 成长（今日五维 · 轻量化） ---------------- */
 
 function GrowthTab() {
-  const tasks = useTaskStore((s) => s.items)
-  const pomo = usePomodoroStore((s) => s.items)
-  const waterLogs = useWaterStore((s) => s.items)
-  const habitLogs = useHabitLogStore((s) => s.items)
-  const bodyLogs = useBodyMetricLogStore((s) => s.items)
-  const notes = useNoteStore((s) => s.items)
-  const collections = useCollectionStore((s) => s.items)
-  const waterGoal = useSettingsStore((s) => s.waterGoalMl)
-  const [granularity, setGranularity] = useState<'day' | 'week' | 'month'>('day')
-
-  // 道行历史曲线数据
-  const cultivationSeries = useMemo(() => {
-    const input = {
-      tasks,
-      pomodoroSessions: pomo,
-      waterLogs,
-      habitLogs,
-      bodyMetricLogs: bodyLogs,
-      notes,
-      collections,
-      waterGoal,
-    }
-    const today = todayISO()
-    if (granularity === 'day') {
-      return Array.from({ length: 14 }, (_, i) => {
-        const d = shiftDate(today, i - 13)
-        return { label: `${Number(d.slice(8))}日`, value: computeDailyCultivation(d, input), key: d }
-      })
-    }
-    if (granularity === 'week') {
-      return Array.from({ length: 8 }, (_, i) => {
-        const end = shiftDate(today, -(7 * i))
-        let sum = 0
-        for (let k = 0; k < 7; k++) sum += computeDailyCultivation(shiftDate(end, -k), input)
-        const endDate = new Date(end).getDate()
-        return { label: `${endDate}日周`, value: Math.round(sum / 7), key: `w${end}` }
-      }).reverse()
-    }
-    // 月
-    return Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(new Date().getFullYear(), new Date().getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
-      let sum = 0
-      for (let k = 0; k < days; k++) {
-        sum += computeDailyCultivation(shiftDate(`${key}-01`, k), input)
-      }
-      return { label: `${d.getMonth() + 1}月`, value: Math.round(sum / days), key }
-    }).reverse()
-  }, [tasks, pomo, waterLogs, habitLogs, bodyLogs, notes, collections, waterGoal, granularity])
-
-  const monthly = useMemo(() => {
-    const now = new Date()
-    const months: { label: string; done: number; focus: number; water: number }[] = []
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      months.push({
-        label: `${d.getMonth() + 1}月`,
-        done: tasks.filter((t) => t.completedAt?.startsWith(key)).length,
-        focus: pomo
-          .filter((p) => p.type === 'focus' && p.startAt.startsWith(key))
-          .reduce((s, p) => s + p.durationMin, 0),
-        water: waterLogs
-          .filter((w) => w.date.startsWith(key))
-          .reduce((s, w) => s + w.amountMl, 0),
-      })
-    }
-    return months
-  }, [tasks, pomo, waterLogs])
-
-  const maxDone = Math.max(1, ...monthly.map((m) => m.done))
+  const stats = useTodayStats()
+  const cultivation = useMemo(
+    () =>
+      computeCultivation({
+        tasksDoneToday: stats.tasksDone,
+        focusMinutesToday: stats.focusMinutes,
+        waterRatio: stats.waterRatio,
+        habitLogsToday: stats.habitLogs,
+        bodyLogsToday: stats.bodyLogs,
+        notesToday: stats.notesToday,
+        creationsToday: stats.creations,
+      }),
+    [stats],
+  )
+  const grade = cultivationGrade(cultivation.total)
 
   return (
-    <Section title="成长" hint="近 12 个月轨迹">
-      {/* 道行历史曲线 */}
-      <div className="mb-4">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium text-ink">道行历史</span>
-          <div className="switch-pill flex gap-1 rounded-tile p-0.5">
-            {([
-              { k: 'day', l: '按天' },
-              { k: 'week', l: '按周' },
-              { k: 'month', l: '按月' },
-            ] as const).map((g) => (
-              <button
-                key={g.k}
-                onClick={() => setGranularity(g.k)}
-                className={cn(
-                  'rounded-control px-2.5 py-0.5 text-xs transition-colors',
-                  granularity === g.k ? 'switch-pill-active' : 'text-ink-muted',
-                )}
-              >
-                {g.l}
-              </button>
-            ))}
+    <div className="space-y-3">
+      {/* 今日道行：圆环 + 等级 */}
+      <Section title="今日道行" hint={grade.title}>
+        <div className="flex items-center gap-5">
+          <Ring percent={cultivation.total} size={112} stroke={9}>
+            <span className="tabular text-xl font-semibold text-ink">{cultivation.total}</span>
+            <span className="text-[10px] text-ink-faint">/ 100</span>
+          </Ring>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-ink">{grade.title}</div>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">{grade.desc}</p>
           </div>
         </div>
-        <div className="h-40 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={cultivationSeries} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--color-ink-muted)' }} axisLine={{ stroke: 'var(--color-line)' }} tickLine={false} interval="preserveStartEnd" />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: 'var(--color-ink-faint)' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip contentStyle={{ background: 'var(--color-paper)', border: '1px solid var(--color-line-strong)', borderRadius: 8, fontSize: 12 }} />
-              <Line type="monotone" dataKey="value" name="道行" stroke="var(--color-cinnabar)" strokeWidth={1.8} dot={{ r: 2.5, fill: 'var(--color-cinnabar)' }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <p className="mt-1 text-[11px] text-ink-faint">
-          由完成待办 / 专注 / 喝水 / 斩三尸 / 身体记录 / 记录 / 创作 逐日聚合
-        </p>
-      </div>
+      </Section>
 
-      {/* 专注分钟趋势（Recharts） */}
-      <div className="mb-4 h-40 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={monthly} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 10, fill: 'var(--color-ink-muted)' }}
-              axisLine={{ stroke: 'var(--color-line)' }}
-              tickLine={false}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: 'var(--color-ink-faint)' }}
-              axisLine={false}
-              tickLine={false}
-              width={40}
-            />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--color-paper)',
-                border: '1px solid var(--color-line-strong)',
-                borderRadius: 8,
-                fontSize: 12,
-                color: 'var(--color-ink)',
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="focus"
-              name="专注分钟"
-              stroke="var(--color-cinnabar)"
-              strokeWidth={1.6}
-              dot={{ r: 2, fill: 'var(--color-cinnabar)' }}
-            />
-            <Line
-              type="monotone"
-              dataKey="done"
-              name="完成待办"
-              stroke="var(--color-bronze)"
-              strokeWidth={1.6}
-              dot={{ r: 2, fill: 'var(--color-bronze)' }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      {/* 桌面：月度明细表（横向空间足够） */}
-      <div className="hidden overflow-x-auto sm:block">
-        <table className="w-full min-w-[520px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-line text-left text-xs text-ink-faint">
-              <th className="py-2 pr-3 font-normal">月份</th>
-              <th className="py-2 pr-3 font-normal">完成待办</th>
-              <th className="py-2 pr-3 font-normal">专注分钟</th>
-              <th className="py-2 font-normal">饮水 ml</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...monthly].reverse().map((m) => (
-              <tr key={m.label} className="border-b border-line/60">
-                <td className="py-2 pr-3 text-ink-muted">{m.label}</td>
-                <td className="py-2 pr-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-24 overflow-hidden rounded-full bg-nested">
-                      <div
-                        className="h-full rounded-full bg-cinnabar"
-                        style={{ width: `${(m.done / maxDone) * 100}%` }}
-                      />
-                    </div>
-                    <span className="tabular text-xs text-ink">{m.done}</span>
-                  </div>
-                </td>
-                <td className="tabular py-2 pr-3 text-ink">{m.focus}</td>
-                <td className="tabular py-2 text-ink">{m.water}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {/* 移动端：同数据转卡片网格，无需横向滚动 */}
-      <div className="grid grid-cols-2 gap-2 sm:hidden">
-        {[...monthly].reverse().map((m) => (
-          <div key={m.label} className="rounded-tile border border-line bg-paper p-3">
-            <div className="mb-2 text-sm font-medium text-ink-muted">{m.label}</div>
-            <div className="space-y-1.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-ink-faint">完成待办</span>
-                <span className="tabular text-ink">{m.done}</span>
+      {/* 五维分解：行 / 学 / 身 / 心 / 创 */}
+      <Section title="五维" hint="今日各维度得分">
+        <div className="space-y-2.5">
+          {cultivation.dimensions.map((d) => (
+            <div key={d.key} className="flex items-center gap-3">
+              <span className="display w-6 shrink-0 text-sm font-semibold text-ink">{d.label}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-nested">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all',
+                    d.value >= d.max * 0.75
+                      ? 'bg-teal'
+                      : d.value >= d.max * 0.4
+                        ? 'bg-bronze'
+                        : 'bg-cinnabar/60',
+                  )}
+                  style={{ width: `${(d.value / d.max) * 100}%` }}
+                />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-ink-faint">专注分钟</span>
-                <span className="tabular text-ink">{m.focus}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-ink-faint">饮水</span>
-                <span className="tabular text-ink">{m.water} ml</span>
-              </div>
+              <span className="tabular w-10 shrink-0 text-right text-xs text-ink-muted">
+                {d.value}/{d.max}
+              </span>
             </div>
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 text-[11px] text-ink-faint">
-        成长统计由各模块行为数据汇总，道行算法接口已预留（services/cultivation）。
-      </p>
-    </Section>
+          ))}
+        </div>
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+          由完成待办、专注、饮水、斩三尸、身体记录、记录与创作逐日聚合，满分 100，每日自动重算。
+        </p>
+      </Section>
+    </div>
   )
 }

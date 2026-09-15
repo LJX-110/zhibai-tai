@@ -5,7 +5,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutMode } from './useAppStore'
-import { DEFAULT_MOBILE_TABS, type SectionId } from '../app/navigation'
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -18,12 +17,6 @@ export interface SettingsState {
   theme: ThemeMode
   /** 桌面工作台 / 移动终端 / 自动 */
   layoutMode: LayoutMode
-  /** 移动端底栏常驻板块（最多 4 个，第 5 格固定是「更多」）。
-   *  此前写死「观行修学」，财/藏/情/奇/术 全埋在「更多」抽屉里 ——
-   *  手机为主要使用场景时，等于一半功能没有入口。 */
-  mobileTabs: SectionId[]
-  setMobileTab: (index: number, id: SectionId) => void
-  resetMobileTabs: () => void
   /** 首次启动引导是否完成 */
   onboarded: boolean
   /** 喝水每日目标 ml */
@@ -92,19 +85,6 @@ export const useSettingsStore = create<SettingsState>()(
       profileName: '修者',
       theme: 'dark',
       layoutMode: 'auto',
-      mobileTabs: [...DEFAULT_MOBILE_TABS],
-      setMobileTab: (index, id) =>
-        set((s) => {
-          const next = [...s.mobileTabs]
-          if (index < 0 || index >= next.length) return {}
-          const existing = next.indexOf(id)
-          if (existing === index) return {}
-          // 已在别格 → 两格互换，避免同一板块占两个位置、又凭空少一个入口
-          if (existing >= 0) next[existing] = next[index]
-          next[index] = id
-          return { mobileTabs: next }
-        }),
-      resetMobileTabs: () => set({ mobileTabs: [...DEFAULT_MOBILE_TABS] }),
       onboarded: false,
       waterGoalMl: 2000,
       pomodoroFocusMin: 25,

@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { Bot, Box, Cpu, FileText, Hammer, Plug, Plus, Power, Search, Sparkles, Trash2, Workflow } from 'lucide-react'
 import { useAIResourceStore } from '../stores/useAIStore'
 import { useInspectorStore } from '../components/inspector/Inspector'
-import { AITasks } from '../components/ai/AITasks'
+import { useAIChatStore } from '../components/ai/AiChatPanel'
 import type { AIResource, AIResourceType } from '../types/entities'
 import { createId } from '../utils/id'
 import { cn } from '../utils/cn'
@@ -154,12 +154,17 @@ export function AIPage() {
       {/* 页头 */}
       <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
         <div>
-          <h1 className="scribal-title text-3xl text-ink-bright">AI 工作台</h1>
-          <p className="scribal mt-1.5 text-base text-ink-muted">工欲善其事，必先利其器</p>
+          <h1 className="scribal-title text-3xl text-ink-bright">术 · 能力库</h1>
+          <p className="scribal mt-1.5 text-base text-ink-muted">模型 · Tool · Skill · Agent，登记即用</p>
         </div>
-        <Button variant="primary" size="sm" onClick={() => openNew()}>
-          <Plus size={14} /> 登记能力
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => useAIChatStore.getState().setOpen(true)}>
+            <Bot size={14} /> 打开天机
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => openNew()}>
+            <Plus size={14} /> 登记能力
+          </Button>
+        </div>
       </div>
 
       {/* 分类顶部条（带计数）：手机上 4 列过挤，改为 2 行 × 3/4 列的紧凑网格 */}
@@ -325,8 +330,7 @@ export function AIPage() {
         </div>
       )}
 
-      {/* AI 任务：一键生成简报/计划/摘要 */}
-      <AITasks />
+      {/* AI 任务已收编入「天机」：对话底部快捷能力一键运行，见 AiChatPanel */}
 
       <Dialog
         open={open}

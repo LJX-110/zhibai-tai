@@ -15,7 +15,6 @@ import {
   Pencil,
   Eye,
 } from 'lucide-react'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useCourseStore, useExamStore, useHomeworkStore } from '../stores/useStudyStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
 import { usePomodoroTimerStore } from '../stores/usePomodoroTimerStore'
@@ -50,7 +49,7 @@ import {
   type WeeksForm,
   type WeeksMode,
 } from '../services/study'
-import type { Course, Exam, Homework, PomodoroSession, Task, WeeklySlot } from '../types/entities'
+import type { Course, Exam, Homework, PomodoroSession, WeeklySlot } from '../types/entities'
 import { cn } from '../utils/cn'
 
 /**
@@ -105,12 +104,7 @@ export function StudyPage() {
         ) : (
           <TimetableTab onGoCourse={() => setManagingCourses(true)} onQuickAdd={openQuickAdd} />
         ))}
-      {tab === 'focus' && (
-        <>
-          <PomodoroTab />
-          <StudyStatsTab />
-        </>
-      )}
+      {tab === 'focus' && <PomodoroTab />}
       {tab === 'homework' && <HomeworkTab />}
       {tab === 'exam' && <ExamTab />}
     </div>
@@ -513,7 +507,7 @@ function PomodoroTab() {
   const assocLabel = { none: '普通', task: '任务', course: '课程', project: '项目' }[assoc]
 
   return (
-    <Section title="番茄钟" hint="专注记录 Session，供道行「学」维计算">
+    <Section title="番茄钟" hint="专注计时 · 逐日统计">
       <div className="flex flex-col items-center gap-5 rounded-paper border border-line p-6 sm:flex-row sm:justify-between">
         <div className="text-center">
           <div className={cn('tabular display text-5xl font-semibold tabular-nums', mode === 'focus' ? 'text-ink' : 'text-ink-muted')}>
@@ -522,28 +516,25 @@ function PomodoroTab() {
           <div className="mt-1 text-xs tracking-[0.3em] text-ink-faint">
             {mode === 'focus' ? '专注' : '休整'} · {mode === 'focus' ? focusMin : breakMin} 分钟
           </div>
-          {/* 关联选择（仅专注开始前） */}
+          {/* 关联选择（仅专注开始前，紧凑双层选择替代 pill+下拉） */}
           {!running && mode === 'focus' && (
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-              <div className="switch-pill flex gap-1 rounded-tile p-0.5">
-                {(['none', 'task', 'course', 'project'] as const).map((k) => (
-                  <button
-                    key={k}
-                    onClick={() => timer.setAssoc(k, '')}
-                    className={cn(
-                      'rounded-control px-2 py-0.5 text-xs transition-colors',
-                      assoc === k ? 'bg-paper text-ink' : 'text-ink-muted',
-                    )}
-                  >
-                    {k === 'none' ? '普通' : k === 'task' ? '任务' : k === 'course' ? '课程' : '项目'}
-                  </button>
-                ))}
-              </div>
+              <Select
+                value={assoc}
+                onChange={(e) => timer.setAssoc(e.target.value as 'none' | 'task' | 'course' | 'project', '')}
+                className="!w-auto !py-1 text-xs"
+                aria-label="关联类型"
+              >
+                <option value="none">此段专注 · 无关联</option>
+                <option value="task">关联任务</option>
+                <option value="course">关联课程</option>
+                <option value="project">关联项目</option>
+              </Select>
               {assoc !== 'none' && (
                 <Select
                   value={assocId}
                   onChange={(e) => timer.setAssoc(assoc, e.target.value)}
-                  className="!w-auto !py-1 text-xs"
+                  className="!w-auto !max-w-[140px] !py-1 text-xs"
                   aria-label="关联对象"
                 >
                   <option value="">选择{assocLabel}</option>
@@ -579,13 +570,13 @@ function PomodoroTab() {
             {todayFocusMin} <span className="text-sm font-normal text-ink-faint">分钟</span>
           </div>
           <div className="mt-1 text-xs text-ink-faint">
-            {todaySessions.length} 段 · {assoc !== 'none' ? `本次关联：${assocLabel}` : '普通'}
+            {todaySessions.length} 段{assoc !== 'none' ? ` · 关联：${assocLabel}` : ''}
           </div>
         </div>
       </div>
 
-      {/* 统计：今日/本周/本月 + 分布 */}
-      <PomodoroStats sessions={sessions} tasks={tasks} courses={courses} />
+      {/* 统计：今日/本周/本月/最长 */}
+      <PomodoroStats sessions={sessions} />
 
       <div className="mt-5">
         {todaySessions.length > 0 ? (
@@ -611,16 +602,8 @@ function PomodoroTab() {
   )
 }
 
-/** 番茄钟统计：今日/本周/本月 + 任务/课程分布 */
-function PomodoroStats({
-  sessions,
-  tasks,
-  courses,
-}: {
-  sessions: PomodoroSession[]
-  tasks: Task[]
-  courses: Course[]
-}) {
+/** 番茄钟统计：今日 / 本周 / 本月 / 最长 —— 四个数字一张卡，别的交给天机 */
+function PomodoroStats({ sessions }: { sessions: PomodoroSession[] }) {
   const today = todayISO()
   const now = new Date()
   const monday = new Date(now)
@@ -637,50 +620,12 @@ function PomodoroStats({
   const month = focus.filter(inRange(monthStart))
   const longest = Math.max(0, ...focus.map((s) => s.durationMin))
 
-  // 任务分布
-  const taskDist = new Map<string, number>()
-  for (const s of focus) {
-    if (s.taskId) taskDist.set(s.taskId, (taskDist.get(s.taskId) ?? 0) + s.durationMin)
-  }
-  const courseDist = new Map<string, number>()
-  for (const s of focus) {
-    if (s.courseId) courseDist.set(s.courseId, (courseDist.get(s.courseId) ?? 0) + s.durationMin)
-  }
-
   return (
     <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
       <MiniStat label="今日" value={`${sum(day)}`} unit="分钟" />
       <MiniStat label="本周" value={`${sum(week)}`} unit="分钟" />
       <MiniStat label="本月" value={`${sum(month)}`} unit="分钟" />
       <MiniStat label="最长" value={`${longest}`} unit="分钟" />
-      <div className="col-span-2 rounded-paper bg-raised px-3 py-2">
-        <div className="mb-1 text-[11px] text-ink-muted">任务分布</div>
-        {taskDist.size > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {[...taskDist.entries()].slice(0, 4).map(([id, min]) => (
-              <span key={id} className="seal seal--plain">
-                {(tasks.find((t) => t.id === id)?.title ?? '任务').slice(0, 8)} · {min}m
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[11px] text-ink-faint">暂无关联任务的专注</p>
-        )}
-      </div>
-      <div className="col-span-2 rounded-paper bg-raised px-3 py-2">
-        <div className="mb-1 text-[11px] text-ink-muted">课程分布</div>
-        {courseDist.size > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {[...courseDist.entries()].slice(0, 4).map(([id, min]) => (
-              <span key={id} className="seal seal--active">
-                {(courses.find((c) => c.id === id)?.name ?? '课程').slice(0, 8)} · {min}m
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[11px] text-ink-faint">暂无关联课程的专注</p>
-        )}
-      </div>
     </div>
   )
 }
@@ -1256,149 +1201,5 @@ function ExamTab() {
         </div>
       </Dialog>
     </Section>
-  )
-}
-
-/* ---------------- 学习统计 ---------------- */
-
-function StudyStatsTab() {
-  const courses = useCourseStore((s) => s.items)
-  const homeworks = useHomeworkStore((s) => s.items)
-  const exams = useExamStore((s) => s.items)
-  const sessions = usePomodoroStore((s) => s.items)
-  const today = todayISO()
-
-  const totalCredit = courses.reduce((s, c) => s + c.credit, 0)
-  const todayFocus = sessions
-    .filter((s) => s.type === 'focus' && s.startAt.startsWith(today))
-    .reduce((s, x) => s + x.durationMin, 0)
-  const undone = homeworks.filter((h) => !h.done).length
-
-  // 本周专注（周一为起点）
-  const weekFocus = useMemo(() => {
-    const now = new Date()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
-    const start = new Date(monday).setHours(0, 0, 0, 0)
-    return sessions
-      .filter((s) => s.type === 'focus' && new Date(s.startAt).getTime() >= start)
-      .reduce((sum, s) => sum + s.durationMin, 0)
-  }, [sessions])
-
-  // 近 30 天专注趋势（与财务页月度趋势同一图表语言）
-  const trend30 = useMemo(() => {
-    const out: { label: string; minutes: number }[] = []
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      out.push({
-        label: `${d.getMonth() + 1}/${d.getDate()}`,
-        minutes: sessions
-          .filter((s) => s.type === 'focus' && s.startAt.startsWith(key))
-          .reduce((a, s) => a + s.durationMin, 0),
-      })
-    }
-    return out
-  }, [sessions])
-
-  return (
-    <Section title="学习统计">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatBox label="总学分" value={`${totalCredit}`} unit="分" />
-        <StatBox label="今日专注" value={`${todayFocus}`} unit="分钟" />
-        <StatBox label="本周专注" value={`${weekFocus}`} unit="分钟" />
-        <StatBox label="未交作业" value={`${undone}`} unit="项" />
-      </div>
-
-      <div className="mt-5">
-        <div className="section-title text-sm">
-          <span className="display">近 30 天专注</span>
-          <span className="hint">分钟 / 日</span>
-        </div>
-        <div className="h-40 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={trend30} margin={{ top: 8, right: 8, bottom: 0, left: -22 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--color-ink-faint)' }} axisLine={{ stroke: 'var(--color-line)' }} tickLine={false} interval={4} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--color-ink-faint)' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip contentStyle={{ background: 'var(--color-paper)', border: '1px solid var(--color-line-strong)', borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="minutes" name="专注分钟" fill="var(--color-teal)" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <div className="section-title text-sm">
-          <span className="display">课程 · 学分</span>
-          <span className="hint">{courses.length} 门</span>
-        </div>
-        {courses.length > 0 ? (
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-xs text-ink-faint">
-                <th className="py-2 pr-3 font-normal">课程</th>
-                <th className="py-2 pr-3 font-normal">学分</th>
-                <th className="py-2 pr-3 font-normal">排课</th>
-                <th className="py-2 font-normal">未交作业</th>
-              </tr>
-            </thead>
-            <tbody>
-              {courses.map((c) => (
-                <tr key={c.id} className="border-b border-line/60">
-                  <td className="py-2 pr-3 font-medium text-ink">{c.name}</td>
-                  <td className="tabular py-2 pr-3 text-ink">{c.credit}</td>
-                  <td className="py-2 pr-3 text-xs text-ink-muted">
-                    {c.schedule?.length > 0
-                      ? c.schedule?.map((s) => `周${['日','一','二','三','四','五','六'][s.weekday]}${s.start}`).join(' · ')
-                      : '—'}
-                  </td>
-                  <td className="tabular py-2 text-ink">
-                    {homeworks.filter((h) => h.courseId === c.id && !h.done).length}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <EmptyState title="暂无课程" desc="添加课程后统计学分与排课" />
-        )}
-      </div>
-
-      {exams.length > 0 && (
-        <div className="mt-5">
-          <div className="section-title text-sm">
-            <span className="display">即将到来的考试</span>
-          </div>
-          <div>
-            {exams
-              .filter((e) => e.date >= today)
-              .sort((a, b) => a.date.localeCompare(b.date))
-              .slice(0, 5)
-              .map((e) => (
-                <div key={e.id} className="row">
-                  <span className="tabular text-xs text-ink-faint">{friendlyDate(e.date)}</span>
-                  <span className="flex-1 text-sm text-ink">{e.title}</span>
-                  {courses.find((c) => c.id === e.courseId) && (
-                    <Badge tone="plain">{courses.find((c) => c.id === e.courseId)?.name}</Badge>
-                  )}
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-    </Section>
-  )
-}
-
-function StatBox({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return (
-    <div className="rounded-paper bg-raised px-4 py-3">
-      <div className="text-[11px] text-ink-muted">{label}</div>
-      <div className="mt-0.5">
-        <span className="display tabular text-xl font-semibold text-ink">{value}</span>
-        <span className="ml-1 text-xs text-ink-faint">{unit}</span>
-      </div>
-    </div>
   )
 }

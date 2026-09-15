@@ -295,6 +295,9 @@ export interface Purchase {
   date: string
   url?: string
   note?: string
+  /** 状态：want=想买（清单）· ordered=已下单/等快递 · done=已到手。
+   *  记录「准备买的东西」与取件进度，缺省视为想买。 */
+  status?: 'want' | 'ordered' | 'done'
   /** 来源流水 id（由财页「购买」自动生成时记录；编辑流水取消购买可据此联动清理） */
   financeId?: string
   createdAt: string

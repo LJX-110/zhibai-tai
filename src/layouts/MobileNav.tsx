@@ -1,5 +1,5 @@
 /**
- * MobileWorkspace 导航 —— 顶部状态 + 底部导航（可配置 4 格 + 更多）
+ * MobileWorkspace 导航 —— 顶部状态 + 底部导航（固定 4 格 + 更多）
  * 触控目标 ≥44px；底部标签带编号
  * 视觉：顶栏/底栏/更多抽屉与桌面侧栏同一语言（var(--sidebar)，
  * 浅色黛蓝 / 深色绛红），内容区保持宣纸白，主次分明
@@ -10,8 +10,8 @@ import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import {
   ALL_SECTIONS,
+  DEFAULT_MOBILE_TABS,
   NAV_SECTIONS,
-  normalizeMobileTabs,
   navSectionOf,
   type NavSection,
   type SectionId,
@@ -107,16 +107,16 @@ export function MobileHeader() {
 export function MobileNav() {
   const section = useAppStore((s) => s.section)
   const setSection = useAppStore((s) => s.setSection)
-  const mobileTabs = useSettingsStore((s) => s.mobileTabs)
   const setAIChatOpen = useAIChatStore((s) => s.setOpen)
   const [moreOpen, setMoreOpen] = useState(false)
 
-  /** 底栏常驻板块：以设置为准（规范化后一定满 4 格） */
+  /** 底栏常驻板块：固定 4 格（观 · 行 · 财 · 情），第 5 格恒为「更多」。
+   *  刻意不再做可配置：底栏是高频入口，配置越多越乱，其余板块统一收进抽屉。 */
   const tabs: NavSection[] = useMemo(() => {
-    return normalizeMobileTabs(mobileTabs)
-      .map((id) => NAV_SECTIONS.find((s) => s.id === id))
-      .filter((s): s is NavSection => Boolean(s))
-  }, [mobileTabs])
+    return DEFAULT_MOBILE_TABS.map((id) => NAV_SECTIONS.find((s) => s.id === id)).filter(
+      (s): s is NavSection => Boolean(s),
+    )
+  }, [])
 
   /** 「更多」抽屉：全部板块里未上底栏的那些（含系统） */
   const moreSections = useMemo(() => {
@@ -191,7 +191,7 @@ export function MobileNav() {
       {/* 更多抽屉（与侧栏同色系） */}
       <Sheet open={moreOpen} onClose={() => setMoreOpen(false)} title="更多空间" tone="sidebar">
         <div className="space-y-2">
-          {/* AI 问问：全局对话入口（抽屉常驻首位，不随板块配置变化） */}
+          {/* 天机：AI 总入口（抽屉常驻首位，不随板块配置变化） */}
           <button
             onClick={() => {
               setMoreOpen(false)
@@ -203,9 +203,9 @@ export function MobileNav() {
               <Bot size={14} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="display block text-base font-semibold text-on-sidebar">AI 问问</span>
+              <span className="display block text-base font-semibold text-on-sidebar">天机</span>
               <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">
-                问任务 / 课程 / 情报 / 收支
+                问 · 简报 · 计划 · 摘要
               </span>
             </span>
           </button>

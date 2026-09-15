@@ -9,7 +9,7 @@ import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { categoryNames, useCategoryStore } from '../../stores/useCategoryStore'
 import { useResolvedLayout } from '../../layouts/useResolvedLayout'
-import { PROVIDER_CATALOG, fetchFromSource, testSource } from '../../services/intelligence/providers/registry'
+import { fetchFromSource, testSource } from '../../services/intelligence/providers/registry'
 import { classifyFetchError, type FetchErrorInfo } from '../../services/intelligence/providers/scraper'
 import { initIntelAutoFetch } from '../../services/intelligence/auto'
 import type { IntelligenceItem, IntelligenceProviderId, IntelligenceSource } from '../../types/entities'
@@ -387,29 +387,6 @@ export function SourceManager() {
           </div>
         )}
       </Dialog>
-
-      {/* 推荐来源目录 */}
-      <div className="mt-4">
-        <div className="section-title text-sm">
-          <span className="display">推荐来源</span>
-          <span className="hint">本地 Provider Catalog · 点击即添加</span>
-        </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {PROVIDER_CATALOG.map((p) => (
-            <button
-              key={`${p.name}-${p.config ?? ''}`}
-              onClick={() => openNew(p)}
-              className="rounded-paper border border-line p-3 text-left transition-colors hover:border-line-strong"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium text-ink">{p.name}</span>
-                <Badge tone="plain">{PROVIDER_LABEL[p.provider]}</Badge>
-              </div>
-              <div className="mt-0.5 text-[11px] text-ink-muted">{p.desc}</div>
-            </button>
-          ))}
-        </div>
-      </div>
 
       <Dialog
         open={open}

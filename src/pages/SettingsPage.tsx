@@ -9,7 +9,6 @@ import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import type { SyncInterval } from '../stores/useSettingsStore'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
-import { NAV_SECTIONS, normalizeMobileTabs, type SectionId } from '../app/navigation'
 import { APP_VERSION } from '../app/version'
 import { seedAllCategories } from '../stores/useCategoryStore'
 import { db } from '../db/db'
@@ -291,31 +290,23 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="移动端底栏">
-        <div className="grid max-w-lg gap-2 sm:grid-cols-2">
-          {normalizeMobileTabs(settings.mobileTabs).map((id, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="tabular w-11 shrink-0 text-[11px] text-ink-faint">第 {i + 1} 格</span>
-              <Select
-                value={id}
-                onChange={(e) => settings.setMobileTab(i, e.target.value as SectionId)}
-                aria-label={`第 ${i + 1} 格板块`}
-                className="!py-1.5 text-sm"
-              >
-                {NAV_SECTIONS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.index} {s.label} · {s.desc}
-                  </option>
-                ))}
-              </Select>
-            </div>
+      <Section title="布局模式" hint={`当前：${resolved === 'desktop' ? '桌面工作台' : '移动终端'}`}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {LAYOUT_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => settings.set({ layoutMode: o.value })}
+              className={cn(
+                'rounded-paper border p-4 text-left transition-colors',
+                settings.layoutMode === o.value
+                  ? 'border-cinnabar/50 bg-cinnabar/5'
+                  : 'border-line hover:border-line-strong',
+              )}
+            >
+              <div className="display text-sm font-semibold text-ink">{o.label}</div>
+              <div className="mt-1 text-[11px] leading-relaxed text-ink-muted">{o.desc}</div>
+            </button>
           ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="tertiary" onClick={() => settings.resetMobileTabs()}>
-            恢复默认
-          </Button>
-          <span className="text-[11px] text-ink-faint">第 5 格固定为「更多」，其余板块都在抽屉里</span>
         </div>
       </Section>
 
@@ -492,27 +483,6 @@ export function SettingsPage() {
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">需浏览器授权，可随时关闭</p>
           </div>
-        </div>
-      </Section>
-
-
-      <Section title="布局模式" hint={`当前：${resolved === 'desktop' ? '桌面工作台' : '移动终端'}`}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {LAYOUT_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => settings.set({ layoutMode: o.value })}
-              className={cn(
-                'rounded-paper border p-4 text-left transition-colors',
-                settings.layoutMode === o.value
-                  ? 'border-cinnabar/50 bg-cinnabar/5'
-                  : 'border-line hover:border-line-strong',
-              )}
-            >
-              <div className="display text-sm font-semibold text-ink">{o.label}</div>
-              <div className="mt-1 text-[11px] leading-relaxed text-ink-muted">{o.desc}</div>
-            </button>
-          ))}
         </div>
       </Section>
 

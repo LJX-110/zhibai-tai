@@ -69,30 +69,11 @@ export function navSectionOf(id: SectionId): NavSection {
   return ALL_SECTIONS.find((s) => s.id === id) ?? ALL_SECTIONS[0]
 }
 
-/** 移动端底栏槽位：4 个可配置 + 1 个固定「更多」 */
-export const MOBILE_TAB_SLOTS = 4
-
-/** 底栏默认常驻板块（第 5 格固定为「更多」）—— 观 · 行 · 学 · 情 */
+/** 移动端底栏固定 4 格 + 1 个固定「更多」（不再可配置，见 MobileNav）
+ *  精简原则：底栏只留最高频的四板，修/学/藏/奇/术都收进「更多」抽屉（含系统）。 */
 export const DEFAULT_MOBILE_TABS: SectionId[] = [
   'overview',
   'action',
-  'study',
+  'finance',
   'intelligence',
 ]
-
-/**
- * 规范化底栏板块：剔除失效 id、去重、不足 4 个用默认清单补齐（仍不够再按导航顺序补）。
- * 设置项是持久化的，升级或手改后可能残留无效值，这里兜底以免底栏塌成空格。
- */
-export function normalizeMobileTabs(ids: readonly SectionId[] | undefined): SectionId[] {
-  const valid = new Set(NAV_SECTIONS.map((s) => s.id))
-  const out: SectionId[] = []
-  for (const id of ids ?? []) {
-    if (valid.has(id) && !out.includes(id)) out.push(id)
-  }
-  for (const fallback of [...DEFAULT_MOBILE_TABS, ...NAV_SECTIONS.map((s) => s.id)]) {
-    if (out.length >= MOBILE_TAB_SLOTS) break
-    if (!out.includes(fallback)) out.push(fallback)
-  }
-  return out.slice(0, MOBILE_TAB_SLOTS)
-}

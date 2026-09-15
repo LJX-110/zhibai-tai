@@ -12,10 +12,8 @@ import { useFollowStore } from '../stores/useLifeStores'
 import { dedupeKey } from '../components/source/SourceManager'
 import {
   fetchAllFromSources,
-  fetchFromSource,
   type SourceFetchFailure,
 } from '../services/intelligence/providers/registry'
-import { classifyFetchError } from '../services/intelligence/providers/scraper'
 import { saveFetchedItems } from '../services/intelligence/retention'
 import { aiService } from '../services/ai/ai-service'
 import { useInspectorStore } from '../components/inspector/Inspector'
@@ -252,13 +250,11 @@ function FeedActions({
 
 export function IntelligencePage() {
   const items = useIntelligenceStore((s) => s.items)
-  const sources = useSourceStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
   const intelCategoryRows = useCategoryStore((s) => s.items)
   // 分类来自业务表（跨设备同步）；派生结果在组件体内算，避免 selector 生成新引用
   const intelCategories = useMemo(() => categoryNames(intelCategoryRows, 'intel'), [intelCategoryRows])
   const toast = useToast().toast
-  const [provider, setProvider] = useState('all')
   const [tab, setTab] = useState('全部')
   const [category, setCategory] = useState('全部')
   const [sourceType, setSourceType] = useState<SourceType | 'all'>('all')
@@ -325,23 +321,9 @@ export function IntelligencePage() {
       let fresh: IntelligenceItem[] = []
       let failures: SourceFetchFailure[] = []
 
-      if (provider === 'all') {
-        const res = await fetchAllFromSources(sourceList)
-        fresh = res.items
-        failures = res.failures
-      } else {
-        const one = sourceList.find((s) => s.id === provider) ?? sourceList[0]
-        if (one) {
-          try {
-            fresh = await fetchFromSource(one)
-          } catch (e) {
-            const info = classifyFetchError(e)
-            failures = [
-              { sourceId: one.id, sourceName: one.name, kind: info.kind, message: info.message },
-            ]
-          }
-        }
-      }
+      const res = await fetchAllFromSources(sourceList)
+      fresh = res.items
+      failures = res.failures
 
       // 去重：source + externalId | url | title + date
       const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
@@ -440,14 +422,14 @@ export function IntelligencePage() {
    * （也是 oxlint 的 set-state-in-effect 规则所指的问题），
    * 而这个仓库已有同类写法（如 NoteEditor 的表单重置）。
    */
-  const filterKey = `${tab}|${provider}|${sourceType}|${category}|${time}|${onlyFav}|${onlyUnread}|${query}`
+  const filterKey = `${tab}|${sourceType}|${category}|${time}|${onlyFav}|${onlyUnread}|${query}`
   const [lastFilterKey, setLastFilterKey] = useState(filterKey)
   if (filterKey !== lastFilterKey) {
     setLastFilterKey(filterKey)
     setPageLimit(PAGE_SIZE)
   }
   const visible = useMemo(() => list.slice(0, pageLimit), [list, pageLimit])
-  /** 任一筛选生效即视为"有明确意图"：来源入口让位 */
+  /** 任一筛选生效即视为"有明确意图" */
   const filtersActive =
     tab !== '全部' ||
     sourceType !== 'all' ||
@@ -799,41 +781,6 @@ export function IntelligencePage() {
           </div>
         </div>
       </Dialog>
-
-      {/* 来源快捷入口（筛选激活时隐藏：此时用户意图明确，入口是噪音） */}
-      {sources.length > 0 && !filtersActive && (
-        <div className="mt-6 border-t border-line pt-4">
-          <div className="mb-2 text-[11px] tracking-[0.24em] text-ink-faint">情报源 · SOURCES</div>
-          <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1">
-            <button
-              onClick={() => setProvider('all')}
-              className={cn(
-                'shrink-0 rounded-tile border px-3 py-1.5 text-sm transition-colors',
-                provider === 'all'
-                  ? 'border-cinnabar/40 bg-cinnabar/5 text-cinnabar'
-                  : 'border-line text-ink-muted hover:border-line-strong hover:text-ink',
-              )}
-            >
-              全部源
-            </button>
-            {sources.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setProvider(s.id)}
-                className={cn(
-                  'shrink-0 rounded-tile border px-3 py-1.5 text-sm transition-colors',
-                  provider === s.id
-                    ? 'border-cinnabar/40 bg-cinnabar/5 text-cinnabar'
-                    : 'border-line text-ink-muted hover:border-line-strong hover:text-ink',
-                )}
-              >
-                {s.name}
-                {!s.enabled && <span className="ml-1 text-[10px] opacity-60">停</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
