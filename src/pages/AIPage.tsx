@@ -1,7 +1,6 @@
 /**
- * 术 —— AI Workshop（工作台感，非管理后台）
- * 顶部：Models / Tools / Skills / Agents / Plugins / Prompts / Workflows
- * 快速开始：添加第一个模型 / Skill / Agent / 导入 Prompt；空态也有完整结构
+ * 术 —— AI 能力库（同藏/情风格：登记即用，可启停/编辑/删除）
+ * AI 任务（简报/计划/摘要）已收编入「天机」，这里只做资源的登记与管理。
  */
 import { useState } from 'react'
 import { Bot, Box, Cpu, FileText, Hammer, Plug, Plus, Power, Search, Sparkles, Trash2, Workflow } from 'lucide-react'
@@ -17,6 +16,7 @@ import {
   Dialog,
   EmptyState,
   Input,
+  PageHeader,
   Select,
   Textarea,
   useToast,
@@ -53,7 +53,7 @@ const TYPE_ICON: Record<AIResourceType, typeof Bot> = {
   workflow: Workflow,
 }
 
-/** 快速开始（空态产品入口）—— 已精简：不必一张张铺开，一次「登记能力」即可开始 */
+/** 空态：一句引导 + 登记入口（不铺大排快速开始卡） */
 
 export function AIPage() {
   const resources = useAIResourceStore((s) => s.items)
@@ -145,21 +145,21 @@ export function AIPage() {
 
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
-      {/* 页头 */}
-      <div className="flex flex-wrap items-end justify-between gap-3 pb-5">
-        <div>
-          <h1 className="scribal-title text-3xl text-ink-bright">术 · 能力库</h1>
-          <p className="scribal mt-1.5 text-base text-ink-muted">模型 · Tool · Skill · Agent，登记即用</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => useAIChatStore.getState().setOpen(true)}>
-            <Bot size={14} /> 打开天机
-          </Button>
-          <Button variant="primary" size="sm" onClick={() => openNew()}>
-            <Plus size={14} /> 登记能力
-          </Button>
-        </div>
-      </div>
+      {/* 页头：与其它板块统一（PageHeader） */}
+      <PageHeader
+        title="术 · 能力库"
+        poem="模型 · Tool · Skill · Agent，登记即用"
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => useAIChatStore.getState().setOpen(true)}>
+              <Bot size={14} /> 打开天机
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => openNew()}>
+              <Plus size={14} /> 登记能力
+            </Button>
+          </div>
+        }
+      />
 
       {/* 分类顶部条（带计数）：手机上 4 列过挤，改为 2 行 × 3/4 列的紧凑网格 */}
       <div className="mb-4 grid grid-cols-4 gap-2 sm:grid-cols-7 max-[420px]:grid-cols-3">

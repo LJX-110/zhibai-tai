@@ -3,7 +3,7 @@
  * 成长页只留「今日五维道行 + 等级」单屏信息：历史曲线/月份明细这类
  * 沉重建图下沉到「观」首页需要时再看，这里不堆图表 —— 少即是多。
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Flame, Plus, Trash2 } from 'lucide-react'
 import { useHabitLogStore, useHabitStore } from '../stores/useHabitStore'
 import { useBodyMetricLogStore, useBodyMetricStore } from '../stores/useBodyStore'
@@ -11,6 +11,7 @@ import { useWaterStore } from '../stores/useWaterStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useTodayStats } from '../hooks/useTodayStats'
 import { computeCultivation, cultivationGrade } from '../services/cultivation'
+import { playSound } from '../services/sound'
 import { recordActivity } from '../services/activity'
 import {
   Button,
@@ -477,6 +478,14 @@ function GrowthTab() {
     [stats],
   )
   const grade = cultivationGrade(cultivation.total)
+  // 等级提升音效：缓存上次渲染的等级标题，首次进入不播，真的升级才响
+  const prevGradeRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevGradeRef.current && prevGradeRef.current !== grade.title && grade.title !== '初窥门径') {
+      playSound('levelup')
+    }
+    prevGradeRef.current = grade.title
+  }, [grade.title])
 
   return (
     <div className="space-y-3">

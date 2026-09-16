@@ -52,10 +52,10 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string; icon: type
 
 /** AI Provider 预设：一键填 baseUrl+model（OpenAI 兼容协议），
  *  拿到 Agnes API 信息后点预设 → 填 Key → 测试连接即可用。
- *  Agnes 模型名以服务端实际返回为准（实测当前为 agnes-2.5-pro-alpha，
- *  旧名 agnes-2.5-flash 已下线；填错模型名时测试连接会直接报错）。 */
+ *  默认模型保持 agnes-2.5-flash（用户实测可用）；若测试连接报模型不存在，
+ *  可到 Agnes 后台 /v1/models 查看最新模型名后手动填写。 */
 const AI_PRESETS: { name: string; baseUrl: string; model: string }[] = [
-  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-pro-alpha' },
+  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash' },
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
   { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },

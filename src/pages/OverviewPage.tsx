@@ -1,6 +1,6 @@
 /**
- * 观 —— 知白台首页（今日炁象 + 今日案台 + AI 今日简报）
- * 打开即知今天：四维状态（非堆数字）→ 今日任务/课程/到期 → AI 一句话简报
+ * 观 —— 知白台首页（今日炁象 + 今日案台）
+ * 打开即知今天：四维状态（非堆数字）→ 今日任务/课程/到期 → 天机入口（简报/问答在天机）
  */
 import { useMemo, useState } from 'react'
 import { ArrowRight, Bell, CheckCircle2, Plus, Sparkles } from 'lucide-react'

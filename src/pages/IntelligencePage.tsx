@@ -22,7 +22,7 @@ import { IntelTidy } from '../components/intelligence/IntelTidy'
 import type { IntelligenceItem, SourceType } from '../types/entities'
 import { diffDays, formatHM, friendlyDate } from '../utils/id'
 import { cn } from '../utils/cn'
-import { Badge, Button, Dialog, EmptyState, Input, Select, Tooltip, useToast } from '../components/ui'
+import { Badge, Button, Dialog, EmptyState, Input, PageHeader, Select, Tooltip, useToast } from '../components/ui'
 const SOURCE_OPTIONS: { value: SourceType | 'all'; label: string }[] = [
   { value: 'all', label: '全部来源' },
   { value: 'bilibili', label: 'B 站' },
@@ -422,20 +422,20 @@ export function IntelligencePage() {
 
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
-      {/* 页头 */}
-      <div className="flex flex-wrap items-end justify-between gap-3 pb-4 md:pb-5">
-        <div>
-          <h1 className="scribal-title text-2xl text-ink-bright md:text-3xl">情 · 汇流</h1>
-          <p className="scribal mt-1 text-sm text-ink-muted md:mt-1.5 md:text-base">世事洞明皆学问</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <IntelTidy />
-          <Button variant="primary" size="sm" onClick={fetchIntelligence} disabled={loading}>
-            <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
-            {loading ? '拉取中…' : '拉取情报'}
-          </Button>
-        </div>
-      </div>
+      {/* 页头：与其它板块统一（PageHeader 含符箓/题跋动效） */}
+      <PageHeader
+        title="情 · 汇流"
+        poem="世事洞明皆学问"
+        action={
+          <div className="flex items-center gap-2">
+            <IntelTidy />
+            <Button variant="primary" size="sm" onClick={fetchIntelligence} disabled={loading}>
+              <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
+              {loading ? '拉取中…' : '拉取情报'}
+            </Button>
+          </div>
+        }
+      />
 
       {/* 抓取失败报告：失败原因、以及「要不要去配代理」一眼可见 */}
       {fetchReport && fetchReport.failures.length > 0 && (

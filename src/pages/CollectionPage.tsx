@@ -468,7 +468,7 @@ export function CollectionPage() {
           {/* 两个下拉此前没有任何标签，窄屏上分不清哪个是哪个 —— 显式标注「类型=介质 / 分类=用途」 */}
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-[11px] text-ink-faint">类型 · 这是什么</span>
+              <span className="mb-1 block text-[11px] text-ink-faint">介质</span>
               <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CollectionType })}>
                 {TYPE_ORDER.map((t) => (
                   <option key={t} value={t}>{TYPE_LABEL[t]}</option>
@@ -476,7 +476,7 @@ export function CollectionPage() {
               </Select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-[11px] text-ink-faint">分类 · 拿它做什么</span>
+              <span className="mb-1 block text-[11px] text-ink-faint">用途</span>
               <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 <option value="">不分类</option>
                 {collectionCategories.filter((c) => c !== '其他').map((c) => (

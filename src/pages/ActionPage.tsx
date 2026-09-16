@@ -4,7 +4,7 @@
  * 保数据、保功能，只清结构。
  */
 import { useMemo, useState } from 'react'
-import { CheckCircle2, ListPlus, Pencil, Pin, Plus, Search, Trash2 } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ListPlus, Pencil, Pin, Plus, Search, Trash2 } from 'lucide-react'
 import { useTaskStore } from '../stores/useTaskStore'
 import { useNoteStore } from '../stores/useNoteStore'
 import { useTaskActions } from '../hooks/useTaskActions'
@@ -86,6 +86,7 @@ function TodoTab() {
   const editor = useTaskEditor()
   const [query, setQuery] = useState('')
   const [showDone, setShowDone] = useState(false)
+  const [showMonthly, setShowMonthly] = useState(false)
   const [quick, setQuick] = useState('')
   const today = todayISO()
 
@@ -204,24 +205,33 @@ function TodoTab() {
         <p className="py-3 text-xs text-ink-faint">今日暂无待办，可点右上「添加」</p>
       )}
 
-      {/* 每月固定提醒 */}
+      {/* 每月固定提醒（次级：折叠展开，不占主列表视觉权重） */}
       {monthly.length > 0 && (
-        <div className="mt-5">
-          <div className="section-title text-sm">
-            <span className="scribal text-base text-bronze">每月固定</span>
-            <span className="hint">每月这天提醒你 · {monthly.length} 项</span>
-          </div>
-          <div>
-            {monthly.map((t) => (
-              <TaskItem
-                key={t.id}
-                task={t}
-                onToggle={actions.toggle}
-                onEdit={editor.openEdit}
-                onDelete={actions.remove}
-              />
-            ))}
-          </div>
+        <div className="mt-6 border-t border-line pt-3">
+          <button
+            onClick={() => setShowMonthly((v) => !v)}
+            className="flex w-full items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink"
+            aria-expanded={showMonthly}
+          >
+            <span className="flex items-center gap-1.5">
+              <CalendarDays size={14} />
+              每月固定 {monthly.length} 项
+            </span>
+            <span className="ml-auto text-xs">{showMonthly ? '收起' : '展开'}</span>
+          </button>
+          {showMonthly && (
+            <div className="mt-2">
+              {monthly.map((t) => (
+                <TaskItem
+                  key={t.id}
+                  task={t}
+                  onToggle={actions.toggle}
+                  onEdit={editor.openEdit}
+                  onDelete={actions.remove}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
