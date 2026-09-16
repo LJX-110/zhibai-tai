@@ -42,10 +42,6 @@ export function CultivatePage() {
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader poem="苟日新，日日新" title="修 · 修身" />
-      {/* 术语通俗化：斩三尸=戒掉坏习惯，一句话讲清，不指望用户道教考据 */}
-      <p className="-mt-3 mb-3 hidden text-[11px] text-ink-faint sm:block">
-        斩三尸 · 戒掉一个坏习惯（游戏 / 刷屏 / 拖延…），逐日打卡
-      </p>
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       {tab === 'habit' && <HabitTab />}
       {tab === 'body' && <BodyTab />}
@@ -528,9 +524,6 @@ function GrowthTab() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
-          由完成待办、专注、饮水、斩三尸、身体记录、记录与创作逐日聚合，满分 100，每日自动重算。
-        </p>
       </Section>
     </div>
   )

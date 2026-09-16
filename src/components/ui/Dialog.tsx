@@ -95,7 +95,7 @@ export function Dialog({
   return createPortal(
     <div className="fixed inset-0 z-[var(--z-overlay)] flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_var(--ease-standard)]"
+        className="absolute inset-0 bg-ink/40 anim-fade"
         onClick={onClose}
       />
       <div
@@ -105,7 +105,7 @@ export function Dialog({
         aria-labelledby={title != null ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'talisman relative w-full max-w-md rounded-tile p-5 shadow-overlay animate-[page-fade_180ms_var(--ease-standard)] max-h-[85vh] overflow-y-auto focus:outline-none',
+          'talisman relative w-full max-w-md rounded-tile p-5 shadow-overlay anim-enter max-h-[85vh] overflow-y-auto focus:outline-none',
           className,
         )}
       >

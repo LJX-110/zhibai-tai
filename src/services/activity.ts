@@ -52,15 +52,3 @@ export async function recordActivity(input: RecordActivityInput): Promise<void> 
     })
   }
 }
-
-/** 按日期取活动（倒序） */
-export async function listActivities(limit = 30): Promise<{ timestamp: string; title: string; entityType: ActivityType; entityId: string; metadata?: string }[]> {
-  const items = await db.activityItems.orderBy('timestamp').reverse().limit(limit).toArray()
-  return items.map((i) => ({
-    timestamp: i.timestamp,
-    title: i.title,
-    entityType: i.entityType,
-    entityId: i.entityId,
-    metadata: i.metadata,
-  }))
-}

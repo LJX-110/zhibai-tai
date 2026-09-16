@@ -138,10 +138,3 @@ const HEX_MAP = new Map(HEXAGRAMS.map((h) => [h.key, h]))
 /** 按上下卦取卦 */
 export const hexagramOf = (upper: Trigram, lower: Trigram): HexagramInfo =>
   HEX_MAP.get(hexKey(upper.key, lower.key)) ?? HEXAGRAMS[0]
-
-/** 按六爻线数组取卦（自下而上，供六爻复用） */
-export const hexagramByLines = (lines: number[]): HexagramInfo => {
-  const lower = trigramByLines([lines[0] ?? 0, lines[1] ?? 0, lines[2] ?? 0])
-  const upper = trigramByLines([lines[3] ?? 0, lines[4] ?? 0, lines[5] ?? 0])
-  return hexagramOf(upper, lower)
-}

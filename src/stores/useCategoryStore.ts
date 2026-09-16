@@ -93,12 +93,13 @@ export async function seedCategories(scope: CategoryScope): Promise<void> {
   )
 }
 
-/** 两个体系各自补齐默认分类（启动时调用一次；先纠偏旧 id 再播种） */
+/** 各体系各自补齐默认分类（启动时调用一次；先纠偏旧 id 再播种） */
 export async function seedAllCategories(): Promise<void> {
   // 纠正旧版随机 id 会造成"重复/删不掉/不同步"，必须在读取分类前收敛
   await migrateCategoryIds()
   await seedCategories('intel')
   await seedCategories('collection')
+  await seedCategories('ai')
   await migrateCollectionCategoryNames()
 }
 

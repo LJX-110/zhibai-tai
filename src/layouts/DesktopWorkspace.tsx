@@ -10,7 +10,7 @@ import { navSectionOf } from '../app/navigation'
 import { PageRouter } from '../app/PageRouter'
 import { DesktopSidebar } from './DesktopSidebar'
 import { FocusMode } from '../components/focus/FocusMode'
-import { CommandMenu, ThemeToggle, ToastViewport } from '../components/ui'
+import { CommandMenu, ToastViewport } from '../components/ui'
 import { Inspector, useInspectorStore } from '../components/inspector/Inspector'
 import { playSound } from '../services/sound'
 import { todayISO, weekdayCN } from '../utils/id'
@@ -18,8 +18,10 @@ import { cn } from '../utils/cn'
 
 export function DesktopWorkspace() {
   const section = useAppStore((s) => s.section)
+  const setSection = useAppStore((s) => s.setSection)
   const setFocusMode = useAppStore((s) => s.setFocusMode)
   const syncStatus = useSettingsStore((s) => s.syncStatus)
+  const lastSyncedAt = useSettingsStore((s) => s.lastSyncedAt)
   const inspectorOpen = useInspectorStore((s) => s.type != null)
   const current = navSectionOf(section)
   // 全局番茄钟芯片（任意页面可见可控）
@@ -46,7 +48,37 @@ export function DesktopWorkspace() {
               <h2 className="scribal-title text-2xl text-ink">{current.label}</h2>
             </div>
             <div className="flex items-center gap-2 text-xs text-ink-muted">
-              <ThemeToggle />
+              {/* 同步状态入口：点一下直达系统页（与手机顶栏同语义），未配置也看得见 */}
+              <button
+                onClick={() => setSection('system')}
+                title={
+                  syncStatus === 'error'
+                    ? '同步失败 · 点击查看'
+                    : lastSyncedAt
+                      ? `上次同步 ${new Date(lastSyncedAt).toLocaleString('zh-CN')} · 点击管理`
+                      : '尚未同步 · 点击配置'
+                }
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1.5 transition-colors',
+                  syncStatus === 'error'
+                    ? 'border-cinnabar/40 text-cinnabar hover:border-cinnabar/70'
+                    : 'border-line text-ink-muted hover:border-line-strong hover:text-ink',
+                )}
+              >
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 rounded-full',
+                    syncStatus === 'error'
+                      ? 'bg-cinnabar'
+                      : syncStatus === 'syncing'
+                        ? 'bg-bronze-bright animate-pulse'
+                        : lastSyncedAt
+                          ? 'bg-teal'
+                          : 'bg-ink-faint',
+                  )}
+                />
+                同步
+              </button>
               <span className="mono-meta hidden sm:inline">
                 {date} · 周{weekdayCN(now.getDay())} · {String(now.getHours()).padStart(2, '0')}:
                 {String(now.getMinutes()).padStart(2, '0')}

@@ -16,7 +16,7 @@ import {
   type NavSection,
   type SectionId,
 } from '../app/navigation'
-import { todayISO } from '../utils/id'
+import { weekdayCN } from '../utils/id'
 import { playSound } from '../services/sound'
 import { Sheet, useToast } from '../components/ui'
 import { useAIChatStore } from '../components/ai/AiChatPanel'
@@ -37,8 +37,10 @@ export function MobileHeader() {
   const section = useAppStore((s) => s.section)
   const setSection = useAppStore((s) => s.setSection)
   const current = navSectionOf(section)
-  const today = todayISO()
-  const [, , day] = today.split('-')
+  const now = new Date()
+  const month = now.getMonth() + 1
+  const day = now.getDate()
+  const week = weekdayCN(now.getDay())
   const syncStatus = useSettingsStore((s) => s.syncStatus)
   // 派生布尔在 selector 内计算（只返回原始值，不生成新引用）
   const syncConfigured = useSettingsStore((s) => isConfigured(s))
@@ -50,20 +52,13 @@ export function MobileHeader() {
     if (syncing) return
     if (!isSyncConfigured()) {
       setSection('system')
-      const s = useSettingsStore.getState()
-      const mode = s.syncMode ?? 'repo'
-      toast(
-        mode === 'gist'
-          ? '请先配置 Gist Token 与同步口令'
-          : '请先配置同步目标（仓库 + Token + 口令）',
-        'info',
-      )
+      toast('请先配置同步目标（仓库 + Token + 口令）', 'info')
       return
     }
     setSyncing(true)
     try {
-      const res = await runSync()
-      toast(res.message ?? '同步完成', 'success')
+      // 同步成功静默（顶栏圆点变绿即反馈），失败才弹
+      await runSync()
     } catch (e) {
       toast(`同步失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
     } finally {
@@ -95,7 +90,7 @@ export function MobileHeader() {
             )}
           />
         </button>
-        <span className="tabular hidden text-sm min-[360px]:inline">{day} 日</span>
+        <span className="tabular hidden whitespace-nowrap text-sm min-[360px]:inline">{month}月{day}日 · 周{week}</span>
         <button
           className="touch-target flex items-center justify-center rounded-tile hover:bg-white/10 hover:text-on-sidebar"
           aria-label="搜索"
@@ -211,7 +206,7 @@ export function MobileNav() {
             <span className="min-w-0 flex-1">
               <span className="display block text-base font-semibold text-on-sidebar">天机</span>
               <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">
-                问 · 简报 · 计划 · 摘要
+                AI 问答 · 一键简报
               </span>
             </span>
           </button>

@@ -23,7 +23,20 @@ const LAYOUTS: { value: LayoutMode; label: string; icon: typeof LayoutGrid; desc
   { value: 'auto', label: '自动', icon: Monitor, desc: '按宽度自适应' },
 ]
 
-const STEPS = ['迎', '色', '局', '水', '成']
+/** 九板块 + 天机 一览（入席前扫一眼，之后桌面侧栏/移动「更多」里还能随时找到） */
+const AREAS = [
+  ['观', '今日态势'],
+  ['行', '待办 日程'],
+  ['修', '修身 打卡'],
+  ['学', '课程 番茄'],
+  ['财', '收支 预算'],
+  ['藏', '收藏 项目'],
+  ['情', '情报 灵感'],
+  ['奇', '占问 抽签'],
+  ['术', 'AI 能力库'],
+] as const
+
+const STEPS = ['迎', '域', '色', '局', '水', '成']
 
 export function Onboarding() {
   const settings = useSettingsStore()
@@ -67,7 +80,7 @@ export function Onboarding() {
 
         <div className="text-center">
           {step === 0 && (
-            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
+            <div className="anim-enter">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-ink">
                 <Taiji size={36} />
               </div>
@@ -82,7 +95,25 @@ export function Onboarding() {
           )}
 
           {step === 1 && (
-            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
+            <div className="anim-enter">
+              <h2 className="display text-xl font-semibold text-ink">九个空间</h2>
+              <p className="mt-2 text-sm text-ink-muted">一行一域，各自安放；还有「天机」统领全局问答</p>
+              <div className="mx-auto mt-5 grid max-w-[340px] grid-cols-3 gap-2">
+                {AREAS.map(([c, d]) => (
+                  <div
+                    key={c}
+                    className="flex flex-col items-center gap-1 rounded-tile border border-line bg-raised px-2 py-2.5"
+                  >
+                    <span className="scribal text-base text-ink">{c}</span>
+                    <span className="text-[11px] text-ink-faint">{d}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="anim-enter">
               <h2 className="display text-xl font-semibold text-ink">选择主题</h2>
               <div className="mt-5 grid grid-cols-3 gap-3">
                 {THEMES.map((t) => (
@@ -105,8 +136,8 @@ export function Onboarding() {
             </div>
           )}
 
-          {step === 2 && (
-            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
+          {step === 3 && (
+            <div className="anim-enter">
               <h2 className="display text-xl font-semibold text-ink">选择布局</h2>
               <div className="mt-5 grid grid-cols-3 gap-3">
                 {LAYOUTS.map((l) => (
@@ -129,8 +160,8 @@ export function Onboarding() {
             </div>
           )}
 
-          {step === 3 && (
-            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
+          {step === 4 && (
+            <div className="anim-enter">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-teal/10">
                 <Droplet size={24} className="text-teal" />
               </div>
@@ -151,8 +182,8 @@ export function Onboarding() {
             </div>
           )}
 
-          {step === 4 && (
-            <div className="animate-[page-fade_240ms_var(--ease-standard)]">
+          {step === 5 && (
+            <div className="anim-enter">
               <div className="display text-4xl font-semibold text-ink">入席</div>
               <p className="mt-3 text-sm text-ink-muted">
                 案台已备，笔墨已研。从今天开始，安顿你的日常。

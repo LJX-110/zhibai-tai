@@ -1,0 +1,8 @@
+# Windows 下拉源码时保持脚本/workflow 为 LF，避免 autocrlf 改写破坏部署链路
+# 不启用 * text=auto，避免历史 CRLF 变体产生大规模 blob 重写
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf

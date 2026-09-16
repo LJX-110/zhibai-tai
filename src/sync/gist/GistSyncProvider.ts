@@ -77,7 +77,10 @@ export class GistSnapshotProvider {
   }
 
   async readSyncFile(): Promise<SyncFile | null> {
-    if (!this.gistId) return null // 尚未创建 → 视为远端为空
+    // 本地没有 gistId（从未同步 / 换设备 / 清缓存）时先自动找回，
+    // 否则两端用同一 Token 却各自读写自己的空 gist，数据永远互不可见
+    if (!this.gistId) await this.autoDiscover()
+    if (!this.gistId) return null // 仍未找到 → 视为远端为空
     try {
       const j = await this.request(`/${this.gistId}`)
       const files = j.files as Record<string, { content?: string }> | undefined
@@ -87,6 +90,30 @@ export class GistSnapshotProvider {
     } catch (e) {
       if (e instanceof Error && e.message.includes('404')) return null // gist 被删 → 视为空，可重建
       throw e
+    }
+  }
+
+  /** 按文件名在当前 Token 的 gist 列表里自动找回（幂等；失败不阻塞，回落到「无远端」） */
+  private async autoDiscover(): Promise<void> {
+    if (this.gistId) return
+    try {
+      const res = await proxyRequest(
+        `${GIST_API}?per_page=100`,
+        this.proxyUrl,
+        { method: 'GET', headers: this.headers() },
+      )
+      if (!res.ok) return
+      const list = JSON.parse(res.text) as unknown
+      if (!Array.isArray(list)) return
+      const hit = (list as { id: string; files?: Record<string, { filename?: string }> }[]).find(
+        (g) => g.files?.[FILE_NAME],
+      )
+      if (hit?.id) {
+        this.gistId = hit.id
+        this.onGistId(hit.id)
+      }
+    } catch {
+      /* 网络失败不阻塞：仍按「无远端」处理，推送时另行创建或手动关联 */
     }
   }
 

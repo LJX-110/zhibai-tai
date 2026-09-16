@@ -4,14 +4,17 @@
  * 预留：GitHub API 自动同步
  */
 import { useState } from 'react'
-import { ExternalLink, Pencil, Plus, Star, Trash2 } from 'lucide-react'
+import { ExternalLink, Eye, Pencil, Plus, Star, Trash2 } from 'lucide-react'
 import { useProjectStore } from '../../stores/useProjectStore'
+import { useTaskStore } from '../../stores/useTaskStore'
+import { useNoteStore } from '../../stores/useNoteStore'
 import { useInspectorStore } from '../inspector/Inspector'
 import { recordActivity } from '../../services/activity'
 import type { Project, ProjectStatus } from '../../types/entities'
 import { createId } from '../../utils/id'
 import { cn } from '../../utils/cn'
 import {
+  Badge,
   Button,
   Dialog,
   EmptyState,
@@ -29,6 +32,14 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
   maintaining: '维护',
   paused: '暂停',
   done: '完成',
+}
+
+const STATUS_TONE: Record<ProjectStatus, 'plain' | 'cinnabar' | 'bronze' | 'teal'> = {
+  planning: 'plain',
+  developing: 'cinnabar',
+  maintaining: 'teal',
+  paused: 'plain',
+  done: 'bronze',
 }
 
 const STATUS_ORDER: ProjectStatus[] = ['planning', 'developing', 'maintaining', 'paused', 'done']
@@ -61,6 +72,8 @@ const EMPTY: FormState = {
 
 export function ProjectList() {
   const projects = useProjectStore((s) => s.items)
+  const tasks = useTaskStore((s) => s.items)
+  const notes = useNoteStore((s) => s.items)
   const toast = useToast().toast
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all')
   const [open, setOpen] = useState(false)
@@ -138,6 +151,14 @@ export function ProjectList() {
       updatedAt: new Date().toISOString(),
     })
   }
+  /** 点里程碑切换完成态，并按其比例自动推进项目进度 */
+  const toggleMilestone = async (p: Project, id: string) => {
+    const milestones = p.milestones.map((m) =>
+      m.id === id ? { ...m, done: !m.done } : m,
+    )
+    const progress = Math.round((milestones.filter((m) => m.done).length / Math.max(1, milestones.length)) * 100)
+    await useProjectStore.getState().update(p.id, { milestones, progress, updatedAt: new Date().toISOString() })
+  }
 
   return (
     <Section
@@ -175,109 +196,106 @@ export function ProjectList() {
       </div>
 
       {list.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+        <div className="space-y-2">
           {list.map((p) => (
             <div
               key={p.id}
-              onClick={() => useInspectorStore.getState().open('project', p.id)}
-              className="group relative flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-tile border border-line bg-raised transition-all duration-fast hover:-translate-y-0.5 hover:shadow-soft active:scale-[0.98]"
+              className="rounded-paper border border-line p-4 transition-colors hover:border-line-strong"
             >
-              {/* 左侧状态签条（与藏品同语言） */}
-              <span
-                className={cn(
-                  'absolute inset-y-0 left-0 w-[3px]',
-                  p.status === 'done'
-                    ? 'bg-teal/60'
-                    : p.status === 'developing'
-                      ? 'bg-cinnabar/55'
-                      : p.status === 'maintaining'
-                        ? 'bg-teal/40'
-                        : 'bg-gold-btn/70',
-                )}
-              />
-              <div className="flex flex-1 flex-col p-3 pl-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-ink-muted">{STATUS_LABEL[p.status]}</span>
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-ink">{p.name}</span>
+                    <Badge tone={STATUS_TONE[p.status]}>{STATUS_LABEL[p.status]}</Badge>
+                    {p.repo && (
+                      <a
+                        href={p.repo.startsWith('http') ? p.repo : `https://github.com/${p.repo}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-0.5 text-[11px] text-teal link-underline"
+                      >
+                        <ExternalLink size={11} /> {p.repo}
+                      </a>
+                    )}
+                  </div>
+                  {p.description && (
+                    <p className="mt-1 line-clamp-1 text-[13px] text-ink-muted">{p.description}</p>
+                  )}
+                  {p.stack.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {p.stack.slice(0, 5).map((t) => (
+                        <span key={t} className="text-[11px] text-ink-faint">#{t}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    <Progress value={p.progress} className="max-w-[200px] flex-1" bronze={p.status === 'done'} />
+                    <span className="tabular text-[11px] text-ink-faint">{p.progress}%</span>
+                  </div>
+                  {p.milestones.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {p.milestones.slice(0, 5).map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => {
+                            void toggleMilestone(p, m.id)
+                          }}
+                          className={cn(
+                            'rounded-control border px-1.5 py-0.5 text-[11px] transition-colors',
+                            m.done
+                              ? 'border-cinnabar/50 bg-cinnabar/5 text-cinnabar line-through'
+                              : 'border-line text-ink-faint hover:border-line-strong hover:text-ink',
+                          )}
+                        >
+                          {m.title}
+                        </button>
+                      ))}
+                      {p.milestones.length > 5 && (
+                        <span className="text-[11px] text-ink-faint">+{p.milestones.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-x-3 text-[11px] text-ink-faint">
+                    <span>档案 · 任务 {tasks.filter((t) => t.projectId === p.id).length}</span>
+                    <span>笔记 {notes.filter((n) => n.projectId === p.id).length}</span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-0.5">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation()
+                    onClick={() => useInspectorStore.getState().open('project', p.id)}
+                    className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-ink"
+                    aria-label="详情"
+                  >
+                    <Eye size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
                       void toggleFav(p)
                     }}
                     className={cn(
-                      'rounded-[4px] p-1.5 transition-colors',
+                      'rounded-control p-1.5 transition-colors',
                       p.favorite ? 'text-bronze' : 'text-ink-faint hover:text-bronze',
                     )}
                     aria-label="收藏"
                   >
-                    <Star size={15} fill={p.favorite ? 'currentColor' : 'none'} />
+                    <Star size={14} fill={p.favorite ? 'currentColor' : 'none'} />
                   </button>
-                </div>
-                {/* 标题区：居中书法大字 */}
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-1 text-center">
-                  <span className="scribal-title line-clamp-2 text-xl leading-snug text-ink">{p.name}</span>
-                  {p.repo && (
-                    <a
-                      href={p.repo.startsWith('http') ? p.repo : `https://github.com/${p.repo}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex max-w-full items-center gap-0.5 truncate text-[11px] text-teal link-underline"
-                    >
-                      <ExternalLink size={11} /> {p.repo}
-                    </a>
-                  )}
-                  {p.nextStep && (
-                    <span className="line-clamp-2 text-[11px] leading-relaxed text-ink-muted">
-                      下一步 · {p.nextStep}
-                    </span>
-                  )}
-                </div>
-                {/* 底部：进度 + 操作 */}
-                <div className="mt-2 border-t border-line/70 pt-2">
-                  <div className="flex items-center gap-2">
-                    <Progress value={p.progress} className="flex-1" bronze={p.status === 'done'} />
-                    <span className="tabular text-[11px] text-ink-faint">{p.progress}%</span>
-                  </div>
-                  {p.milestones.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {p.milestones.slice(0, 3).map((m) => (
-                        <span
-                          key={m.id}
-                          className={cn(
-                            'rounded-control border px-1.5 py-0.5 text-[10px]',
-                            m.done
-                              ? 'border-cinnabar/50 bg-cinnabar/5 text-cinnabar line-through'
-                              : 'border-line text-ink-faint',
-                          )}
-                        >
-                          {m.title}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {/* 操作：编辑 / 删除（与藏品保持同一语言，小图标常显） */}
-                  <div className="mt-2 flex justify-end gap-0.5">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openEdit(p)
-                      }}
-                      className="rounded-control p-1 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
-                      aria-label="编辑"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        void remove(p)
-                      }}
-                      className="rounded-control p-1 text-ink-muted transition-colors hover:bg-nested hover:text-cinnabar"
-                      aria-label="删除"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-ink"
+                    aria-label="编辑"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      void remove(p)
+                    }}
+                    className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-cinnabar"
+                    aria-label="删除"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             </div>

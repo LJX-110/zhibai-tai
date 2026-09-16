@@ -52,7 +52,7 @@ const BUY_STATUS: { key: Purchase['status']; label: string; desc: string }[] = [
 const TABS: TabItem[] = [
   { key: 'ledger', label: '记账' },
   { key: 'buy', label: '购买' },
-  { key: 'budget', label: '预算' },
+  // 预算并入「统计」，页签收窄：记账 / 购买 / 统计 三页，预算设置放统计页顶部
   { key: 'stats', label: '统计' },
 ]
 
@@ -64,7 +64,6 @@ export function FinancePage() {
       <Tabs items={TABS} active={tab} onChange={setTab} className="mb-4" />
       {tab === 'ledger' && <LedgerTab />}
       {tab === 'buy' && <BuyTab />}
-      {tab === 'budget' && <BudgetTab />}
       {tab === 'stats' && <StatsTab />}
     </div>
   )
@@ -228,27 +227,27 @@ function LedgerTab() {
             </Button>
           }
         >
-          <ScrollRow className="pb-2" activeSelector={'[data-active="true"]'} activeKey={filter}>
-            {LEDGER_FILTERS.map((f) => (
-              <button
-                key={f.key}
-                data-active={filter === f.key || undefined}
-                onClick={() => setFilter(f.key)}
-                className={cn(
-                  'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-                  filter === f.key ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </ScrollRow>
-
-          <div className="pb-3">
+          {/* 筛选栏：类型标签 + 月份下拉同一行，避免日期独立悬浮显得突兀 */}
+          <div className="flex items-center gap-2 pb-3">
+            <ScrollRow className="min-w-0 flex-1 pb-0" activeSelector={'[data-active="true"]'} activeKey={filter}>
+              {LEDGER_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  data-active={filter === f.key || undefined}
+                  onClick={() => setFilter(f.key)}
+                  className={cn(
+                    'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+                    filter === f.key ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </ScrollRow>
             <Select
               value={month}
               onChange={(e) => setMonth(e.target.value)}
-              className="!w-auto !py-1.5 text-sm"
+              className="!w-auto !shrink-0 !py-1.5 text-sm"
             >
               <option value="all">全部月份</option>
               {monthOptions.map((m) => (
@@ -739,16 +738,18 @@ function FinanceRow({
   )
 }
 
-/** 预算 */
-function BudgetTab() {
-  const budgets = useBudgetStore((s) => s.items)
-  const { expense } = useMonthSummary()
+/** 统计 —— 月度预算（原「预算」页签并入） + 分类占比 + 收支概览 */
+function StatsTab() {
+  const records = useFinanceStore((s) => s.items)
   const month = todayISO().slice(0, 7)
+  const budgets = useBudgetStore((s) => s.items)
+  const { income, expense } = useMonthSummary()
   const current = budgets.find((b) => b.month === month)
   const [value, setValue] = useState(String(current?.amount ?? ''))
   const toast = useToast().toast
 
-  const save = async () => {
+  /** 保存月度预算 */
+  const saveBudget = async () => {
     const amt = parsePositiveAmount(value)
     if (amt === null) {
       toast('预算需为大于 0 的数字', 'danger')
@@ -767,52 +768,19 @@ function BudgetTab() {
 
   const usedPct = current && current.amount > 0 ? Math.min(100, (expense / current.amount) * 100) : 0
 
-  return (
-    <Section title="月度预算" hint={month}>
-      <div className="max-w-md">
-        <div className="flex items-center gap-2">
-          <Input type="number" min={0} step={100} placeholder="本月预算（元）" value={value} onChange={(e) => setValue(e.target.value)} />
-          <Button variant="primary" onClick={save} disabled={parsePositiveAmount(value) === null}>保存</Button>
-        </div>
-        {current && current.amount > 0 && (
-          <div className="mt-4 flex items-center gap-4">
-            <Ring percent={usedPct} size={104} stroke={8}>
-              <span className="tabular text-lg font-semibold text-ink">{Math.round(usedPct)}%</span>
-              <span className="text-[10px] text-ink-faint">已用</span>
-            </Ring>
-            <div className="flex-1 text-sm text-ink-muted">
-              <div className="flex justify-between gap-2">
-                <span>已用 {money(expense)} / {money(current.amount)}</span>
-              </div>
-              <p className="mt-2 text-[11px] text-ink-faint">
-                {expense > current.amount ? '已超预算，留意支出。' : `剩余预算 ${money(current.amount - expense)}`}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </Section>
-  )
-}
-
-/** 统计 —— 分类占比用圆环：一眼看懂钱花在哪 */
-function StatsTab() {
-  const records = useFinanceStore((s) => s.items)
-  const month = todayISO().slice(0, 7)
-
   const byCategory = useMemo(() => {
     const map = new Map<FinanceCategory, number>()
+    // 只统计当月支出：此前不过滤月份，历史月份的数值混进「本月支出」标题下
     for (const r of records) {
-      if (r.kind !== 'expense') continue
+      if (r.kind !== 'expense' || !r.date.startsWith(month)) continue
       map.set(r.category, (map.get(r.category) ?? 0) + r.amount)
     }
     return [...map.entries()]
       .map(([key, value]) => ({ name: categoryLabel(key), value: Math.round(value) }))
       .sort((a, b) => b.value - a.value)
-  }, [records])
+  }, [records, month])
 
   const expenseTotal = byCategory.reduce((s, c) => s + c.value, 0)
-  const { income } = useMonthSummary()
 
   /** 圆环配色：主环用当月支出总额，占比按分类逐段着色（CSS 变量跟随主题） */
   const RING_COLORS = [
@@ -827,51 +795,78 @@ function StatsTab() {
   ]
 
   return (
-    <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-12">
-      <div className="lg:col-span-5">
-        <Section title="本月支出" hint={month}>
-          {expenseTotal > 0 ? (
-            <div className="flex items-center gap-5">
-              <Ring percent={income > 0 ? Math.min(100, (expenseTotal / income) * 100) : 0} size={120} stroke={10}>
-                <span className="tabular text-lg font-semibold text-ink">¥{expenseTotal.toLocaleString()}</span>
-                <span className="text-[10px] text-ink-faint">共支出</span>
+    <div className="space-y-[var(--section-gap)]">
+      <Section title="月度预算" hint={month}>
+        <div className="max-w-md">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={0} step={100} placeholder="本月预算（元）" value={value} onChange={(e) => setValue(e.target.value)} />
+            <Button variant="primary" onClick={saveBudget} disabled={parsePositiveAmount(value) === null}>保存</Button>
+          </div>
+          {current && current.amount > 0 && (
+            <div className="mt-4 flex items-center gap-4">
+              <Ring percent={usedPct} size={104} stroke={8}>
+                <span className="tabular text-lg font-semibold text-ink">{Math.round(usedPct)}%</span>
+                <span className="text-[10px] text-ink-faint">已用</span>
               </Ring>
-              <div className="flex-1 space-y-1.5">
-                {byCategory.slice(0, 5).map((c, i) => (
-                  <div key={c.name} className="flex items-center gap-2 text-xs">
-                    <span className="h-2 w-2 rounded-full" style={{ background: RING_COLORS[i % RING_COLORS.length] }} />
-                    <span className="text-ink-muted">{c.name}</span>
-                    <span className="tabular ml-auto text-ink">{money(c.value)}</span>
-                    <span className="tabular w-9 text-right text-[11px] text-ink-faint">
-                      {Math.round((c.value / expenseTotal) * 100)}%
-                    </span>
-                  </div>
-                ))}
-                {byCategory.length > 5 && (
-                  <p className="pt-1 text-[11px] text-ink-faint">另有 {byCategory.length - 5} 个分类未展示</p>
-                )}
+              <div className="flex-1 text-sm text-ink-muted">
+                <div className="flex justify-between gap-2">
+                  <span>已用 {money(expense)} / {money(current.amount)}</span>
+                </div>
+                <p className="mt-2 text-[11px] text-ink-faint">
+                  {expense > current.amount ? '已超预算，留意支出。' : `剩余预算 ${money(current.amount - expense)}`}
+                </p>
               </div>
             </div>
-          ) : (
-            <EmptyState title="暂无支出数据" desc={month} />
           )}
-        </Section>
-      </div>
+        </div>
+      </Section>
 
-      <div className="lg:col-span-7">
-        <Section title="收支概览" hint="本月">
-          <div className="grid grid-cols-2 gap-3">
-            <SummaryCell label="收入" value={money(income)} tone="teal" />
-            <SummaryCell label="支出" value={money(expenseTotal)} tone="cinnabar" />
-            <SummaryCell label="结余" value={money(income - expenseTotal)} tone="ink" />
-            <SummaryCell label="记录数" value={`${records.length} 条`} tone="bronze" />
-          </div>
-          <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
-            {income > 0
-              ? `结余率 ${Math.round(((income - expenseTotal) / income) * 100)}%${expenseTotal > income ? '，支出已超收入' : '，总体健康'}`
-              : '记下收入后即可看到结余率'}
-          </p>
-        </Section>
+      <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-12">
+        <div className="lg:col-span-5">
+          <Section title="本月支出" hint={month}>
+            {expenseTotal > 0 ? (
+              <div className="flex items-center gap-5">
+                <Ring percent={income > 0 ? Math.min(100, (expenseTotal / income) * 100) : 0} size={120} stroke={10}>
+                  <span className="tabular text-lg font-semibold text-ink">¥{expenseTotal.toLocaleString()}</span>
+                  <span className="text-[10px] text-ink-faint">共支出</span>
+                </Ring>
+                <div className="flex-1 space-y-1.5">
+                  {byCategory.slice(0, 5).map((c, i) => (
+                    <div key={c.name} className="flex items-center gap-2 text-xs">
+                      <span className="h-2 w-2 rounded-full" style={{ background: RING_COLORS[i % RING_COLORS.length] }} />
+                      <span className="text-ink-muted">{c.name}</span>
+                      <span className="tabular ml-auto text-ink">{money(c.value)}</span>
+                      <span className="tabular w-9 text-right text-[11px] text-ink-faint">
+                        {Math.round((c.value / expenseTotal) * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                  {byCategory.length > 5 && (
+                    <p className="pt-1 text-[11px] text-ink-faint">另有 {byCategory.length - 5} 个分类未展示</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <EmptyState title="暂无支出数据" desc={month} />
+            )}
+          </Section>
+        </div>
+
+        <div className="lg:col-span-7">
+          <Section title="收支概览" hint="本月">
+            <div className="grid grid-cols-2 gap-3">
+              <SummaryCell label="收入" value={money(income)} tone="teal" />
+              <SummaryCell label="支出" value={money(expenseTotal)} tone="cinnabar" />
+              <SummaryCell label="结余" value={money(income - expenseTotal)} tone="ink" />
+              <SummaryCell label="记录数" value={`${records.length} 条`} tone="bronze" />
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+              {income > 0
+                ? `结余率 ${Math.round(((income - expenseTotal) / income) * 100)}%${expenseTotal > income ? '，支出已超收入' : '，总体健康'}`
+                : '记下收入后即可看到结余率'}
+            </p>
+          </Section>
+        </div>
       </div>
     </div>
   )

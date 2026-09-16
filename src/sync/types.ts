@@ -16,8 +16,6 @@ export interface SyncRecord {
   payload?: unknown
 }
 
-export type SyncState = 'idle' | 'syncing' | 'success' | 'error'
-
 export interface SyncResult {
   ok: boolean
   pushed: number

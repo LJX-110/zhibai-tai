@@ -5,13 +5,12 @@
  * 文案刻意用系统字体：书法字体全字集 woff2 有数 MB，
  * font-display:swap 会在启动期间换字触发重排，连带太极动画掉帧。
  */
-import { Taiji } from '../components/ui/Taiji'
+import { Spinner } from '../components/ui/Spinner'
 
 export function BootScreen() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-paper">
-      <Taiji size={48} className="spin-smooth" />
-      <p className="text-sm text-ink-faint">正在铺开文房 …</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-paper">
+      <Spinner size={72} label="正在铺开文房 …" />
     </div>
   )
 }

@@ -309,7 +309,7 @@ export function IntelligencePage() {
       const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
       const newItems = fresh.filter((x) => !known.has(dedupeKey(x)))
       // 落库并顺带按上限裁剪（情报是唯一会持续自动增长的表，不裁剪会让快照无限膨胀）
-      const { added, removed } = await saveFetchedItems(newItems)
+      const { added } = await saveFetchedItems(newItems)
       if (newItems.length > 0 && added === 0) {
         toast('情报已拉取但保存失败，请检查存储空间', 'danger')
         return
@@ -319,14 +319,8 @@ export function IntelligencePage() {
       // 用户只看得到「拉取 0 条」，无从判断是没配代理还是被限流
       setFetchReport({ fetched: fresh.length, added: newItems.length, failures })
       if (newItems.length > 0) playSound('intel-new')
-      if (failures.length === 0) {
-        toast(
-          removed > 0
-            ? `新增 ${newItems.length} 条 · 按上限清理 ${removed} 条旧情报`
-            : `拉取 ${fresh.length} 条情报（新增 ${newItems.length}）`,
-          'success',
-        )
-      } else {
+      // 全部成功不弹 toast：页内报告已展示新增数，避免频繁打断（更克制的通知策略）
+      if (failures.length > 0) {
         toast(
           `新增 ${newItems.length} 条 · ${failures.length} 个源失败`,
           fresh.length === 0 ? 'danger' : 'info',

@@ -139,7 +139,7 @@ function TodoTab() {
   return (
     <Section
       title="待办"
-      hint={`未完成 ${open.length} · 每月固定 ${monthly.length} · 已完成 ${done.length}`}
+      hint={`未完成 ${open.length} · 已完成 ${done.length}`}
       action={
         <Button size="sm" variant="tertiary" onClick={editor.openNew}>
           <Plus size={14} /> 添加
@@ -184,11 +184,7 @@ function TodoTab() {
         </div>
       )}
 
-      {/* 未完成清单 */}
-      <div className="section-title text-sm">
-        <span className="scribal text-base text-ink">待办</span>
-        <span className="hint">未完成 {open.length}</span>
-      </div>
+      {/* 未完成清单（标题已在 Section 头，不再重复内嵌标题） */}
       {open.length > 0 ? (
         <div>
           {open.map((t) => (
@@ -235,15 +231,15 @@ function TodoTab() {
         </div>
       )}
 
-      {/* 已完成 */}
-      <div className="mt-6 border-t border-line pt-3">
+      {/* 已完成：并入「待办」同一节，弱化为一行小字入口（不抢视觉权重，需要时展开） */}
+      <div className="mt-3">
         <button
           onClick={() => setShowDone((v) => !v)}
-          className="flex w-full items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink"
+          className="flex w-full items-center gap-2 py-1 text-xs text-ink-faint transition-colors hover:text-ink-muted"
+          aria-expanded={showDone}
         >
-          <span className={cn('h-1.5 w-1.5 rotate-45', done.length ? 'bg-cinnabar' : 'bg-line-strong')} />
           已完成 · {done.length}
-          <span className="ml-auto text-xs text-ink-faint">{showDone ? '收起' : '展开'}</span>
+          <span className="ml-auto text-[11px]">{showDone ? '收起' : '展开'}</span>
         </button>
         {showDone && done.length > 0 && (
           <div className="mt-2">

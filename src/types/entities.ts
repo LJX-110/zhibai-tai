@@ -458,7 +458,7 @@ export interface Follow {
   updatedAt?: string
 }
 
-/** AI 资源类型 */
+/** AI 资源类型：内置枚举 + 用户自定义类型名（自定义名走 categories 表 scope 'ai_type' 跨设备同步） */
 export type AIResourceType =
   | 'model'
   | 'tool'
@@ -472,9 +472,12 @@ export type AIResourceType =
 export interface AIResource {
   id: ID
   name: string
-  type: AIResourceType
+  /** 可为内置枚举外的自定义类型名（自定义类型在 categories 表 'ai_type' scope 内管理） */
+  type: string
   provider?: string
   description?: string
+  /** 用法分类（自由文本，走 categories 业务表可增删、跨设备同步） */
+  category?: string
   /** JSON 字符串形式的配置 */
   config?: string
   tags: string[]
@@ -490,7 +493,7 @@ export interface AIResource {
  * 此前分类存在设置项里（只落浏览器本地），永远不参与同步 ——
  * 手机上加的分类，电脑上必然看不到。
  */
-export type CategoryScope = 'intel' | 'collection'
+export type CategoryScope = 'intel' | 'collection' | 'ai' | 'ai_type'
 
 export interface Category {
   id: ID

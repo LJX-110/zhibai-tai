@@ -9,6 +9,8 @@ import { Hotkeys } from './Hotkeys'
 import { ThemeApplier } from './ThemeApplier'
 import { Onboarding } from './Onboarding'
 import { NotificationGate } from '../components/notification/NotificationGate'
+import { BackupReminder } from '../components/backup/BackupReminder'
+import { InstallPrompt } from '../components/pwa/InstallPrompt'
 import { AmbientSound } from '../components/sound/AmbientSound'
 import { PomodoroTicker } from '../components/pomodoro/PomodoroTicker'
 import { ClassReminder } from '../components/study/ClassReminder'
@@ -33,6 +35,8 @@ export default function App() {
         <Bootstrap />
         <Hotkeys />
         <NotificationGate />
+        <BackupReminder />
+        <InstallPrompt />
         <AmbientSound />
         <PomodoroTicker />
         <ClassReminder />

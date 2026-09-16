@@ -163,11 +163,6 @@ export function playSound(ev: SoundEvent): void {
   }
 }
 
-/** 主动初始化音频上下文（需在用户手势中调用一次） */
-export function primeAudio(): void {
-  audio()
-}
-
 /* 首次用户手势解锁音频 —— 音效"从未播放"的根因修复。
  * Chrome 自动播放策略：非手势中创建的 AudioContext 恒为 suspended，
  * 无激活时 resume() 也会被拒。若首个 playSound 恰好发生在异步回调

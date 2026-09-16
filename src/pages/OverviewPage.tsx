@@ -17,7 +17,6 @@ import { useCultivation } from '../hooks/useCultivation'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
-import { useAIChatStore } from '../components/ai/AiChatPanel'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
 import { Section, EmptyState, Timeline, Button, Sheet, Taiji, PageHeader } from '../components/ui'
@@ -327,32 +326,55 @@ export function OverviewPage() {
 
   const now = new Date()
   const date = todayISO()
+  // 当前时刻 HH:mm（每渲染实时计算；分钟级变化由使用处驱动重渲染）
+  const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-  // 今日课程（按周几匹配课程表）
+  // 今日待上课（按周几匹配课程表）：
+  // 只保留「未开始或进行中」，已结束的课不再展示 —— 实测反馈早上上完的课刷新后仍在提示
   const todayWeekday = now.getDay()
   const todayClasses = useMemo(() => {
     return courses
       .flatMap((c) =>
         (c.schedule ?? [])
           .filter((s) => s.weekday === todayWeekday)
-          .map((s) => ({ name: c.name, room: c.room, teacher: c.teacher, start: s.start, end: s.end })),
+          .map((s) => ({
+            name: c.name,
+            room: c.room,
+            teacher: c.teacher,
+            start: s.start,
+            end: s.end,
+            // 进行中：开始时刻 ≤ 现在 < 结束时刻
+            ongoing: s.start <= nowHMStr && nowHMStr < s.end,
+          })),
       )
+      .filter((s) => s.end > nowHMStr)
       .sort((a, b) => a.start.localeCompare(b.start))
-  }, [courses, todayWeekday])
+  }, [courses, todayWeekday, nowHMStr])
 
-  // 今日轨迹
-  const todayActivities = activities
-    .filter((a) => a.timestamp.startsWith(date))
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+  // 今日轨迹：同一分钟内对同一记录的连续操作（连续点「斩三尸 +1」等）合并为一条带计数，
+  // 否则连点几下首页时间轴就被同一条刷屏（前述截图里 1 分钟内出现 6 条 +1 即此问题）
   const toneOf = (t: string): 'cinnabar' | 'bronze' | 'teal' =>
     t === 'task' || t === 'finance' || t === 'collection' ? 'cinnabar' : t === 'pomodoro' || t === 'water' ? 'teal' : 'bronze'
-  const track = todayActivities.slice(0, 10).map((a) => ({
-    id: a.id,
-    time: formatHM(a.timestamp),
-    title: a.title,
-    detail: a.metadata ?? '',
-    tone: toneOf(a.entityType),
-  }))
+  const track = useMemo(() => {
+    const minute = (iso: string) => iso.slice(0, 16)
+    const today = activities
+      .filter((a) => a.timestamp.startsWith(date))
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    const groups = new Map<string, { first: (typeof today)[number]; count: number }>()
+    for (const a of today) {
+      const key = `${minute(a.timestamp)}|${a.entityType}|${a.entityId}|${a.title}`
+      const g = groups.get(key)
+      if (g) g.count++
+      else groups.set(key, { first: a, count: 1 })
+    }
+    return [...groups.values()].slice(0, 10).map(({ first, count }) => ({
+      id: first.id,
+      time: formatHM(first.timestamp),
+      title: first.title,
+      detail: count > 1 ? `×${count}` : (first.metadata ?? ''),
+      tone: toneOf(first.entityType),
+    }))
+  }, [activities, date])
 
   // 关注更新提示
   const followNotice = useMemo(() => {
@@ -373,7 +395,6 @@ export function OverviewPage() {
   const urgent = [...stats.todayDue, ...stats.upcoming].slice(0, 5)
 
   // 下一件事：今天下一节课 / 最近到期任务（打开首页即获行动指令）
-  const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const nextClass = todayClasses.find((c) => c.start > nowHMStr)
   const nextDue = stats.todayDue[0]
 
@@ -497,7 +518,10 @@ export function OverviewPage() {
               <div>
                 {todayClasses.map((c, i) => (
                   <div key={i} className="row">
-                    <span className="tabular w-16 shrink-0 text-xs text-ink-faint">{c.start}</span>
+                    <span className="flex w-16 shrink-0 items-center gap-1">
+                      <span className="tabular text-xs text-ink-faint">{c.start}</span>
+                      {c.ongoing && <span className="text-[10px] text-cinnabar">上课中</span>}
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm text-ink">{c.name?.trim() || c.room?.trim() || '课程'}</div>
                       <div className="truncate text-[11px] text-ink-faint">
@@ -508,7 +532,7 @@ export function OverviewPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState title="今日无课" desc="周末或休息，可安排自主复习" />
+              <EmptyState title="今日课程已结束" desc="刷新后不再显示已上完的课" />
             )}
           </Section>
 
@@ -544,7 +568,7 @@ export function OverviewPage() {
       <div className="mt-2">
         <Section
           title="今日轨迹"
-          hint={`${todayActivities.length} 条`}
+          hint={`${track.length} 条`}
           action={
             <Button size="sm" variant="tertiary" onClick={() => setAllTraceOpen(true)}>
               全部 <ArrowRight size={13} />
@@ -562,24 +586,6 @@ export function OverviewPage() {
           )}
         </Section>
       </div>
-
-      {/* 今日简报入口：一键打开天机（简报/周报/问答已收编于天机） */}
-      <section className="mt-2 rounded-paper border border-line px-6 py-5">
-        <button
-          onClick={() => useAIChatStore.getState().setOpen(true)}
-          className="flex w-full items-center gap-3 text-left"
-        >
-          <span className="flex shrink-0 items-center justify-center gap-2 mono-meta text-teal">
-            <Sparkles size={15} /> 天机
-          </span>
-          <span className="min-w-0 flex-1 text-[13px] leading-relaxed text-ink-muted">
-            今日简报 · 道行周报 · 直接提问 —— 点击打开天机
-          </span>
-          <ArrowRight size={14} className="shrink-0 text-ink-faint" />
-        </button>
-      </section>
-
-
 
       <TaskEditor
         open={editorOpen}

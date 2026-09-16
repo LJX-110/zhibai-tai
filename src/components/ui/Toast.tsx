@@ -60,6 +60,9 @@ export function ToastViewport() {
   return createPortal(
     <div
       className="pointer-events-none fixed z-[var(--z-toast)] flex flex-col items-center gap-2 sm:left-auto sm:right-4 sm:items-end"
+      role="region"
+      aria-label="轻提示"
+      aria-live="polite"
       style={{
         left: 0,
         right: 0,
@@ -74,7 +77,7 @@ export function ToastViewport() {
             key={t.id}
             onClick={() => dismiss(t.id)}
             className={cn(
-              'pointer-events-auto flex items-center gap-2 rounded-[4px] border border-line-strong bg-ink px-3.5 py-2 text-sm text-on-dark shadow-overlay animate-[toast-in_200ms_var(--ease-standard)]',
+              'pointer-events-auto flex items-center gap-2 rounded-[4px] border border-line-strong bg-ink px-3.5 py-2 text-sm text-on-dark shadow-overlay anim-toast',
             )}
           >
             <span className={cn('h-1.5 w-1.5 rotate-45', t.tone === 'danger' ? 'bg-cinnabar' : 'bg-bronze')} />

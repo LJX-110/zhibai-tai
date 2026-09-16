@@ -56,6 +56,8 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string; icon: type
  *  可到 Agnes 后台 /v1/models 查看最新模型名后手动填写。 */
 const AI_PRESETS: { name: string; baseUrl: string; model: string }[] = [
   { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash' },
+  // NVIDIA NIM：OpenAI 兼容，免费（约 40 RPM 限速），模型可在 build.nvidia.com/models 免费端点查看
+  { name: 'NVIDIA', baseUrl: 'https://integrate.api.nvidia.com/v1', model: 'deepseek-ai/deepseek-v4-pro' },
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
   { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
@@ -181,7 +183,8 @@ export function SettingsPage() {
   const [tokenDraft, setTokenDraft] = useState('')
   const [passwordDraft, setPasswordDraft] = useState('')
   const [aiKeyDraft, setAiKeyDraft] = useState('')
-  const [gistTokenDraft, setGistTokenDraft] = useState('')
+  const [models, setModels] = useState<string[]>([])
+  const [modelsLoading, setModelsLoading] = useState(false)
   const pendingCount = useSyncStore((s) => s.pending)
   const conflicts = useConflictStore((s) => s.items)
   const pendingConflicts = conflicts.filter((c) => !c.resolved)
@@ -189,8 +192,8 @@ export function SettingsPage() {
   const doSync = async () => {
     setSyncing(true)
     try {
-      const res = await runSync()
-      toast(`${res.message} · 拉取 ${res.pulled} 条`, 'success')
+      // 同步成功不弹 toast：状态行与顶栏圆点已反馈，避免每个动作都被打断
+      await runSync()
     } catch (e) {
       toast('同步失败：' + (e instanceof Error ? e.message : ''), 'danger')
     } finally {
@@ -207,13 +210,57 @@ export function SettingsPage() {
     toast('Token 已加密保存（AES-GCM）', 'success')
   }
 
-  /** 保存 Gist Token：设备本地密钥加密（云笺轻量模式用） */
-  const saveGistToken = async () => {
-    if (!gistTokenDraft.trim()) return toast('请先粘贴 Gist Token', 'danger')
-    const enc = await encryptor.encrypt(gistTokenDraft.trim())
-    settings.set({ gistToken: enc, gistTokenEnc: true })
-    setGistTokenDraft('')
-    toast('Gist Token 已加密保存（AES-GCM）', 'success')
+  /** 拉取当前 Provider 的模型列表（OpenAI 兼容 /v1/models；NVIDIA 等免费端点同样适用） */
+  const fetchModels = async () => {
+    const s = useSettingsStore.getState()
+    if (!s.aiKey) {
+      toast('请先保存 API Key 再拉取模型列表', 'info')
+      return
+    }
+    const key = s.aiKeyEnc ? await encryptor.decrypt(s.aiKey) : s.aiKey
+    setModelsLoading(true)
+    try {
+      const res = await fetch(`${s.aiBaseUrl.replace(/\/+$/, '')}/models`, {
+        headers: { Authorization: `Bearer ${key}` },
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = (await res.json()) as { data?: { id?: string }[] }
+      const ids = (data.data ?? []).map((m) => m.id).filter((x): x is string => Boolean(x))
+      if (ids.length === 0) throw new Error('接口返回空列表')
+      setModels(ids)
+      toast(`拉到 ${ids.length} 个模型，请在下方下拉选择或直接填入`, 'success')
+    } catch (e) {
+      toast(`拉取模型失败：${e instanceof Error ? e.message : '未知错误'}（检查 Base URL 与 Key 权限）`, 'danger')
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  /** 一键诊断：版本 / 浏览器 / 同步状态 / 各表数据量，复制给协作者排查问题 */
+  const copyDiagnostics = async () => {
+    const counts: Record<string, number> = {}
+    for (const t of BUSINESS_TABLES) {
+      counts[t.label] = await db.table(t.key).count()
+    }
+    const detail = Object.entries(counts)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(' / ')
+    const text = [
+      `知白台 v${APP_VERSION}`,
+      `浏览器：${navigator.userAgent}`,
+      `时间：${new Date().toLocaleString('zh-CN')}`,
+      `同步：${settings.syncStatus}${settings.lastSyncedAt ? ` · 上次 ${settings.lastSyncedAt}` : ' · 从未'}`,
+      settings.syncError ? `同步错误：${settings.syncError}` : '',
+      `数据：${detail}`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      toast('诊断信息已复制，可直接粘贴', 'success')
+    } catch {
+      toast('复制失败，请手动截图系统页', 'danger')
+    }
   }
 
   /** 保存 Sync Password：设备本地密钥加密（跨设备恢复用同一密码） */
@@ -225,12 +272,8 @@ export function SettingsPage() {
     toast('Sync Password 已加密保存（PBKDF2 推导数据密钥）', 'success')
   }
 
-  // 连接判定需按模式区分：gist 用 gist 权限 Token，repo 用仓库 + contents 权限 Token。
-  // 两种模式都需要 Sync Password（数据加密密钥），缺口令时同步必然失败，不能算「已连接」。
-  const connected =
-    (settings.syncMode ?? 'repo') === 'gist'
-      ? Boolean(settings.gistTokenEnc && settings.syncPasswordEnc)
-      : Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
+  // 同步只用「仓库完整」模式：仓库 + contents 权限 Token + Sync Password（数据加密密钥）
+  const connected = Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
   const [group, setGroup] = useState<SettingsGroup>('appearance')
 
   return (
@@ -598,6 +641,15 @@ export function SettingsPage() {
         <p className="mt-2 text-[11px] text-ink-faint">
           数据存本机 IndexedDB；多端同步通过 GitHub 私有仓库快照（见下方「GitHub 同步」）。
         </p>
+        <div className="row">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">诊断</span>
+          <Button size="sm" variant="tertiary" onClick={() => void copyDiagnostics()}>
+            复制诊断信息
+          </Button>
+          <span className="flex-1 text-[11px] text-ink-faint">
+            版本 / 浏览器 / 同步状态 / 数据统计——发给协作者排查用
+          </span>
+        </div>
       </Section>
 
       {/* 破坏性操作移出首屏：既让首屏变干净，也把「不可恢复」这件事藏在一层确认之后 */}
@@ -681,7 +733,26 @@ export function SettingsPage() {
               className="flex-1 font-mono !text-xs"
               placeholder="agnes-2.5-flash / deepseek-chat"
             />
+            <Button size="sm" variant="tertiary" onClick={() => void fetchModels()} disabled={modelsLoading || !settings.aiKey}>
+              {modelsLoading ? '拉取中…' : '获取模型列表'}
+            </Button>
           </div>
+          {/* 拉取到的模型列表：下拉切换即填入（NVIDIA/Agnes 等 OpenAI 兼容端点通用） */}
+          {models.length > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="w-20 shrink-0" />
+              <Select
+                value={settings.aiModel}
+                onChange={(e) => settings.set({ aiModel: e.target.value })}
+                className="!w-auto max-w-[300px] font-mono !text-xs"
+              >
+                {models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </Select>
+              <span className="text-[11px] text-ink-faint">共 {models.length} 个模型，选中即填入</span>
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0 text-sm text-ink-muted">API Key</span>
             <Input
@@ -784,33 +855,43 @@ export function SettingsPage() {
           )}
         </div>
 
-        {/* 同步模式：云笺轻量（推荐新手）/ 仓库完整 */}
-        <div className="mb-3 flex items-center gap-3">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">模式</span>
-          <div className="switch-pill flex gap-1 rounded-tile p-0.5">
-            {([
-              ['gist', '云笺轻量'],
-              ['repo', '仓库完整'],
-            ] as const).map(([m, l]) => (
-              <button
-                key={m}
-                onClick={() => settings.set({ syncMode: m })}
-                className={cn(
-                  'whitespace-nowrap rounded-control px-3 py-1 text-sm transition-colors',
-                  (settings.syncMode ?? 'repo') === m ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
-                )}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-          <span className="text-[11px] text-ink-faint">
-            {(settings.syncMode ?? 'repo') === 'gist' ? '仅需一个 gist 权限 Token，Gist 自动创建' : '私有仓库 + 加密快照，支持超大历史'}
-          </span>
-        </div>
+        {/* 同步方式固定为「仓库完整」：私有仓库 + 加密快照，支持超大历史（已移除 gist 云笺） */}
+        <p className="mb-3 flex items-center gap-1.5 text-[11px] text-ink-faint">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-teal" />
+          私有仓库 + 加密快照，支持超大历史
+        </p>
+
+        {/* 首次同步三步引导：仓库/Token 都空时最需要，配齐后自动收起（折叠不占空间） */}
+        {!settings.githubRepo?.trim() && (
+          <Collapse title="第一次同步？三步开启" hint="建仓库 · 拿 Token · 填回这里" className="mb-3">
+            <ol className="space-y-2.5 text-[13px] leading-relaxed text-ink-soft">
+              <li className="flex gap-2">
+                <span className="display flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-[11px] text-on-teal">1</span>
+                <span>
+                  <b className="text-ink">建私有仓库</b>：GitHub 右上角 <code className="rounded-control bg-nested px-1">+</code> → New repository，
+                  勾选 <b className="text-ink">Private</b>，其余留空 → Create。
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="display flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-[11px] text-on-teal">2</span>
+                <span>
+                  <b className="text-ink">生成 Token</b>：GitHub → Settings → Developer settings →
+                  Personal access tokens → <b className="text-ink">Fine-grained</b> → 仓库权限勾选{' '}
+                  <code className="rounded-control bg-nested px-1">Contents: Read and write</code>（只读即可时选 Contents: Read）→ Generate。
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span className="display flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-[11px] text-on-teal">3</span>
+                <span>
+                  <b className="text-ink">填回这里</b>：下方「仓库」填 <code className="rounded-control bg-nested px-1">你的用户名/仓库名</code>，
+                  Token 粘贴后点「加密保存」，再设 ≥6 位同步口令，点右上「立即同步」即可。
+                </span>
+              </li>
+            </ol>
+          </Collapse>
+        )}
 
         <div className="space-y-2 py-1">
-          {settings.syncMode !== 'gist' && (<>
           <div className="row">
             <span className="w-20 shrink-0 text-sm text-ink-muted">仓库</span>
             <Input
@@ -844,43 +925,7 @@ export function SettingsPage() {
               <span className="text-[11px] text-teal">已保存（加密）</span>
             )}
           </div>
-          </>)}
 
-          {settings.syncMode === 'gist' && (<>
-          <div className="row">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">Token</span>
-            <Input
-              type="password"
-              placeholder="GitHub Token（仅需 gist 权限）"
-              value={gistTokenDraft}
-              onChange={(e) => setGistTokenDraft(e.target.value)}
-              className="max-w-[300px]"
-            />
-            <Button size="sm" variant="secondary" onClick={saveGistToken} disabled={!gistTokenDraft.trim()}>
-              加密保存
-            </Button>
-            {settings.gistTokenEnc && (
-              <span className="text-[11px] text-teal">已保存（加密）</span>
-            )}
-          </div>
-          <div className="row">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">云笺 ID</span>
-            <Input
-              value={settings.gistId ?? ''}
-              readOnly
-              placeholder="留空——首次同步自动创建"
-              className="max-w-[300px] opacity-70"
-            />
-          </div>
-          <p className="flex items-center gap-1.5 pt-1 text-[11px] text-cinnabar">
-            <span className="h-1.5 w-1.5 rounded-full bg-cinnabar" />
-            Token 经 AES-GCM 加密后仅存本机；创建 Token 时勾选 <code className="rounded-control bg-nested px-1">gist</code> 权限即可。
-          </p>
-          <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-bronze">
-            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-bronze" />
-            国内网络直连 api.github.com 常超时。若同步一直失败，请在「智能 · 情报源 · 自建代理」填入转发地址——同步会自动走代理（Gist 已支持 PATCH/POST 透传）。
-          </p>
-          </>)}
           <div className="row">
             <span className="w-20 shrink-0 text-sm text-ink-muted">同步口令</span>
             <Input
@@ -899,12 +944,13 @@ export function SettingsPage() {
           </div>
           <p className="flex items-center gap-1.5 pt-1 text-[11px] text-cinnabar">
             <span className="h-1.5 w-1.5 rounded-full bg-cinnabar" />
-            {settings.syncMode === 'gist' ? (
-              <>Sync Password 经 PBKDF2 推导加密密钥；Gist 上仅存密文，跨设备用同一口令解密。</>
-            ) : (
-              <>Token 经 AES-GCM 加密后仅存本机；需仓库 <code className="rounded-control bg-nested px-1">contents:write</code> 权限。绝不写入代码/提交。</>
-            )}
+            Token 经 AES-GCM 加密后仅存本机；需仓库 <code className="rounded-control bg-nested px-1">contents:write</code> 权限。绝不写入代码/提交。
           </p>
+          <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-bronze">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-bronze" />
+            国内网络直连 api.github.com 常超时。若同步一直失败，请在「智能 · 情报源 · 自建代理」填入转发地址——同步会自动走代理转发。
+          </p>
+          </div>
 
           {/* 自动同步 */}
           <div className="mt-2 flex flex-wrap items-center gap-3 rounded-paper bg-raised px-3 py-2">
@@ -966,10 +1012,9 @@ export function SettingsPage() {
               </div>
             </div>
           )}
-        </div>
       </Section>
       )}
-
+      
       <p className="py-6 text-center text-[11px] tracking-[0.3em] text-ink-faint">
         知白台 v{APP_VERSION} · Local-first
       </p>

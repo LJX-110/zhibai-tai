@@ -93,7 +93,6 @@ export function CollectionPage() {
   )
   const toast = useToast().toast
   const [view, setView] = useState<'items' | 'projects'>('items')
-  const [typeFilter, setTypeFilter] = useState<CollectionType | 'all'>('all')
   const [catFilter, setCatFilter] = useState<string>('all')
   const [onlyFav, setOnlyFav] = useState(false)
   const [query, setQuery] = useState('')
@@ -107,21 +106,14 @@ export function CollectionPage() {
   const [catMgrOpen, setCatMgrOpen] = useState(false)
   const [catDraft, setCatDraft] = useState('')
 
-  /** 只列出「确实有藏品」的类型：默认 10 种类型平铺会摆出一排 0，窄屏上纯属噪音 */
-  const typesInUse = useMemo(() => {
-    const seen = new Set(items.map((it) => it.type))
-    return TYPE_ORDER.filter((t) => seen.has(t))
-  }, [items])
-
   /**
-   * 两个维度各自独立筛选：
-   *  · 类型（介质，固定枚举）——「这是什么」
-   *  · 分类（用途，可增删同步）——「拿它做什么」
-   * 此前两者默认名重合 7 项，界面上无法分辨，现在分两行呈现。
+   * 筛选只有一维：分类（用途，可增删同步）——「拿它做什么」。
+   * 介质（type，固定枚举）不在筛选行出现：此前它与分类默认名高度重合
+   * （如分类「小说」与类型「小说」），并排在筛选行会造成同名重复。
+   * 介质仍作为卡片属性展示（左侧签条/徽标），表单里也可选。
    */
   const list = useMemo(() => {
     return items
-      .filter((it) => typeFilter === 'all' || it.type === typeFilter)
       .filter((it) => {
         if (catFilter === 'all') return true
         if (catFilter === '其他') return !it.category || !collectionCategories.includes(it.category)
@@ -138,7 +130,7 @@ export function CollectionPage() {
         )
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  }, [items, typeFilter, catFilter, onlyFav, query, collectionCategories])
+  }, [items, catFilter, onlyFav, query, collectionCategories])
 
   const addCategoryName = (name: string) => {
     const t = name.trim()
@@ -271,112 +263,84 @@ export function CollectionPage() {
         <ProjectList />
       ) : (
         <>
-      {/* 两个维度分两行：类型=介质（这是什么）· 分类=用途（拿它做什么）
-          此前两者混在一行且默认名重合 7 项，界面上根本分不出区别。
-          空数据时隐藏类型行：下方空态已提示「添加第一件」，不必再铺一行「全部 0」 */}
-      <div className="pb-3">
-        {items.length > 0 && (
-        <ScrollRow className="pb-1">
-          <span className="shrink-0 pr-1 text-[11px] text-ink-faint">类型</span>
-          <button
-            onClick={() => setTypeFilter('all')}
-            className={cn(
-              'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-              typeFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-            )}
-          >
-            全部 <span className="tabular text-xs opacity-60">{items.length}</span>
-          </button>
-          {typesInUse.map((t) => {
-            const count = items.filter((it) => it.type === t).length
-            return (
+        <Section
+          title="藏品"
+          hint={`${list.length} 件`}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                <Input
+                  placeholder="搜索"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="!w-28 !py-1.5 !pl-8 text-sm sm:!w-48"
+                />
+              </div>
               <button
-                key={t}
-                onClick={() => setTypeFilter(t)}
+                onClick={() => setOnlyFav((v) => !v)}
                 className={cn(
-                  'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-                  typeFilter === t ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+                  'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
+                  onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
                 )}
               >
-                {TYPE_LABEL[t]} <span className="tabular text-xs opacity-60">{count}</span>
+                <Star size={13} /> 仅收藏
               </button>
-            )
-          })}
-        </ScrollRow>
-        )}
-
-        <ScrollRow className="mt-1.5 pb-1" activeSelector={'[data-active="true"]'} activeKey={catFilter}>
-          <span className="shrink-0 pr-1 text-[11px] text-ink-faint">分类</span>
-          <button
-            data-active={catFilter === 'all' || undefined}
-            onClick={() => setCatFilter('all')}
-            className={cn(
-              'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-              catFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-            )}
-          >
-            全部
-          </button>
-          {collectionCategories.map((c) => {
-            const count =
-              c === '其他'
-                ? items.filter((it) => !it.category || !collectionCategories.includes(it.category)).length
-                : items.filter((it) => it.category === c).length
-            return (
-              <button
-                key={c}
-                data-active={catFilter === c || undefined}
-                onClick={() => setCatFilter(c)}
-                className={cn(
-                  'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-                  catFilter === c ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-                )}
-              >
-                {c} <span className="tabular text-xs opacity-60">{count}</span>
-              </button>
-            )
-          })}
-          <Tooltip label="管理分类">
-            <button
-              onClick={() => setCatMgrOpen(true)}
-              className="shrink-0 rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
-              aria-label="管理分类"
-            >
-              <Plus size={14} />
-            </button>
-          </Tooltip>
-        </ScrollRow>
-      </div>
-
-      <Section
-        title="藏品"
-        hint={`${list.length} 件`}
-        action={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
-              <Input
-                placeholder="搜索"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="!w-28 !py-1.5 !pl-8 text-sm sm:!w-48"
-              />
+              <Button size="sm" variant="primary" onClick={openNew}>
+                <Plus size={14} /> 收藏
+              </Button>
             </div>
-            <button
-              onClick={() => setOnlyFav((v) => !v)}
-              className={cn(
-                'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
-                onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
-              )}
-            >
-              <Star size={13} /> 仅收藏
-            </button>
-            <Button size="sm" variant="primary" onClick={openNew}>
-              <Plus size={14} /> 收藏
-            </Button>
+          }
+        >
+          {/* 筛选单行：全部 / 分类（可增删同步）/ 行尾「管理分类＋」。
+          介质（type）不进筛选行——与分类同名时避免重复。
+          空数据也保留「＋」入口 —— 否则要先有一条藏品才能建分类（鸡生蛋） */}
+          <div className="mb-3">
+              <ScrollRow
+                className="pb-1"
+                activeSelector={'[data-active="true"]'}
+                activeKey={catFilter}
+              >
+                <button
+                  data-active={catFilter === 'all' || undefined}
+                  onClick={() => setCatFilter('all')}
+                  className={cn(
+                    'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+                    catFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+                  )}
+                >
+                  全部 <span className="tabular text-xs opacity-60">{items.length}</span>
+                </button>
+                {collectionCategories.map((c) => {
+                  const count =
+                    c === '其他'
+                      ? items.filter((it) => !it.category || !collectionCategories.includes(it.category)).length
+                      : items.filter((it) => it.category === c).length
+                  return (
+                    <button
+                      key={`cat-${c}`}
+                      data-active={catFilter === c || undefined}
+                      onClick={() => setCatFilter(c)}
+                      className={cn(
+                        'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
+                        catFilter === c ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+                      )}
+                    >
+                      {c} <span className="tabular text-xs opacity-60">{count}</span>
+                    </button>
+                  )
+                })}
+                <Tooltip label="管理分类">
+                  <button
+                    onClick={() => setCatMgrOpen(true)}
+                    className="shrink-0 rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
+                    aria-label="管理分类"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </Tooltip>
+              </ScrollRow>
           </div>
-        }
-      >
         {list.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
             {list.map((it) => (

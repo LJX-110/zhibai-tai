@@ -16,7 +16,7 @@
  * 此前合并取双边并集，本地删除的记录会被远端快照原样加回。
  */
 import { db } from '../db/db'
-import { BUSINESS_TABLE_KEYS, TOMBSTONES, isBusinessTable } from '../db/tables'
+import { BUSINESS_TABLES, BUSINESS_TABLE_KEYS, TOMBSTONES, isBusinessTable } from '../db/tables'
 import { GitHubSnapshotProvider } from './github/GithubSyncProvider'
 import { GistSnapshotProvider } from './gist/GistSyncProvider'
 import { syncMetaRepo, syncQueueRepo } from '../repositories/sync-repo'
@@ -176,6 +176,48 @@ export function mergeTombstones(
     }
   }
   return [...map.values()]
+}
+
+/** 本次同步「远端带来」的变化统计（纯函数）：
+ *  added=远端有、本地无；updated=两边都有但内容不同。
+ *  此前直接把远端快照记录总数当「拉取 N 条」，两台设备数据本就一致时
+ *  也会显示一个很大的数字，用户以为拉到了新数据其实没有任何变化。 */
+export interface ImportDiff {
+  added: number
+  updated: number
+  byTable: { table: string; added: number; updated: number }[]
+}
+
+export function diffRemoteImports(
+  local: Record<string, unknown[]>,
+  remote: Record<string, unknown[]>,
+): ImportDiff {
+  let added = 0
+  let updated = 0
+  const hint: Record<string, { added: number; updated: number }> = {}
+  for (const t of SYNC_TABLES) {
+    const localRows = (local[t] ?? []) as AnyRecord[]
+    const remoteRows = (remote[t] ?? []) as AnyRecord[]
+    const localMap = new Map(localRows.map((r) => [r.id, r]))
+    let ta = 0
+    let tu = 0
+    for (const r of remoteRows) {
+      const l = localMap.get(r.id)
+      if (!l) {
+        ta++
+        continue
+      }
+      if (JSON.stringify(l) !== JSON.stringify(r)) tu++
+    }
+    if (ta > 0 || tu > 0) hint[t] = { added: ta, updated: tu }
+    added += ta
+    updated += tu
+  }
+  const byTable = Object.entries(hint)
+    .map(([table, v]) => ({ table, ...v }))
+    .sort((a, b) => b.added + b.updated - (a.added + a.updated))
+    .slice(0, 3)
+  return { added, updated, byTable }
 }
 
 /** 墓碑保留期：超过此天数的删除标记视为已扩散到所有常用设备 */
@@ -398,6 +440,23 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     }
     await provider.writeSyncFile(syncFile)
 
+    // 「远端带来」的真实变化（此前把快照记录总数当拉取量，数字大却无新增，误导用户）
+    const diff = remote ? diffRemoteImports(local, remote) : null
+    const changed = (diff?.added ?? 0) + (diff?.updated ?? 0)
+    const tableDetail =
+      diff && diff.byTable.length > 0
+        ? `（${diff.byTable
+            .map((b) => `${BUSINESS_TABLES.find((t) => t.key === b.table)?.label ?? b.table} 增${b.added}·改${b.updated}`)
+            .join('，')}）`
+        : ''
+    const message = !remote
+      ? '首次同步完成'
+      : changed > 0
+        ? `已合并远端：新增 ${diff!.added} · 更新 ${diff!.updated}${doomedIds.length > 0 ? ` · 清理 ${doomedIds.length} 条已删` : ''}${tableDetail}`
+        : doomedIds.length > 0
+          ? `已同步，清理 ${doomedIds.length} 条已删记录`
+          : '已同步，本地与远端一致，无新增'
+
     const pushedRows = Object.values(merged).reduce((s, a) => s + a.length, 0)
     const now = new Date().toISOString()
     await syncMetaRepo.put({
@@ -414,10 +473,10 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     settings.set({ syncStatus: 'success', lastSyncedAt: now })
     return {
       ok: true,
-      pulled: remote ? Object.values(remote).reduce((s, a) => s + a.length, 0) : 0,
+      pulled: changed,
       pushed: pushedRows,
       conflicts: conflicts.length,
-      message: remote ? '已合并远端并推送' : '首次同步完成',
+      message,
     }
   } catch (e) {
     settings.set({ syncStatus: 'error', syncError: e instanceof Error ? e.message : '同步失败' })

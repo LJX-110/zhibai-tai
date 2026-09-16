@@ -126,7 +126,7 @@ export function DesktopSidebar() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-on-sidebar">天机</span>
-            <span className="block text-[9px] text-on-sidebar-muted">问 / 简报 / 计划 / 摘要 · 总掌数据</span>
+            <span className="block text-[9px] text-on-sidebar-muted">AI 问答 · 一键简报</span>
           </span>
         </button>
         <NavButton

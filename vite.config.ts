@@ -20,7 +20,9 @@ export default defineConfig({
     tailwindcss(),
     // PWA：manifest + service worker，离线可用、可添加到主屏幕
     VitePWA({
-      registerType: 'autoUpdate',
+      // prompt 模式：SW 发现新版本时通知页面显示「点击刷新」横幅，
+      // 而不是 autoUpdate 的后台悄悄换（用户感知不到更新，长期停在旧版）
+      registerType: 'prompt',
       includeAssets: ['favicon-v2.svg'],
       // dev 模式默认不注入 manifest（vite-plugin-pwa 源码：
       // devEnvironment && !devOptions.enabled → webManifestData() 返回 void）

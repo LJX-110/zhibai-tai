@@ -61,7 +61,7 @@ export function Inspector() {
     return (
       <div className="fixed inset-0 z-[var(--z-overlay)]">
         <div className="absolute inset-0 bg-ink/40" onClick={close} />
-        <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-sheet bg-paper p-5 pb-safe shadow-overlay animate-[sheet-up_240ms_var(--ease-standard)]">
+        <div className="absolute inset-x-0 bottom-0 max-h-[86vh] overflow-y-auto rounded-t-sheet bg-paper p-5 pb-safe shadow-overlay anim-sheet">
           {content}
         </div>
       </div>
@@ -69,7 +69,7 @@ export function Inspector() {
   }
 
   return (
-    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-[var(--z-header)] w-[360px] overflow-y-auto border-l border-line bg-panel p-6 animate-[page-fade_160ms_var(--ease-standard)]">
+    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-[var(--z-header)] w-[360px] overflow-y-auto border-l border-line bg-panel p-6 anim-enter-fast">
       {content}
     </aside>
   )

@@ -9,9 +9,3 @@ export const waterRepo = createRepository<WaterLog>(db.waterLogs)
 export async function listWaterByDate(date: string): Promise<WaterLog[]> {
   return db.waterLogs.where('date').equals(date).toArray()
 }
-
-/** 某日喝水总量 ml */
-export async function waterTotalByDate(date: string): Promise<number> {
-  const logs = await listWaterByDate(date)
-  return logs.reduce((s, l) => s + l.amountMl, 0)
-}

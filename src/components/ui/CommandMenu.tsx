@@ -235,8 +235,8 @@ export function CommandMenu() {
         run: async () => {
           setOpen(false)
           try {
-            const res = await runSync()
-            toast(`${res.message} · 拉取 ${res.pulled} 条`, 'success')
+            // 同步成功静默：顶栏状态点可见；只在失败时报错
+            await runSync()
           } catch (e) {
             toast('同步失败：' + (e instanceof Error ? e.message : ''), 'danger')
           }
@@ -340,7 +340,7 @@ export function CommandMenu() {
         role="dialog"
         aria-modal="true"
         aria-label="命令面板"
-        className="relative w-full max-w-lg rounded-sheet bg-paper shadow-overlay animate-[page-fade_120ms_var(--ease-standard)]"
+        className="relative w-full max-w-lg rounded-sheet bg-paper shadow-overlay anim-enter-fast"
       >
         {/* 输入 + 模式切换 */}
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">

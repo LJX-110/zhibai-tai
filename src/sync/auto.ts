@@ -25,17 +25,23 @@ function delayFor(interval: SyncInterval): number | null {
   }
 }
 
-/** 同步目标是否配齐（纯函数，便于 selector / 组件复用，避免判定逻辑两处漂移） */
+/** 同步目标是否配齐（纯函数，便于 selector / 组件复用，避免判定逻辑两处漂移）。
+ *  同步仅支持「仓库完整」模式（云笺 gist 已下线） */
 export function isConfigured(s: {
   syncPassword?: string
-  syncMode?: 'repo' | 'gist'
-  gistToken?: string
   githubRepo?: string
   githubToken?: string
 }): boolean {
   if (!(s.syncPassword ?? '').trim()) return false
-  if ((s.syncMode ?? 'repo') === 'gist') return Boolean((s.gistToken ?? '').trim())
   return Boolean((s.githubRepo ?? '').trim()) && Boolean((s.githubToken ?? '').trim())
+}
+
+/** 云笺 gist 已下线：老用户本地残留 gist 配置时，启动强制迁回仓库模式（数据在仓库快照里） */
+export function migrateSyncModeToRepo(): void {
+  const s = useSettingsStore.getState()
+  if ((s.syncMode ?? 'repo') === 'gist') {
+    s.set({ syncMode: 'repo' })
+  }
 }
 
 /** 同步目标是否已配置完整 —— 未配置时自动同步静默跳过，
@@ -49,6 +55,8 @@ function schedule() {
   if (!s.autoSync || s.syncInterval === 'manual') return
   const delay = delayFor(s.syncInterval)
   if (delay == null) return
+  // 非浏览器环境（vitest 等）没有 window：自动同步只在浏览器里跑
+  if (typeof window === 'undefined') return
   if (timer) window.clearTimeout(timer)
   timer = window.setTimeout(() => void doSync(), delay)
 }
@@ -83,21 +91,13 @@ export function notifyDataChanged(): void {
   schedule()
 }
 
-/** 手动立即同步（Command/按钮） */
-export function requestManualSync(): void {
-  dirty = true
-  void doSync()
-}
-
 /** 网络恢复自动同步 */
 export function initAutoSync(): void {
   if (typeof window === 'undefined') return
+  // 云笺已下线：老配置（gist）一次性迁移为仓库模式
+  migrateSyncModeToRepo()
   window.addEventListener('online', () => {
     const s = useSettingsStore.getState()
     if (s.autoSync && dirty) schedule()
   })
-}
-
-export function isSyncDirty(): boolean {
-  return dirty
 }

@@ -16,6 +16,9 @@ import type { CategoryScope } from '../types/entities'
 export const DEFAULT_CATEGORIES: Record<CategoryScope, string[]> = {
   intel: INTELLIGENCE_CATEGORIES.filter((c) => c !== '全部' && c !== '自定义'),
   collection: ['待看', '在看', '看过', '参考资料', '素材', '工具', '其他'],
+  ai: ['工具', '编码', '研究', '创作'],
+  // 术的类型无默认播种：内置 7 类（model/tool/...）是代码常量，这里只存用户自定义类型
+  ai_type: [],
 }
 
 /**
@@ -41,6 +44,8 @@ const LEGACY_SETTINGS_KEY = 'yishu-workbench:settings'
 const LEGACY_FIELD: Record<CategoryScope, string> = {
   intel: 'intelCategories',
   collection: 'collectionCategories',
+  ai: 'aiCategories',
+  ai_type: '', // 术的类型没有旧版设置项，迁移读取自然落空
 }
 
 /**

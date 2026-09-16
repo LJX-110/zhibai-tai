@@ -8,7 +8,7 @@
  * 远程未就绪时回退本地规则概述（不假装智能）；远程就绪则完整问答。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, CalendarDays, CornerDownLeft, FileText, GraduationCap, NotebookPen, Send, Sparkles, X } from 'lucide-react'
+import { Bot, CalendarDays, CornerDownLeft, FileText, GraduationCap, NotebookPen, RotateCcw, Send, Sparkles, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { aiService } from '../../services/ai/ai-service'
@@ -31,6 +31,30 @@ import { hasActiveOverlay } from '../ui/overlay'
 interface ChatMessage {
   role: 'user' | 'ai'
   content: string
+}
+
+/** 会话历史本地存档（天机 = 内置小 agent：换页/重开/刷新都保留对话，
+ *  只在点「新对话」时清空。存 localStorage 而非业务表：历史不参与跨设备同步） */
+const HISTORY_KEY = 'zbt:ai-chat:v1'
+const HISTORY_MAX = 60
+
+function loadHistory(): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    if (Array.isArray(parsed)) return (parsed as ChatMessage[]).slice(-HISTORY_MAX)
+  } catch {
+    /* 存档损坏视为空会话 */
+  }
+  return []
+}
+
+function saveHistory(messages: ChatMessage[]): void {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-HISTORY_MAX)))
+  } catch {
+    /* 存储满/隐私模式下写不进去就放弃存档，不影响对话 */
+  }
 }
 
 interface AIChatState {
@@ -90,12 +114,28 @@ function buildContext(): string {
   return lines.join('\n')
 }
 
-/** 提问入口：远程就绪走完整问答，否则本地概述（绝不报错打断） */
-async function ask(prompt: string): Promise<string> {
+/** 提问入口：远程就绪走完整问答（携带本次会话历史做多轮上下文），否则本地概述（绝不报错打断） */
+async function ask(prompt: string, history: ChatMessage[]): Promise<string> {
   const ctx = buildContext()
   const provider = aiService.provider
   if (provider.id === 'remote' && provider.available()) {
-    const full = `以下是知白台用户今日的真实数据（用于回答与用户生活/任务相关的问题）：\n${ctx}\n\n用户问题：${prompt}\n\n要求：中文回答，简洁有条理；数据相关问题直接引用上方数据；与数据无关的通用问题正常回答。`
+    // 长会话压缩：超过 MAX_HISTORY 轮后，把最早的部分压成一条摘要占位，
+    // 避免 prompt 过长吞掉上下文预算（天机不会"失忆式"爆长）
+    const MAX_HISTORY = 12
+    let usable = history
+    if (history.length > MAX_HISTORY) {
+      const head = history.slice(0, history.length - MAX_HISTORY)
+      const tail = history.slice(-MAX_HISTORY)
+      const digest = head
+        .map((m) => `${m.role === 'user' ? '问' : '答'}：${m.content.replace(/\s+/g, ' ').slice(0, 40)}`)
+        .join('；')
+      usable = [{ role: 'ai', content: `（更早的对话已压缩）${digest}…` }, ...tail]
+    }
+    const historyText = usable
+      .slice(-MAX_HISTORY)
+      .map((m) => `${m.role === 'user' ? '用户' : '天机'}：${m.content}`)
+      .join('\n')
+    const full = `以下是知白台用户今日的真实数据（用于回答与用户生活/任务相关的问题）：\n${ctx}\n\n对话历史：\n${historyText || '（本会话第一条提问）'}\n\n用户当前问题：${prompt}\n\n要求：中文回答，简洁有条理；数据相关问题直接引用上方数据；与数据无关的通用问题正常回答；能结合对话历史延续上下文。`
     try {
       return await provider.complete(full)
     } catch {
@@ -276,7 +316,8 @@ function WelcomeBoard({
 export function AiChatPanel() {
   const open = useAIChatStore((s) => s.open)
   const setOpen = useAIChatStore((s) => s.setOpen)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  // 天机 = 内置小 agent：打开即恢复上次会话（本地存档），不再每次清空
+  const [messages, setMessages] = useState<ChatMessage[]>(loadHistory)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
@@ -291,13 +332,10 @@ export function AiChatPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, setOpen])
 
-  // 打开时清空会话，每次都是新的开始
+  // 消息变化即持久化（多轮上下文 + 跨打开保留的依据）
   useEffect(() => {
-    if (open) {
-      setMessages([])
-      setInput('')
-    }
-  }, [open])
+    saveHistory(messages)
+  }, [messages])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -317,11 +355,18 @@ export function AiChatPanel() {
     setMessages((m) => [...m, { role: 'user', content: q }])
     setBusy(true)
     try {
-      const answer = await ask(q)
+      const answer = await ask(q, messages)
       setMessages((m) => [...m, { role: 'ai', content: answer }])
     } finally {
       setBusy(false)
     }
+  }
+
+  /** 新对话：清空当前会话（连同本地存档），回到看板 */
+  const newChat = () => {
+    saveHistory([])
+    setMessages([])
+    setInput('')
   }
 
   /** 快捷能力：以「能力名 + 结果」的对话形式入流 */
@@ -351,7 +396,7 @@ export function AiChatPanel() {
         aria-modal="true"
         aria-label="天机"
         className={cn(
-          'relative flex flex-col bg-paper shadow-overlay animate-[page-fade_150ms_var(--ease-standard)]',
+          'relative flex flex-col bg-paper shadow-overlay anim-enter',
           'w-full h-full',
           'md:my-auto md:mx-auto md:h-[min(72vh,640px)] md:max-w-xl md:rounded-sheet md:border md:border-line',
         )}
@@ -367,6 +412,14 @@ export function AiChatPanel() {
               {remoteReady ? '已接入远程 AI · 总掌全局，可问可点' : '未配置远程 AI · 当前仅本地规则概览'}
             </div>
           </div>
+          <button
+            onClick={newChat}
+            aria-label="新对话"
+            title="清空并开始新对话"
+            className="rounded-control p-1.5 text-ink-muted transition-colors hover:bg-raised hover:text-ink"
+          >
+            <RotateCcw size={15} />
+          </button>
           <button
             onClick={() => setOpen(false)}
             aria-label="关闭天机"
@@ -401,7 +454,7 @@ export function AiChatPanel() {
           )}
           {busy && (
             <div className="flex items-center gap-1.5 px-1 text-[11px] text-ink-faint">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-bronze" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-skill-indigo" />
               天机推演中…
             </div>
           )}

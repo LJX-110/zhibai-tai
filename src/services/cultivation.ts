@@ -8,8 +8,6 @@
  * 不是已删除的 journals 表。它与「创」（灵感 + 收藏）刻意不重叠：
  * 心 = 记录与内省，创 = 创作与收拢 —— 两件事，两种分数。
  */
-import type { NoteKind } from '../types/entities'
-
 export type DimensionKey = 'xing' | 'xue' | 'shen' | 'xin' | 'chuang'
 
 export interface DimensionResult {
@@ -70,13 +68,19 @@ export function computeCultivation(input: CultivationInput): CultivationResult {
   return { total, dimensions }
 }
 
-/** 道行等级描述（克制，非 RPG 段位） */
+/** 道行等级（丹道四炼 · 由今日总分定阶）：
+ *  抱朴 → 炼精化气 → 炼气化神 → 炼神还虚 → 炼虚合道。
+ *  总分 0-100，五阶覆盖：未入道、下三品、中三品、上三品、圆满。 */
 export function cultivationGrade(total: number): { title: string; desc: string } {
-  if (total >= 80) return { title: '入境', desc: '今日诸事合宜，气机顺畅' }
-  if (total >= 60) return { title: '得法', desc: '今日行之有效，略有进益' }
-  if (total >= 40) return { title: '守常', desc: '今日中规中矩，尚需用心' }
-  if (total >= 20) return { title: '积微', desc: '今日所积甚少，宜加把劲' }
-  return { title: '虚静', desc: '今日无事可记，养精蓄锐亦可' }
+  if (total >= 90)
+    return { title: '炼虚合道', desc: '今日与道合真，气机浑然，可称圆满' }
+  if (total >= 65)
+    return { title: '炼神还虚', desc: '神返内守，虚静生慧，今日功夫到火候' }
+  if (total >= 35)
+    return { title: '炼气化神', desc: '气机渐足，神意清明，正合今日所得' }
+  if (total >= 10)
+    return { title: '炼精化气', desc: '精微初聚，尚需火候，宜再添几笔' }
+  return { title: '抱朴守一', desc: '今日无事可记，养精蓄锐亦是修行' }
 }
 
 /** 道行来源分解（行为 → 得分说明，非 RPG 数值，只是记录来源） */
@@ -93,57 +97,4 @@ export function cultivationSources(input: CultivationInput): { label: string; va
   add('记录', input.notesToday >= 3 ? 20 : input.notesToday >= 1 ? 12 : 0)
   add('创作', Math.min(input.creationsToday, 4) * 5)
   return out
-}
-
-/** 逐日道行输入（供历史曲线） */
-export interface DailyCultivationInput {
-  tasks: { done: boolean; completedAt?: string | null }[]
-  pomodoroSessions: { type: 'focus' | 'break'; startAt: string; durationMin: number }[]
-  waterLogs: { date: string; amountMl: number }[]
-  habitLogs: { date: string }[]
-  bodyMetricLogs: { date: string }[]
-  notes: { kind: NoteKind; createdAt: string }[]
-  collections: { createdAt: string }[]
-  waterGoal: number
-}
-
-/** 计算某日道行总分（0-100） */
-export function computeDailyCultivation(date: string, input: DailyCultivationInput): number {
-  const {
-    tasks,
-    pomodoroSessions,
-    waterLogs,
-    habitLogs,
-    bodyMetricLogs,
-    notes,
-    collections,
-    waterGoal,
-  } = input
-
-  const tasksDone = tasks.filter(
-    (t) => t.done && t.completedAt?.startsWith(date),
-  ).length
-  const focusMinutes = pomodoroSessions
-    .filter((p) => p.type === 'focus' && p.startAt.startsWith(date))
-    .reduce((s, p) => s + p.durationMin, 0)
-  const waterMl = waterLogs
-    .filter((w) => w.date === date)
-    .reduce((s, w) => s + w.amountMl, 0)
-  // 心 ← 记录类笔记；创 ← 灵感 + 收藏。两者刻意不重叠
-  const notesToday = notes.filter(
-    (n) => n.kind === 'note' && n.createdAt.startsWith(date),
-  ).length
-  const creations =
-    notes.filter((n) => n.kind === 'inspiration' && n.createdAt.startsWith(date)).length +
-    collections.filter((c) => c.createdAt.startsWith(date)).length
-
-  return computeCultivation({
-    tasksDoneToday: tasksDone,
-    focusMinutesToday: focusMinutes,
-    waterRatio: waterGoal > 0 ? Math.min(1, waterMl / waterGoal) : 0,
-    habitLogsToday: habitLogs.filter((l) => l.date === date).length,
-    bodyLogsToday: bodyMetricLogs.filter((l) => l.date === date).length,
-    notesToday,
-    creationsToday: creations,
-  }).total
 }

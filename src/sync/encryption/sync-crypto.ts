@@ -7,8 +7,6 @@
  * - Token 用设备本地不可导出密钥加密（新设备需重输）
  * - 数据快照用 Sync Password 推导密钥加密（可跨设备恢复）
  */
-import { encryptor } from './encryption'
-
 /** 应用固定盐（非机密，用于跨设备推导同一密钥） */
 const SALT = new TextEncoder().encode('yishu-workbench-sync-salt-v1')
 const ITERATIONS = 200_000
@@ -67,19 +65,4 @@ export async function decryptSyncData(key: CryptoKey, cipher: string): Promise<u
   return JSON.parse(new TextDecoder().decode(plain)) as unknown
 }
 
-/** 是否支持 Web Crypto */
-export function isCryptoAvailable(): boolean {
-  return typeof crypto !== 'undefined' && !!crypto.subtle
-}
 
-/**
- * 存储 Sync Password：用设备本地密钥加密后存设置（不明文落盘）
- * 新设备首次恢复时用户需重新输入。
- */
-export async function encryptSyncPassword(password: string): Promise<string> {
-  return encryptor.encrypt(password)
-}
-
-export async function decryptSyncPassword(cipher: string): Promise<string> {
-  return encryptor.decrypt(cipher)
-}

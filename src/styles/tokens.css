@@ -1,6 +1,34 @@
 /* ============================================================
    Design Tokens — 知白台 V1.6（一人之下 · 冷色定稿）
    主题：Light / Dark / System（跟随 <html data-theme>）
+
+   ════════════════════════════════════════════════════════════
+   设计令牌标准索引（所有组件必须遵守，禁止绕过令牌写魔法值）
+   ════════════════════════════════════════════════════════════
+   【颜色】语义色走 --color-*（@theme inline 映射，主题自动翻转）：
+     ink 系文字阶梯 / paper 系表面层级 / teal·cinnabar·bronze 三强调色 /
+     danger 危险 / module-* 图表 / skill-* 异术三色（金光/炁青/雷靛）/
+     seal-* 印章 / sidebar 侧栏与 on-sidebar 文字。
+     规则：文字总是 ink 系；金底配深字(--on-gold)；侧栏内一律 on-sidebar 系。
+   【字体】--font-sans 正文 / --font-serif 大标题(.display) /
+     --font-deco 书法装饰(.scribal) / --font-mono 数字与元数据(.tabular)。
+   【字号】阶梯 12/13/15/18/21/28/36/48px（--text-*）。正文基准 15px。
+   【间距】纵向节奏一律用 4px 栅格（Tailwind 默认）。区块间隙用 --section-gap(20px)，
+     页面版面用 Section 组件的 pb-[var(--section-gap)]，禁止手写散落 margin。
+   【圆角】--radius-control(4) < --radius-tile(8) < --radius-paper(12) < --radius-sheet(16)。
+   【阴影】--shadow-soft/float/overlay 三级，浮层必须 overlay。
+   【动效】时长令牌 --duration-fast(120)/med(240)/slow(420) + --ease-standard。
+     进入动画统一用 index.css 的命名类：anim-fade / anim-enter / anim-enter-fast / anim-sheet，
+     **禁止**写散落的 animate-[page-fade_XXXms_...]。
+   【层级】z 一律走 --z-* 令牌：header(30) < sidebar(40) < nav(50) < overlay(60)
+     < immersive(70) < command(80) < toast(90)。禁止写死 z-50 / z-[60]。
+   【加载】整页/整块加载 = <Spinner/>（太极旋转）；按钮内加载 = 图标 + animate-spin。
+   【音效】统一 sfx/playSound 事件（ui-open/ui-close/ui-click/...），按钮组件已内建点击音。
+   【弹层】Dialog(居中) / Sheet(底部) / CommandMenu(命令) 三件套，
+     均带遮罩 anim-fade + 面板 anim-enter/anim-sheet，Escape 关闭并登记 overlay 栈。
+   【标题】页面大标题 = PageHeader(scribal-title text-2xl/3xl + poem)；分区标题 = Section(section-title)。
+   ============================================================
+
    定稿配色（用户确认）：
    · 浅色 = 白底 + 黛蓝主 + 绛红辅（印章/危险）+ 鎏金点缀
    · 深色 = 纯黑底 + 绛红主 + 黛蓝辅 + 鎏金点缀
@@ -68,6 +96,11 @@
   --color-seal-lapis: var(--seal-lapis);
   --color-seal-gold: var(--seal-gold);
   --color-seal-earth: var(--seal-earth);
+
+  /* 异术三色 · 技能色系（一人之下原创表达：金光咒·鎏金 / 炁青玉·修行 / 雷靛·雷法天机） */
+  --color-skill-gold: var(--skill-gold);
+  --color-skill-qing: var(--skill-qing);
+  --color-skill-indigo: var(--skill-indigo);
 }
 
 /* ---------- 字体 / 圆角 / 阴影 / 动效 / 排版 ---------- */
@@ -185,6 +218,11 @@
   --seal-gold: var(--bronze);
   --seal-earth: #8a7455;
 
+  /* 异术三色 · 技能色系（浅色：金/青复用定稿色，靛为新增雷法色，白底 7.0:1） */
+  --skill-gold: var(--bronze);         /* 金光咒 · 鎏金 */
+  --skill-qing: #3e7268;               /* 炁青玉 · 青玉（同 module-4） */
+  --skill-indigo: #44578f;             /* 雷靛 · 雷法 */
+
   --shadow-soft-value: 0 1px 2px rgba(15, 23, 42, 0.07), 0 4px 14px rgba(15, 23, 42, 0.08);
   --shadow-float-value: 0 2px 4px rgba(15, 23, 42, 0.08), 0 10px 26px rgba(15, 23, 42, 0.12);
   --shadow-overlay-value: 0 14px 34px rgba(15, 23, 42, 0.18);
@@ -298,6 +336,11 @@
   --seal-lapis: #7fa3cc;
   --seal-gold: var(--bronze);
   --seal-earth: #c7ae85;
+
+  /* 异术三色 · 技能色系（深色：金/青复用定稿色，靛提亮，黑底 8.3:1） */
+  --skill-gold: var(--bronze);         /* 金光咒 · 鎏金 */
+  --skill-qing: #6fa899;               /* 炁青玉 · 青玉（同 module-4） */
+  --skill-indigo: #8fa2d8;             /* 雷靛 · 雷法 */
 
   --shadow-soft-value: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.42);
   --shadow-float-value: 0 2px 4px rgba(0, 0, 0, 0.55), 0 10px 24px rgba(0, 0, 0, 0.5);

@@ -137,12 +137,13 @@ const COURSE_COLORS = [
   'bg-mist/50 text-ink-soft border-line-strong',
 ]
 
-/** 课程左侧实色条（与 COURSE_COLORS 同哈希映射） */
+/** 课程左侧实色条（与 COURSE_COLORS 同哈希映射）。
+ *  用高不透明度实色：半透明 60% 在米白底上几乎看不见（截图反馈色条太淡） */
 const COURSE_BARS = [
-  'bg-teal/60',
-  'bg-cinnabar/60',
-  'bg-bronze/60',
-  'bg-ink-faint/50',
+  'bg-teal/85',
+  'bg-cinnabar/85',
+  'bg-bronze/85',
+  'bg-ink-soft/60',
 ]
 
 function colorFor(id: string): string {
@@ -191,19 +192,20 @@ function TimetableTab({
   return (
     <div>
       <div className="mb-3 space-y-2">
-        {/* 标题行：只放标题与周次（学期起始日入口同样在此，未设置时显式露出） */}
-        <div className="flex flex-wrap items-baseline gap-2">
-          <h2 className="scribal-title text-xl text-ink">课程表</h2>
-          {week != null ? (
-            <button
-              type="button"
-              onClick={() => setMode('week')}
-              className="text-xs text-ink-faint transition-colors hover:text-ink"
-              title="修改学期起始日"
-            >
-              第 {week} 周
-            </button>
-          ) : (
+        {/* 标题行：与其他页 Section 标题同语言（sans + hint），不用书法体 —— 此前 scribal 让课程表标题字体与全站不一致 */}
+        <div className="section-title">
+          <span>
+            <span className="text-base font-semibold text-ink">课程表</span>
+            {week != null && (
+              <span className="hint" title="点击「周景」修改学期起始周">
+                第 {week} 周
+              </span>
+            )}
+          </span>
+        </div>
+        {/* 操作行：设置首周 / 视图切换 / 课程管理（与标题分行，手机上一行内不再塞四样控件） */}
+        <div className="flex flex-wrap items-center gap-2">
+          {week == null && (
             /* 未设学期起始日就没法算周次：图标入口，点击弹出日期选择（不占标题行宽） */
             <label className="flex cursor-pointer items-center gap-1 text-xs text-cinnabar">
               设置首周
@@ -218,9 +220,6 @@ function TimetableTab({
               />
             </label>
           )}
-        </div>
-        {/* 操作行：视图切换 + 课程管理（与标题分行，手机上一行内不再塞四样控件） */}
-        <div className="flex items-center gap-2">
           <div className="switch-pill flex gap-0.5 rounded-tile p-0.5">
             {(
               [
@@ -260,7 +259,7 @@ function TimetableTab({
               <ChevronLeft size={17} />
             </button>
             <div className="flex items-center gap-2">
-              <span className="display text-base font-medium text-ink">{WEEKDAY_NAMES[viewDay]}</span>
+              <span className="text-base font-medium text-ink">{WEEKDAY_NAMES[viewDay]}</span>
               {viewDay === today && <span className="text-[11px] text-cinnabar">今天</span>}
               <span className="text-[11px] text-ink-faint">{weeklyLoad(viewDay)} 节</span>
             </div>

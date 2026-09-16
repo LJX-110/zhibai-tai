@@ -47,14 +47,14 @@ export function Sheet({ open, onClose, title, children, footer, className, tone 
   return createPortal(
     <div className="fixed inset-0 z-[var(--z-overlay)]">
       <div
-        className="absolute inset-0 bg-ink/40 animate-[page-fade_120ms_var(--ease-standard)]"
+        className="absolute inset-0 bg-ink/40 anim-fade"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          'talisman absolute inset-x-0 bottom-0 rounded-t-tile border-x-0 border-b-0 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay animate-[sheet-up_240ms_var(--ease-standard)] max-h-[88vh] overflow-y-auto',
+          'talisman absolute inset-x-0 bottom-0 rounded-t-tile border-x-0 border-b-0 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet max-h-[88vh] overflow-y-auto',
           tone === 'sidebar' && 'sheet-sidebar',
           className,
         )}

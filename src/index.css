@@ -308,6 +308,31 @@
     flex-direction: column;
   }
 
+  /* ===== 统一动效标准（单一事实源） =====
+   所有弹层/遮罩/卡片进入动画必须用下面四个命名类，
+   禁止各组件写散落的 animate-[page-fade_XXXms_...]（时长各不相同会漂移）：
+   · anim-fade        遮罩淡入        —— var(--duration-fast, 120ms)
+   · anim-enter       弹层/面板进入   —— var(--duration-med, 240ms)
+   · anim-enter-fast  快速面板（命令/侧栏）—— var(--duration-fast, 120ms)
+   · anim-sheet       底部弹层上滑   —— var(--duration-med, 240ms)
+   时长令牌在 tokens.css：--duration-fast/med/slow 是唯一时长来源 */
+  .anim-fade {
+    animation: page-fade var(--duration-fast) var(--ease-standard) both;
+  }
+  .anim-enter {
+    animation: page-fade var(--duration-med) var(--ease-standard) both;
+  }
+  .anim-enter-fast {
+    animation: page-fade var(--duration-fast) var(--ease-standard) both;
+  }
+  .anim-sheet {
+    animation: sheet-up var(--duration-med) var(--ease-standard) both;
+  }
+  /* Toast 进入（轻提示用，时长同 med 级） */
+  .anim-toast {
+    animation: toast-in var(--duration-med) var(--ease-standard) both;
+  }
+
   /* ===== v0.4 异术化 Motion Utilities ===== */
 
   /* 墨线划过（加载/切换/装饰） */
