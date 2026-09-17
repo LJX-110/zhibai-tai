@@ -39,19 +39,12 @@ jobs:
       - name: Build (base = 仓库名)
         # 关键：GitHub Pages 部署在 https://<user>.github.io/<仓库名>/ 子路径
         # 用仓库名作为 base，资源路径才正确
-        run: npm run build -- --base=/${{ github.event.repository.name }}/ 2>&1 | tee /tmp/build.log
+        # 注意：不要用 `| tee` 包命令 —— 管道会吞掉非零退出码，
+        # 让 tsc 编译失败被误报为成功，dist 缺失拖到上传步骤才爆。
+        # 步骤日志本身在 Actions 里完整可见，无需 tee 备份。
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
         env:
           npm_config_cache: /tmp/npm-cache
-        # 无论成败都把日志挂到 workflow 页面上（失败时也要能读）
-        # (动作日志本身就可见，tee 仅为额外保险)
-
-      - name: Upload build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: /tmp/build.log
-          if-no-files-found: ignore
 
       - uses: actions/configure-pages@v5
 

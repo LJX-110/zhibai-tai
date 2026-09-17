@@ -16,8 +16,8 @@ dev-dist
 *.local
 .npm-cache
 .npmrc
-backup
-备份
+/backup
+/备份
 
 # Editor directories and files
 .vscode/*
