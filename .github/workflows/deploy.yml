@@ -25,7 +25,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Vite 8 要求 Node ≥20.19 或 ≥22.12；固定 20 会拿到旧版 20.x 导致构建瞬间失败。
+          # 用 24（当前 LTS 安全线）保证与本地一致。
+          node-version: 24
           cache: npm
 
       - name: Install
