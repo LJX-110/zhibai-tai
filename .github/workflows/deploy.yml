@@ -26,17 +26,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # Vite 8 要求 Node ≥20.19 或 ≥22.12；固定 20 会拿到旧版 20.x 导致构建瞬间失败。
-          # 用 24（当前 LTS 安全线）保证与本地一致。
+          # 用 24（当前 LTS 安全线）保证与本地一致。若回归，回退为 22。
           node-version: 24
           cache: npm
 
       - name: Install
         run: npm ci
+        env:
+          # 出现描述不清的瞬间失败时，禁用缓存与软链定位根因
+          npm_config_cache: /tmp/npm-cache
 
       - name: Build (base = 仓库名)
         # 关键：GitHub Pages 部署在 https://<user>.github.io/<仓库名>/ 子路径
         # 用仓库名作为 base，资源路径才正确
-        run: npm run build -- --base=/${{ github.event.repository.name }}/
+        run: npm run build -- --base=/${{ github.event.repository.name }}/ 2>&1 | tee /tmp/build.log
+        env:
+          npm_config_cache: /tmp/npm-cache
+        # 无论成败都把日志挂到 workflow 页面上（失败时也要能读）
+        # (动作日志本身就可见，tee 仅为额外保险)
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          if-no-files-found: ignore
 
       - uses: actions/configure-pages@v5
 
