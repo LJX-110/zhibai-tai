@@ -16,9 +16,9 @@ import type { CategoryScope } from '../types/entities'
 export const DEFAULT_CATEGORIES: Record<CategoryScope, string[]> = {
   intel: INTELLIGENCE_CATEGORIES.filter((c) => c !== '全部' && c !== '自定义'),
   collection: ['待看', '在看', '看过', '参考资料', '素材', '工具', '其他'],
-  ai: ['工具', '编码', '研究', '创作'],
-  // 术的类型无默认播种：内置 7 类（model/tool/...）是代码常量，这里只存用户自定义类型
-  ai_type: [],
+  ai: ['工具', '编码', '研究', '创作'], // 历史遗留：分类行已从界面移除，保留仅为兼容存量数据
+  // 术的类型**完全数据化**：内置 7 类播种为普通类型行，与用户新建的同等可增删改
+  ai_type: ['模型', 'Tool', 'Skill', 'Agent', 'Plugin', 'Prompt', 'Workflow'],
 }
 
 /**

@@ -1,105 +1,30 @@
 /**
  * SourceManager —— 情报源管理（系统）
  * 增删/启停/测试/立即抓取 + 推荐来源目录（本地 Provider Catalog）
+ *
+ * 拆分说明（2026-09-20 路线图第 4 步）：单行、表单弹窗、测试预览、手机端操作弹层、
+ * 定时抓取开关、自建代理各自成文件放在本目录下；本文件只留状态、抓取动作与组合。
+ * `ProxyConfig` 仍从本文件导出 —— 「系统 · 智能」首屏按这个路径直接挂载它。
  */
 import { useState, useMemo } from 'react'
-import { Download, MoreHorizontal, Pencil, Plus, Power, Trash2, Zap } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useSourceStore } from '../../stores/useSourceStore'
-import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { categoryNames, useCategoryStore } from '../../stores/useCategoryStore'
 import { useResolvedLayout } from '../../layouts/useResolvedLayout'
-import { fetchFromSource, testSource } from '../../services/intelligence/providers/registry'
-import { classifyFetchError, type FetchErrorInfo } from '../../services/intelligence/providers/scraper'
+import { retrySource, testSource } from '../../services/intelligence/run'
 import { initIntelAutoFetch } from '../../services/intelligence/auto'
-import type { IntelligenceItem, IntelligenceProviderId, IntelligenceSource } from '../../types/entities'
-import { createId } from '../../utils/id'
-import { cn } from '../../utils/cn'
-import { Badge, Button, Dialog, EmptyState, Input, Section, Select, useToast } from '../ui'
+import type { IntelligenceProviderId, IntelligenceSource } from '../../types/entities'
+import { createId, nowISO } from '../../utils/id'
+import { Button, EmptyState, Section, useToast } from '../ui'
+import { AutoFetchBar } from './AutoFetchBar'
+import { MobileActionDialog } from './MobileActionDialog'
+import { SourceFormDialog } from './SourceFormDialog'
+import { SourceRow } from './SourceRow'
+import { TestPreviewDialog, type PreviewState } from './TestPreviewDialog'
+import { EMPTY, type FormState } from './shared'
 
-const PROVIDER_LABEL: Record<IntelligenceProviderId, string> = {
-  github: 'GitHub',
-  rss: 'RSS',
-  atom: 'Atom',
-  json: 'JSON',
-  rest: 'REST',
-  mock: '示例',
-  game: '游戏',
-  anime: '动漫',
-  official: '官方',
-  web: 'Web',
-  custom: '自定义',
-  steam: 'Steam',
-  rawg: 'RAWG',
-  jikan: 'Jikan',
-  bilibili: 'B 站',
-  ai: 'AI',
-}
-
-const PROVIDER_ORDER: IntelligenceProviderId[] = [
-  'bilibili',
-  'steam',
-  'rawg',
-  'jikan',
-  'github',
-  'rss',
-  'atom',
-  'json',
-  'rest',
-  'web',
-  'custom',
-  'mock',
-  'game',
-  'anime',
-  'official',
-]
-
-const CONFIG_HINT: Partial<Record<IntelligenceProviderId, string>> = {
-  bilibili: 'JSON：{"keyword":"鸣潮"}（可选 order: pubdate|click，需先在下方配置自建代理）',
-  steam: 'JSON：{"appid":730}（Steam 应用 ID）',
-  rawg: 'JSON：{"key":"你的 RAWG key"}',
-  jikan: 'JSON：{"mode":"season|top|search","type":"anime|manga","q":"关键词"}',
-  github: 'JSON：{"queries":["topic:local-first"]}',
-  web: 'JSON：{"itemSel":"article","titleSel":"h2","linkSel":"a","summarySel":"p","timeSel":"time"}',
-  json: 'JSON：{"listPath":"items","titleKey":"title","urlKey":"url","summaryKey":"summary","dateKey":"date"}',
-  rest: 'JSON：{"listPath":"data.list","titleKey":"name","urlKey":"html_url"}',
-}
-
-interface FormState {
-  name: string
-  provider: IntelligenceProviderId
-  url: string
-  category: string
-  config: string
-}
-
-const EMPTY: FormState = { name: '', provider: 'rss', url: '', category: '科技', config: '' }
-
-/**
- * ProxyConfig —— 自建 CORS 代理地址（单独导出，供「系统 · 智能」首屏直接挂载）
- *
- * 代理是情报抓取「能不能用」的唯一开关，情报页抓取失败时正是把用户指到这里。
- * 所以它不能再当情报源区块里的一行 —— 那是折叠层，指路会把用户带到空地方。
- * 说明文案在窄屏也保留：首屏上它是「为什么值得填」的唯一解释，不能只给桌面看。
- */
-export function ProxyConfig() {
-  const corsProxyUrl = useSettingsStore((s) => s.corsProxyUrl)
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
-      <span className="text-sm text-ink">自建代理</span>
-      <Input
-        placeholder="https://你的站点.netlify.app（或 Cloudflare Pages）"
-        value={corsProxyUrl ?? ''}
-        onChange={(e) => useSettingsStore.getState().set({ corsProxyUrl: e.target.value.trim() || undefined })}
-        className="min-w-[220px] flex-1 !py-1 font-mono !text-xs"
-        aria-label="自建 CORS 代理地址"
-      />
-      <span className="text-[11px] leading-relaxed text-ink-faint">
-        中文源与 B 站都需要它 · 部署见仓库 proxy/（首选 Netlify）
-      </span>
-    </div>
-  )
-}
+export { ProxyConfig } from './ProxyConfig'
 
 export function SourceManager() {
   const sources = useSourceStore((s) => s.items)
@@ -114,12 +39,7 @@ export function SourceManager() {
   const [editing, setEditing] = useState<IntelligenceSource | null>(null)
   const [form, setForm] = useState<FormState>({ ...EMPTY })
   const [testing, setTesting] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{
-    source: IntelligenceSource
-    items: IntelligenceItem[]
-    error?: FetchErrorInfo
-    loading: boolean
-  } | null>(null)
+  const [preview, setPreview] = useState<PreviewState | null>(null)
 
   const openNew = (preset?: { provider: IntelligenceProviderId; name: string; category: string; config?: string }) => {
     setEditing(null)
@@ -146,7 +66,7 @@ export function SourceManager() {
 
   const save = async () => {
     if (!form.name.trim()) return
-    const now = new Date().toISOString()
+    const now = nowISO()
     await useSourceStore.getState().save({
       id: editing?.id ?? createId(),
       name: form.name.trim(),
@@ -155,8 +75,11 @@ export function SourceManager() {
       category: form.category.trim() || '科技',
       enabled: editing?.enabled ?? true,
       config: form.config.trim() || undefined,
+      // 本机抓取状态原样带过：编辑名称/分类不应把「上次成功时间」「连续失败次数」清空
       lastFetchedAt: editing?.lastFetchedAt,
+      lastSuccessAt: editing?.lastSuccessAt,
       lastError: editing?.lastError,
+      failCount: editing?.failCount,
       createdAt: editing?.createdAt ?? now,
       updatedAt: now,
     })
@@ -171,44 +94,62 @@ export function SourceManager() {
   const toggleEnabled = async (s: IntelligenceSource) => {
     await useSourceStore.getState().update(s.id, {
       enabled: !s.enabled,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowISO(),
     })
   }
-  /** 测试：拉取 → 预览（成功显示条目，失败分类展示 CORS/认证/解析/空） */
+  /** 测试：拉取 → 预览（成功显示条目，失败显示分类与可照做的下一步） */
   const test = async (s: IntelligenceSource) => {
     setTesting(s.id)
     setPreview({ source: s, items: [], loading: true })
-    try {
-      const items = await testSource(s)
-      setPreview({ source: s, items, loading: false })
-    } catch (e) {
-      setPreview({ source: s, items: [], error: classifyFetchError(e), loading: false })
-    } finally {
-      setTesting(null)
-    }
+    const res = await testSource(s)
+    setPreview(res.ok ? { source: s, items: res.items, loading: false } : { source: s, items: [], error: res.failure, loading: false })
+    setTesting(null)
   }
-  /** 立即抓取并并入情报流（经 saveMany 落库并触发同步；失败透出真实原因） */
+  /** 立即抓取并并入情报流（经 run.retrySource：忽略退避 + 落库 + 裁剪 + 记录状态） */
   const fetchNow = async (s: IntelligenceSource) => {
     setTesting(s.id)
     try {
-      const fresh = await fetchFromSource(s)
-      const existing = useIntelligenceStore.getState().items
-      const known = new Set(existing.map((x) => dedupeKey(x)))
-      const added = fresh.filter((x) => !known.has(dedupeKey(x)))
-      await useIntelligenceStore.getState().saveMany(added)
-      toast(`抓取 ${s.name}：新增 ${added.length} 条`, added.length > 0 ? 'success' : 'info')
+      const res = await retrySource(s)
+      if (res.failure) {
+        toast(`抓取「${s.name}」失败：${res.failure.message}`, 'danger')
+        return
+      }
+      if (res.added === 0) {
+        // 没有新条目就不要谎报"新增 N 条"
+        toast(`抓取 ${s.name}：无新条目`, 'info')
+      } else {
+        toast(
+          `抓取 ${s.name}：新增 ${res.added} 条` + (res.removed > 0 ? `（已保留上限，清理 ${res.removed} 条）` : ''),
+          'success',
+        )
+      }
     } catch (e) {
       toast(`抓取失败：${e instanceof Error ? e.message : '网络不可达'}`, 'danger')
     } finally {
+      // 源状态（上次成功 / 连续失败次数）由 run 统一写库并刷新内存，这里无需再 load
       setTesting(null)
-      // fetchFromSource 直写 db 记录统计，刷新内存让卡片上的时间/错误即时可见
-      void useSourceStore.getState().load()
     }
+  }
+
+  /** 测试确认：清掉该源的失败态（下次抓取重新计） */
+  const confirmPreview = () => {
+    if (preview?.source) {
+      const src = preview.source
+      toast(
+        preview.items.length > 0
+          ? `连接成功：${preview.items.length} 条可映射`
+          : '连接成功但无数据',
+        preview.items.length > 0 ? 'success' : 'info',
+      )
+      void useSourceStore.getState().update(src.id, { lastError: undefined, failCount: 0, updatedAt: nowISO() })
+    }
+    setPreview(null)
   }
 
   return (
     <Section
-      title="情报源"
+      // 不写 title：这一块嵌在「系统 · 智能」的折叠层里，折叠头已经写着「情报源」，
+      // 内层再写一遍就是同屏两行一样的字（用户截图反馈过）
       hint={`${sources.length} 个 · 启停/测试/抓取`}
       action={
         <Button size="sm" variant="primary" onClick={() => openNew()}>
@@ -217,112 +158,34 @@ export function SourceManager() {
       }
     >
       {/* 定时自动抓取 */}
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
-        <span className="text-sm text-ink">定时自动抓取</span>
-        <button
-          role="switch"
-          aria-checked={intelAuto}
-          onClick={() => {
-            useSettingsStore.getState().set({ intelAutoFetch: !intelAuto })
-            initIntelAutoFetch()
-          }}
-          className={cn(
-            'relative h-5 w-9 rounded-full transition-colors',
-            intelAuto ? 'bg-teal' : 'bg-nested',
-          )}
-        >
-          <span
-            className={cn(
-              'absolute top-0.5 h-4 w-4 rounded-full bg-paper transition-all',
-              intelAuto ? 'left-[18px]' : 'left-0.5',
-            )}
-          />
-        </button>
-        <span className="text-[11px] text-ink-faint">间隔</span>
-        <Select
-          value={String(intelMinutes)}
-          onChange={(e) => {
-            useSettingsStore.getState().set({ intelFetchMinutes: Number(e.target.value) })
-            initIntelAutoFetch()
-          }}
-          className="!w-auto !py-1 text-xs"
-          disabled={!intelAuto}
-          aria-label="抓取间隔"
-        >
-          <option value="30">30 分钟</option>
-          <option value="60">1 小时</option>
-          <option value="360">6 小时</option>
-        </Select>
-        <span className="ml-auto text-[11px] text-ink-faint">
-          {intelAuto ? `每 ${intelMinutes} 分钟自动拉取启用源` : '默认关闭'}
-        </span>
-      </div>
+      <AutoFetchBar
+        auto={intelAuto}
+        minutes={intelMinutes}
+        onToggle={() => {
+          useSettingsStore.getState().set({ intelAutoFetch: !intelAuto })
+          initIntelAutoFetch()
+        }}
+        onMinutes={(n) => {
+          useSettingsStore.getState().set({ intelFetchMinutes: n })
+          initIntelAutoFetch()
+        }}
+      />
 
       {sources.length > 0 ? (
         <div>
           {sources.map((s) => (
-            <div key={s.id} className="row group">
-              <span
-                className={cn(
-                  'flex h-8 w-8 shrink-0 items-center justify-center rounded-tile text-xs',
-                  s.enabled ? 'bg-teal/10 text-teal' : 'bg-nested/60 text-ink-faint',
-                )}
-              >
-                {PROVIDER_LABEL[s.provider].slice(0, 2)}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className={cn('text-sm font-medium', s.enabled ? 'text-ink' : 'text-ink-faint')}>
-                    {s.name}
-                  </span>
-                  <Badge tone="plain">{PROVIDER_LABEL[s.provider]}</Badge>
-                  <Badge tone="teal">{s.category}</Badge>
-                  {!s.enabled && <Badge tone="plain">停用</Badge>}
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-ink-faint">
-                  {s.url && <span className="hidden truncate md:inline">{s.url}</span>}
-                  {s.lastFetchedAt && <span className="tabular">抓取于 {s.lastFetchedAt.slice(0, 16).replace('T', ' ')}</span>}
-                  {s.lastError && <span className="text-cinnabar" title={s.lastError}>失败：{s.lastError.slice(0, 40)}</span>}
-                </div>
-              </div>
-              {compact ? (
-                /* 手机端：一行 5 个图标必然挤成一团，只留「抓取」，其余收进 ⋯ */
-                <>
-                  <Button size="sm" variant="tertiary" onClick={() => fetchNow(s)} disabled={testing === s.id} className="!px-2">
-                    <Download size={13} /> 抓取
-                  </Button>
-                  <button
-                    onClick={() => setActionFor(s)}
-                    className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-raised"
-                    aria-label="更多操作"
-                  >
-                    <MoreHorizontal size={16} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Button size="sm" variant="tertiary" onClick={() => fetchNow(s)} disabled={testing === s.id} className="!px-2">
-                    <Download size={13} /> {testing === s.id ? '抓取中' : '抓取'}
-                  </Button>
-                  <Button size="sm" variant="tertiary" onClick={() => test(s)} disabled={testing === s.id} className="!px-2">
-                    <Zap size={13} /> 测试
-                  </Button>
-                  <button
-                    onClick={() => toggleEnabled(s)}
-                    className={cn('rounded-control p-1.5 transition-colors', s.enabled ? 'text-teal' : 'text-ink-faint hover:text-teal')}
-                    aria-label={s.enabled ? '停用' : '启用'}
-                  >
-                    <Power size={14} />
-                  </button>
-                  <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => openEdit(s)} aria-label="编辑">
-                    <Pencil size={14} />
-                  </button>
-                  <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => remove(s)} aria-label="删除">
-                    <Trash2 size={14} />
-                  </button>
-                </>
-              )}
-            </div>
+            <SourceRow
+              key={s.id}
+              s={s}
+              compact={compact}
+              testing={testing === s.id}
+              onFetch={() => void fetchNow(s)}
+              onTest={() => void test(s)}
+              onToggle={() => void toggleEnabled(s)}
+              onEdit={() => openEdit(s)}
+              onRemove={() => void remove(s)}
+              onMore={() => setActionFor(s)}
+            />
           ))}
         </div>
       ) : (
@@ -337,174 +200,32 @@ export function SourceManager() {
       )}
 
       {/* 手机端单源操作：整行按钮摊不开，改为弹层集中承载 */}
-      <Dialog open={actionFor != null} onClose={() => setActionFor(null)} title={actionFor?.name}>
-        {actionFor && (
-          <div className="space-y-2">
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                const s = actionFor
-                setActionFor(null)
-                void test(s)
-              }}
-            >
-              <Zap size={14} /> 测试连接
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                const s = actionFor
-                setActionFor(null)
-                void toggleEnabled(s)
-              }}
-            >
-              <Power size={14} /> {actionFor.enabled ? '停用该源' : '启用该源'}
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                const s = actionFor
-                setActionFor(null)
-                openEdit(s)
-              }}
-            >
-              <Pencil size={14} /> 编辑配置
-            </Button>
-            <Button
-              variant="danger"
-              className="w-full"
-              onClick={() => {
-                const s = actionFor
-                setActionFor(null)
-                void remove(s)
-              }}
-            >
-              <Trash2 size={14} /> 删除该源
-            </Button>
-          </div>
-        )}
-      </Dialog>
+      <MobileActionDialog
+        source={actionFor}
+        onClose={() => setActionFor(null)}
+        onTest={(s) => void test(s)}
+        onToggle={(s) => void toggleEnabled(s)}
+        onEdit={openEdit}
+        onRemove={(s) => void remove(s)}
+      />
 
-      <Dialog
+      <SourceFormDialog
         open={open}
         onClose={() => setOpen(false)}
-        title={editing ? '改情报源' : '新增情报源'}
-        footer={
-          <>
-            <Button variant="tertiary" onClick={() => setOpen(false)}>取消</Button>
-            <Button variant="primary" onClick={save} disabled={!form.name.trim()}>保存</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <Input autoFocus placeholder="名称" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <div className="grid grid-cols-2 gap-3">
-            <Select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value as IntelligenceProviderId })}>
-              {PROVIDER_ORDER.map((p) => (
-                <option key={p} value={p}>{PROVIDER_LABEL[p]}</option>
-              ))}
-            </Select>
-            <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} aria-label="分类">
-              {intelCategories.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </Select>
-          </div>
-          {(form.provider === 'rss' || form.provider === 'custom') && (
-            <Input placeholder="Feed URL（rss/custom 必填）" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
-          )}
-          {CONFIG_HINT[form.provider] && (
-            <Input
-              placeholder={CONFIG_HINT[form.provider]}
-              value={form.config}
-              onChange={(e) => setForm({ ...form, config: e.target.value })}
-              className="font-mono !text-xs"
-            />
-          )}
-          <p className="text-[11px] text-ink-faint">
-            Steam/Jikan 无需 Key（Steam 需 App ID）；RAWG 需在配置填 key（绝不写源码）。GitHub 用公共搜索 API；B 站须先配置上方「自建代理」。
-          </p>
-        </div>
-      </Dialog>
+        editing={editing != null}
+        form={form}
+        onForm={setForm}
+        categories={intelCategories}
+        onSave={() => void save()}
+      />
 
       {/* 测试预览：连接 → 预览 → 字段映射确认 → 保存 */}
-      <Dialog
-        open={preview != null}
+      <TestPreviewDialog
+        preview={preview}
         onClose={() => setPreview(null)}
-        title={`测试 · ${preview?.source.name ?? ''}`}
-        footer={
-          <>
-            <Button variant="tertiary" onClick={() => setPreview(null)}>关闭</Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (preview?.source) {
-                  const src = preview.source
-                  toast(
-                    preview.items.length > 0
-                      ? `连接成功：${preview.items.length} 条可映射`
-                      : '连接成功但无数据',
-                    preview.items.length > 0 ? 'success' : 'info',
-                  )
-                  void useSourceStore.getState().update(src.id, { lastError: undefined, updatedAt: new Date().toISOString() })
-                }
-                setPreview(null)
-              }}
-              disabled={!preview || preview.loading}
-            >
-              确认保存
-            </Button>
-          </>
-        }
-      >
-        {preview?.loading ? (
-          <p className="py-8 text-center text-sm text-ink-faint">连接与解析中…</p>
-        ) : preview?.error ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 rounded-tile border border-cinnabar/40 bg-cinnabar/5 px-4 py-3">
-              <span className="seal seal--done">{preview.error.kind.toUpperCase()}</span>
-              <span className="text-sm text-ink">{preview.error.message}</span>
-            </div>
-            <p className="hidden text-[11px] leading-relaxed text-ink-faint md:block">
-              失败分类：CORS（浏览器跨域）/ auth（认证）/ timeout（超时）/ parse（解析）/ empty（空数据）/ http（状态码）。CORS 受限时建议改用 RSS / JSON 接口，或接入服务端代理。
-            </p>
-          </div>
-        ) : preview ? (
-          preview.items.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-xs text-ink-faint">
-                共拉取 <span className="text-ink">{preview.items.length}</span> 条 · 已按统一模型映射：
-              </p>
-              {preview.items.slice(0, 5).map((it) => (
-                <div key={it.id} className="rounded-tile border border-line px-3 py-2">
-                  <div className="text-sm font-medium text-ink">{it.title}</div>
-                  <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-ink-faint">
-                    {it.url && <span className="truncate">链接 {it.url}</span>}
-                    {it.publishedAt && <span className="tabular">{it.publishedAt.slice(0, 10)}</span>}
-                    {it.category && <span>{it.category}</span>}
-                  </div>
-                </div>
-              ))}
-              {preview.items.length > 5 && (
-                <p className="text-[11px] text-ink-faint">… 其余 {preview.items.length - 5} 条略</p>
-              )}
-            </div>
-          ) : (
-            <p className="py-8 text-center text-sm text-ink-faint">连接成功，但没有解析到条目（empty）</p>
-          )
-        ) : null}
-      </Dialog>
+        onRetest={(s) => void test(s)}
+        onConfirm={confirmPreview}
+      />
     </Section>
   )
-}
-
-/** 去重键：source + externalId | url | title + publishedAt */
-export function dedupeKey(it: { source?: string; sourceName?: string; externalId?: string; url?: string; title: string; publishedAt?: string }): string {
-  const s = it.source ?? it.sourceName ?? ''
-  if (it.externalId) return `${s}|${it.externalId}`
-  if (it.url) return `${s}|${it.url}`
-  return `${s}|${it.title}|${(it.publishedAt ?? '').slice(0, 10)}`
 }

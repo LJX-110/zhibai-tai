@@ -36,7 +36,6 @@ import type {
   Project,
   Purchase,
   SyncMeta,
-  SyncQueueRecord,
   Task,
   Tombstone,
   WaterLog,
@@ -59,28 +58,27 @@ export class WorkbenchDB extends Dexie {
   divinationRecords!: Table<DivinationRecord, string>
   aiResources!: Table<AIResource, string>
 
-  // v0.2 新增
+  // 新增
   financeRecords!: Table<FinanceRecord, string>
   purchases!: Table<Purchase, string>
   budgets!: Table<Budget, string>
   projects!: Table<Project, string>
 
-  // v0.2.5 新增
+  // 新增
   intelligenceSources!: Table<IntelligenceSource, string>
-  syncQueue!: Table<SyncQueueRecord, string>
   syncMeta!: Table<SyncMeta, string>
   /** 本地加密密钥（AES-GCM，不可导出） */
   cryptoKeys!: Table<{ id: string; key: CryptoKey }, string>
 
-  // v0.3 新增
+  // 新增
   conflicts!: Table<ConflictRecord, string>
   activityItems!: Table<ActivityItem, string>
   follows!: Table<Follow, string>
 
-  // v0.4 新增：墓碑表，让删除可在设备间传播
+  // 新增：墓碑表，让删除可在设备间传播
   tombstones!: Table<Tombstone, string>
 
-  // v0.6 新增：分类（原存于设置项，无法同步）+ 参与同步的偏好设置单行表
+  // 新增：分类（原存于设置项，无法同步）+ 参与同步的偏好设置单行表
   categories!: Table<Category, string>
   appSettings!: Table<AppSettingsRow, string>
 
@@ -104,31 +102,31 @@ export class WorkbenchDB extends Dexie {
       aiResources: 'id, type, enabled',
       journals: 'id, date',
     })
-    // v0.2：仅新增表，不动 v1 表
+    // 仅新增表，不动既有结构（兼容旧版本升级）
     this.version(2).stores({
       financeRecords: 'id, kind, category, date, createdAt',
       purchases: 'id, category, date, createdAt',
       budgets: 'id, month',
       projects: 'id, status, favorite, updatedAt',
     })
-    // v0.2.5：情报源 / 持久化同步队列 / 同步元数据 / 加密密钥（均为新增表）
+    // 情报源 / 持久化同步队列 / 同步元数据 / 加密密钥（均为新增表）
     this.version(3).stores({
       intelligenceSources: 'id, provider, enabled, category',
       syncQueue: 'id, entity, ts',
       syncMeta: 'id',
       cryptoKeys: 'id',
     })
-    // v0.3：冲突记录 / 活动轨迹 / 关注（均为新增表）
+    // 冲突记录 / 活动轨迹 / 关注（均为新增表）
     this.version(4).stores({
       conflicts: 'id, entity, entityId, resolved, createdAt',
       activityItems: 'id, entityType, timestamp',
       follows: 'id, type, createdAt',
     })
-    // v0.4：删除墓碑（仅新增表，不动既有结构）
+    // 删除墓碑（仅新增表，不动既有结构）
     this.version(5).stores({
       tombstones: 'id, entity, entityId, deletedAt',
     })
-    /* v0.5：清理 9 处无效布尔索引。
+    /* 清理 9 处无效布尔索引。
      * IndexedDB 不接受 boolean 类型的 key——这些字段（done/pinned/favorite/
      * read/enabled/resolved）建索引时被静默跳过，索引恒为空，属纯死重；
      * 全仓也没有任何 .where() 布尔查询（布尔过滤一律走内存 .filter）。
@@ -144,7 +142,7 @@ export class WorkbenchDB extends Dexie {
       intelligenceSources: 'id, provider, category',
       conflicts: 'id, entity, entityId, createdAt',
     })
-    /* v0.6：新增「分类」与「偏好设置」两张业务表（仅新增，不动既有结构）。
+    /* 新增「分类」与「偏好设置」两张业务表（仅新增，不动既有结构）。
      * 分类此前只存在设置项里，从不参与同步；偏好设置此前也只有浏览器本地一份。
      * 两者注册进 BUSINESS_TABLES 后才真正进入快照、墓碑与备份链路。 */
     this.version(7).stores({
@@ -157,6 +155,13 @@ export class WorkbenchDB extends Dexie {
      * 又会篡改历史版本 schema（已装用户的旧库升级时不会真正删表）。 */
     this.version(8).stores({
       journals: null,
+    })
+    /* 删除 syncQueue 表：该表自建库起没有任何写入路径
+     * （同步改为全量快照后，不再记录逐条变更），数据恒为空——属预留未落地功能，
+     * 故连同读写链路一并移除。Dexie 删表须在更高版本号显式声明 `表名: null`，
+     * 直接删 v3 的索引既不会触发删除，又会篡改历史版本 schema。 */
+    this.version(9).stores({
+      syncQueue: null,
     })
   }
 }

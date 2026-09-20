@@ -2,7 +2,7 @@
  * Onboarding —— 首次启动引导
  * 欢迎 → 主题 → 布局 → 喝水目标 → 完成
  */
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Check, Moon, Sun, Monitor, LayoutGrid, Smartphone, Droplet } from 'lucide-react'
 import { Taiji } from '../components/ui/Taiji'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -57,13 +57,13 @@ export function Onboarding() {
   return (
     <div className="fixed inset-0 z-[var(--z-immersive)] flex items-center justify-center overflow-y-auto bg-paper p-4">
       <div className="w-full max-w-md py-8">
-        {/* 步骤指示 */}
-        <div className="mb-8 flex items-center justify-center gap-2">
+        {/* 步骤指示：连线用 flex-1 而非固定宽，6 步在 320px 下也能收进屏宽而不溢出 */}
+        <div className="mb-8 flex w-full items-center justify-between">
           {STEPS.map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
+            <Fragment key={s}>
               <span
                 className={cn(
-                  'display flex h-7 w-7 items-center justify-center rounded-full border text-xs transition-colors',
+                  'display flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs transition-colors',
                   i < step
                     ? 'border-cinnabar bg-cinnabar text-on-cinnabar'
                     : i === step
@@ -73,8 +73,8 @@ export function Onboarding() {
               >
                 {i < step ? <Check size={13} /> : s}
               </span>
-              {i < STEPS.length - 1 && <span className="h-px w-6 bg-line" />}
-            </div>
+              {i < STEPS.length - 1 && <span className="mx-1 h-px flex-1 bg-line" />}
+            </Fragment>
           ))}
         </div>
 
@@ -105,7 +105,7 @@ export function Onboarding() {
                     className="flex flex-col items-center gap-1 rounded-tile border border-line bg-raised px-2 py-2.5"
                   >
                     <span className="scribal text-base text-ink">{c}</span>
-                    <span className="text-[11px] text-ink-faint">{d}</span>
+                    <span className="text-xs text-ink-faint">{d}</span>
                   </div>
                 ))}
               </div>
@@ -129,7 +129,7 @@ export function Onboarding() {
                   >
                     <t.icon size={20} className="mx-auto mb-2 text-ink-soft" />
                     <div className="text-sm font-medium text-ink">{t.label}</div>
-                    <div className="mt-0.5 text-[11px] text-ink-faint">{t.desc}</div>
+                    <div className="mt-0.5 text-xs text-ink-faint">{t.desc}</div>
                   </button>
                 ))}
               </div>
@@ -153,7 +153,7 @@ export function Onboarding() {
                   >
                     <l.icon size={20} className="mx-auto mb-2 text-ink-soft" />
                     <div className="text-sm font-medium text-ink">{l.label}</div>
-                    <div className="mt-0.5 text-[11px] text-ink-faint">{l.desc}</div>
+                    <div className="mt-0.5 text-xs text-ink-faint">{l.desc}</div>
                   </button>
                 ))}
               </div>
@@ -190,14 +190,14 @@ export function Onboarding() {
               </p>
               {/* 快捷键卡：命令面板是效率核心，不做引导几乎无人发现 */}
               <div className="mx-auto mt-6 max-w-[300px] rounded-paper border border-line bg-raised p-3 text-left">
-                <div className="mb-2 text-[11px] tracking-[0.2em] text-ink-faint">键盘快捷方式</div>
+                <div className="mb-2 text-xs tracking-[0.2em] text-ink-faint">键盘快捷方式</div>
                 {([
                   ['Ctrl + K', '呼出命令面板：新建 / 跳转 / 抓取'],
                   ['/', '任意页面快速全局搜索'],
                   ['Esc', '关闭弹层与面板'],
                 ] as const).map(([k, d]) => (
                   <div key={k} className="flex items-center gap-3 py-1 text-xs">
-                    <kbd className="min-w-[64px] rounded-control border border-line bg-paper px-1.5 py-0.5 text-center font-mono text-[11px] text-ink-soft">
+                    <kbd className="min-w-[64px] rounded-control border border-line bg-paper px-1.5 py-0.5 text-center font-mono text-xs text-ink-soft">
                       {k}
                     </kbd>
                     <span className="text-ink-muted">{d}</span>

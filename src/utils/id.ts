@@ -53,6 +53,17 @@ export function diffDays(iso: string): number {
   return Math.round((d - t) / 86400000)
 }
 
+/** 当前时刻的 ISO 字符串 —— 全库统一的"现在"（写库 / 导出用），
+ *  避免各处各写一遍 new Date().toISOString()（全库曾有 40 处） */
+export function nowISO(): string {
+  return new Date().toISOString()
+}
+
+/** 今天星期几（0=周日 … 6=周六），与 weekdayCN / 课程表 weekday 同构 */
+export function todayWeekday(): number {
+  return new Date().getDay()
+}
+
 /** 当前时间 HH:mm */
 export function nowHM(): string {
   const d = new Date()
@@ -88,4 +99,36 @@ export function monthlyDueToday(
   now = new Date(),
 ): boolean {
   return t.monthlyDay != null && t.monthlyDay === now.getDate()
+}
+
+/* ---------------- 每周固定任务（每周 X 提醒） ---------------- */
+
+/**
+ * 本周是否已完成（completedAt 落在本周一 00:00 起的一周内）。
+ * 一周以「周一」为始：与国内作息一致，也对齐 ISO 周；
+ * 用 getDay() 推周一时借其「0=周日」特性 —— (dow + 6) % 7 即距周一的天数，
+ * 与 weeklyDay 取值域（0=周日…6=周六）同一套，不引入第二套编号。
+ */
+export function weeklyDoneThisWeek(
+  t: { done: boolean; completedAt?: string | null },
+  now = new Date(),
+): boolean {
+  if (!t.done || !t.completedAt) return false
+  const completed = new Date(t.completedAt)
+  if (Number.isNaN(completed.getTime())) return false
+  // 取某日所在周的周一 00:00（本地）
+  const mondayOf = (d: Date) => {
+    const dow = d.getDay() // 0=周日…6=周六
+    const diff = (dow + 6) % 7 // 周日→6, 周一→0, …, 周六→5
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff)
+  }
+  return mondayOf(completed).getTime() === mondayOf(now).getTime()
+}
+
+/** 每周固定任务：今天是否到期（今天 = 每周 X；weeklyDay 用 0=周日 约定） */
+export function weeklyDueToday(
+  t: { weeklyDay?: number | null },
+  now = new Date(),
+): boolean {
+  return t.weeklyDay != null && t.weeklyDay === now.getDay()
 }

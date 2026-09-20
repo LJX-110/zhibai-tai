@@ -34,7 +34,7 @@ export function Timeline({ items, className }: TimelineProps) {
         <li key={it.id} className="relative flex gap-3 pb-4 pl-4 last:pb-0">
           <span
             className={cn(
-              'absolute left-0 top-[8px] h-2 w-2 -translate-x-1/2 rotate-45',
+              'absolute left-0 top-2 h-2 w-2 -translate-x-1/2 rotate-45',
               dotTone[it.tone ?? 'plain'],
             )}
           />
@@ -46,7 +46,7 @@ export function Timeline({ items, className }: TimelineProps) {
               <span className="min-w-0 flex-1 text-sm font-medium text-ink">{it.title}</span>
             </div>
             {it.detail && (
-              <div className="mt-0.5 text-[13px] text-ink-muted">{it.detail}</div>
+              <div className="mt-0.5 text-sm text-ink-muted">{it.detail}</div>
             )}
           </div>
         </li>

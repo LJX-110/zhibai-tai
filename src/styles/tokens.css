@@ -12,17 +12,19 @@
      规则：文字总是 ink 系；金底配深字(--on-gold)；侧栏内一律 on-sidebar 系。
    【字体】--font-sans 正文 / --font-serif 大标题(.display) /
      --font-deco 书法装饰(.scribal) / --font-mono 数字与元数据(.tabular)。
-   【字号】阶梯 12/13/15/18/21/28/36/48px（--text-*）。正文基准 15px。
+   【字号】阶梯 12/14/16/18/22/28/36/48px（--text-*）。正文基准 16px
+     —— 定 16 为防 iOS 聚焦输入框时把整页放大（配合 index.css 的输入控件规则）。
    【间距】纵向节奏一律用 4px 栅格（Tailwind 默认）。区块间隙用 --section-gap(20px)，
      页面版面用 Section 组件的 pb-[var(--section-gap)]，禁止手写散落 margin。
-   【圆角】--radius-control(4) < --radius-tile(8) < --radius-paper(12) < --radius-sheet(16)。
+   【圆角】--radius-control(4) < --radius-chip(6) < --radius-tile(8) < --radius-paper(12) < --radius-sheet(16)。
    【阴影】--shadow-soft/float/overlay 三级，浮层必须 overlay。
-   【动效】时长令牌 --duration-fast(120)/med(240)/slow(420) + --ease-standard。
+   【动效】时长令牌 --duration-fast(120)/med(240)/slow(420)/enter(320) +
+     --ease-standard（常态）/ --ease-settle（入场，ease-out-quart）。
      进入动画统一用 index.css 的命名类：anim-fade / anim-enter / anim-enter-fast / anim-sheet，
      **禁止**写散落的 animate-[page-fade_XXXms_...]。
    【层级】z 一律走 --z-* 令牌：header(30) < sidebar(40) < nav(50) < overlay(60)
      < immersive(70) < command(80) < toast(90)。禁止写死 z-50 / z-[60]。
-   【加载】整页/整块加载 = <Spinner/>（太极旋转）；按钮内加载 = 图标 + animate-spin。
+   【加载】整页/整块加载 = <Taiji/> 太极旋转（与 index.html 的 .boot 首屏占位同款视觉）；按钮内加载 = 图标 + animate-spin。
    【音效】统一 sfx/playSound 事件（ui-open/ui-close/ui-click/...），按钮组件已内建点击音。
    【弹层】Dialog(居中) / Sheet(底部) / CommandMenu(命令) 三件套，
      均带遮罩 anim-fade + 面板 anim-enter/anim-sheet，Escape 关闭并登记 overlay 栈。
@@ -39,6 +41,9 @@
    ============================================================ */
 
 @import "tailwindcss";
+/* 组件兜底规则（浮层圆角 / 按钮禁用态）：需要越过 index.css 的未分层样式，
+   必须排在工具层之外的文件里，见该文件头部说明 */
+@import "./ui-rules.css";
 
 /* ---------- 语义化颜色（运行时随主题翻转） ---------- */
 @theme inline {
@@ -112,28 +117,38 @@
 
   /* 圆角：控制件最小、面板次之、浮层最大 */
   --radius-control: 4px;
+  /* chip 档：比控件略大的小块 —— 徽标、勾选框、侧栏菜单项、顶栏工具按钮。
+     它服务的是「小体量、需可点」的元素；与 Chip 组件的实现无关（Chip 用 tile 档）。 */
+  --radius-chip: 6px;
   --radius-tile: 8px;
   --radius-paper: 12px;
   --radius-sheet: 16px;
 
-  /* 字号阶梯（正文 15 为基准） */
-  --text-xs: 0.75rem;       /* 12px */
-  --text-sm: 0.8125rem;     /* 13px */
-  --text-base: 0.9375rem;   /* 15px */
-  --text-lg: 1.125rem;      /* 18px */
-  --text-xl: 1.3125rem;     /* 21px */
-  --text-2xl: 1.75rem;      /* 28px */
-  --text-3xl: 2.25rem;      /* 36px */
-  --text-4xl: 3rem;         /* 48px */
+  /* 字号阶梯（正文 16 为基准）
+     定 16 而非 15 的原因：iOS Safari 对 <16px 的输入框会在聚焦时把整页放大且不还原，
+     把正文基准抬到 16 顺带解决「手机端一聚焦输入框就跳大」。
+     小端保持 2px 等差（12/14/16）便于建立层级，标题端留跳跃（22/28/36/48）。 */
+  --text-xs: 0.75rem;       /* 12px 元信息、mono 数字 */
+  --text-sm: 0.875rem;      /* 14px 次要文字 */
+  --text-base: 1rem;        /* 16px 正文 */
+  --text-lg: 1.125rem;      /* 18px 小标题 */
+  --text-xl: 1.375rem;      /* 22px 区块标题 */
+  --text-2xl: 1.75rem;      /* 28px 页面标题 */
+  --text-3xl: 2.25rem;      /* 36px 展示标题 */
+  --text-4xl: 3rem;         /* 48px 诗题 */
 
   --shadow-soft: var(--shadow-soft-value);
   --shadow-float: var(--shadow-float-value);
   --shadow-overlay: var(--shadow-overlay-value);
 
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* 入场用 ease-out-quart：起手快、收尾稳，比通用缓动更像「落定」。
+     命名避开 Tailwind 内置的 ease-out，以免覆盖其默认语义。 */
+  --ease-settle: cubic-bezier(0.25, 1, 0.5, 1);
   --duration-fast: 120ms;
   --duration-med: 240ms;
   --duration-slow: 420ms;
+  --duration-enter: 320ms;
 }
 
 /* ============================================================
@@ -149,7 +164,7 @@
   --font-serif-stack: "Noto Serif SC", "Source Han Serif SC", "Songti SC",
     "STSong", "SimSun", serif;
   --font-mono-stack: "JetBrains Mono", "Cascadia Code", "SF Mono", Consolas, monospace;
-  --font-deco-stack: "Ma Shan Zheng", "ZCOOL XiaoWei", "Noto Serif SC",
+  --font-deco-stack: "Ma Shan Zheng", "Noto Serif SC",
     "Kaiti SC", "STKaiti", "KaiTi", serif;
 
   /* 基底：纯白，冷灰分层（无色相注入） */

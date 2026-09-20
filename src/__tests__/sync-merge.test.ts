@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { mergeAndDetectConflicts } from '../sync/SyncService'
-import { dedupeKey } from '../components/source/SourceManager'
+import { dedupeKey } from '../services/intelligence/dedupe'
 
 const rec = (id: string, ts: string, title: string) => ({ id, updatedAt: ts, title })
 

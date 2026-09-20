@@ -24,13 +24,8 @@ export interface SettingsState {
   /** 番茄钟时长（分钟） */
   pomodoroFocusMin: number
   pomodoroBreakMin: number
-  /** GitHub 同步 */
-  /** 同步模式：repo=GitHub 私有仓库（完整） gist=Gist 云笺（轻量） */
-  syncMode?: 'repo' | 'gist'
-  gistToken?: string
-  gistTokenEnc?: boolean
-  /** 首次同步自动创建后回填 */
-  gistId?: string
+  /** GitHub 同步（仅私有仓库 + 加密快照一种方式） */
+  syncMode?: 'repo'
   githubRepo?: string
   githubBranch?: string
   /** Token 经加密后存储（encryptor），绝不存明文进代码 */
@@ -46,17 +41,24 @@ export interface SettingsState {
   syncStatus: SyncStatus
   syncError?: string
 
-  /** v0.4 音效（Web Audio 合成，默认低音量） */
+  /** 音效（Web Audio 合成，默认低音量） */
   soundEnabled: boolean
   soundVolume: number
-  /** 环境音（未来扩展，默认关） */
+  /** 环境音（Web Audio 合成，默认关；由 sound.ts 的 setAmbient 控制） */
   ambientEnabled: boolean
-  /** v0.4 轻量通知（非强制弹窗） */
+  /** 轻量通知（非强制弹窗） */
   notifyEnabled: boolean
   /** 使用浏览器 Notification（需授权） */
   browserNotify: boolean
+  /**
+   * 免打扰时段：该时段内提醒**只记入历史、不弹提示、不发系统通知。
+   * 起止为 'HH:MM'；支持跨零点（如 23:00 → 07:00 覆盖整夜）。
+   */
+  quietEnabled: boolean
+  quietFrom: string
+  quietTo: string
 
-  /** v1.0 AI Core：Provider 配置（Key 加密存储，绝不硬编码） */
+  /** AI Core：Provider 配置（Key 加密存储，绝不硬编码） */
   aiProvider: 'local' | 'remote'
   aiBaseUrl: string
   aiModel: string
@@ -69,7 +71,7 @@ export interface SettingsState {
   /** 情报保留上限（条）。情报是会持续自动增长的表，没有上限会让同步快照无限膨胀。 */
   intelKeepLimit: number
   /** 自建 CORS 代理（如 Cloudflare Worker）。配置后情报抓取优先经它转发，
-   *  彻底摆脱公共代理的可用性波动；留空则走 直连 → 公共代理 兜底链。
+   *  彻底摆脱公共代理的可用性波动；留空则仅直连（不做公共代理兜底）。
    *  B 站源（bilibili provider）同样依赖它：B 站接口不接受浏览器跨域直连。 */
   corsProxyUrl?: string
 
@@ -90,9 +92,6 @@ export const useSettingsStore = create<SettingsState>()(
       pomodoroFocusMin: 25,
       pomodoroBreakMin: 5,
       syncMode: 'repo',
-      gistToken: '',
-      gistTokenEnc: false,
-      gistId: '',
       githubRepo: '',
       githubBranch: 'main',
       githubToken: '',
@@ -111,6 +110,9 @@ export const useSettingsStore = create<SettingsState>()(
       ambientEnabled: false,
       notifyEnabled: true,
       browserNotify: false,
+      quietEnabled: false,
+      quietFrom: '23:00',
+      quietTo: '07:00',
       aiProvider: 'local',
       aiBaseUrl: 'https://apihub.agnes-ai.com/v1',
       aiModel: 'agnes-2.5-flash',

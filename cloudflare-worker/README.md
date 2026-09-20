@@ -81,7 +81,9 @@ npx wrangler deploy
 
 App 会拼成 `<填的地址>?url=…`，因此填不填结尾的 `/proxy` 都能命中。
 
-保存后情报抓取链路为：**自建代理 → 直连 → 公共代理兜底**。
+保存后情报抓取链路为：**自建代理 → 直连**。直连失败即快速失败并提示去配代理，
+**不做公共代理兜底** —— 公共 CORS 代理（allorigins / r.jina.ai / codetabs / thingproxy
+超时，cors.lol / cors.eu.org 一律 429）在国内已全部不可用，兜底只会白等 24 秒。
 
 ## 安全加固（建议）
 

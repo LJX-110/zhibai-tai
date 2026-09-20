@@ -1,6 +1,6 @@
 /**
  * 道行服务 —— 由近期行为综合得出的轨迹分
- * Phase 1：简单权重模型，不做复杂算法；接口预留后续扩展
+ * 权重模型保持简单，不做复杂算法
  *
  * 五维：行 / 学 / 身 / 心 / 创（每维 0-20，总分 0-100）
  *
@@ -8,6 +8,8 @@
  * 不是已删除的 journals 表。它与「创」（灵感 + 收藏）刻意不重叠：
  * 心 = 记录与内省，创 = 创作与收拢 —— 两件事，两种分数。
  */
+import { todayISO } from '../utils/id'
+
 export type DimensionKey = 'xing' | 'xue' | 'shen' | 'xin' | 'chuang'
 
 export interface DimensionResult {
@@ -68,19 +70,67 @@ export function computeCultivation(input: CultivationInput): CultivationResult {
   return { total, dimensions }
 }
 
-/** 道行等级（丹道四炼 · 由今日总分定阶）：
- *  抱朴 → 炼精化气 → 炼气化神 → 炼神还虚 → 炼虚合道。
- *  总分 0-100，五阶覆盖：未入道、下三品、中三品、上三品、圆满。 */
-export function cultivationGrade(total: number): { title: string; desc: string } {
+/** 道行等级（丹道五阶 · 由今日总分定阶）
+ *  抱朴守一 → 炼精化气 → 炼气化神 → 炼神还虚 → 炼虚合道（总分 0-100）。
+ *  `tone` 取自既有品牌色（不新增颜色），供境界卡取色；`rank` 用于比较高低。 */
+export interface CultivationGrade {
+  title: string
+  desc: string
+  /** 阶位（0 起） */
+  rank: number
+  /** 该阶的色（tokens 变量名） */
+  tone: 'plain' | 'qing' | 'teal' | 'bronze' | 'cinnabar'
+}
+
+export function cultivationGrade(total: number): CultivationGrade {
   if (total >= 90)
-    return { title: '炼虚合道', desc: '今日与道合真，气机浑然，可称圆满' }
+    return { rank: 4, tone: 'cinnabar', title: '炼虚合道', desc: '今日与道合真，气机浑然，可称圆满' }
   if (total >= 65)
-    return { title: '炼神还虚', desc: '神返内守，虚静生慧，今日功夫到火候' }
+    return { rank: 3, tone: 'bronze', title: '炼神还虚', desc: '神返内守，虚静生慧，今日功夫到火候' }
   if (total >= 35)
-    return { title: '炼气化神', desc: '气机渐足，神意清明，正合今日所得' }
+    return { rank: 2, tone: 'teal', title: '炼气化神', desc: '气机渐足，神意清明，正合今日所得' }
   if (total >= 10)
-    return { title: '炼精化气', desc: '精微初聚，尚需火候，宜再添几笔' }
-  return { title: '抱朴守一', desc: '今日无事可记，养精蓄锐亦是修行' }
+    return { rank: 1, tone: 'qing', title: '炼精化气', desc: '精微初聚，尚需火候，宜再添几笔' }
+  return { rank: 0, tone: 'plain', title: '抱朴守一', desc: '今日无事可记，养精蓄锐亦是修行' }
+}
+
+/**
+ * 历史最高境界 —— 存本机。
+ * 道行由**本机**今日数据算出，历史也该留在本机；跨设备同步会与"今日道行"
+ * 的本机语义冲突（A 机的最高纪录不该覆盖 B 机的）。
+ */
+const BEST_KEY = 'zbt:cultivation-best:v1'
+
+export interface BestRecord {
+  title: string
+  rank: number
+  total: number
+  /** 达到该纪录的日期 */
+  at: string
+}
+
+export function readBest(): BestRecord | null {
+  try {
+    const raw = localStorage.getItem(BEST_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    if (parsed && typeof parsed.title === 'string') return parsed as BestRecord
+  } catch {
+    /* 存档损坏按无记录处理 */
+  }
+  return null
+}
+
+/** 只在刷新纪录时写入；返回是否刷新 */
+export function saveBestIfHigher(grade: CultivationGrade, total: number): boolean {
+  const prev = readBest()
+  if (prev && prev.rank >= grade.rank && prev.total >= total) return false
+  try {
+    const rec: BestRecord = { title: grade.title, rank: grade.rank, total, at: todayISO() }
+    localStorage.setItem(BEST_KEY, JSON.stringify(rec))
+  } catch {
+    /* 存储满 / 隐私模式写不进去时放弃记录，不影响界面 */
+  }
+  return true
 }
 
 /** 道行来源分解（行为 → 得分说明，非 RPG 数值，只是记录来源） */

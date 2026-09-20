@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { aiService } from '../../services/ai/ai-service'
-import { dedupeKey } from '../source/SourceManager'
+import { dedupeKey } from '../../services/intelligence/dedupe'
 import { playSound } from '../../services/sound'
 import { Button, Dialog, useToast } from '../ui'
 
@@ -121,7 +121,7 @@ export function IntelTidy() {
                   <span className="min-w-0 flex-1 truncate text-sm text-ink">{r.title}</span>
                   {r.dedupe && <span className="seal seal--done">疑似重复</span>}
                 </div>
-                <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-faint">
+                <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-ink-faint">
                   <span>分类：{r.category}</span>
                   <span>标签：{r.tags.length > 0 ? r.tags.join('、') : '无新增'}</span>
                   <span>重要度：{r.importance}</span>

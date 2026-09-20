@@ -62,20 +62,23 @@ function isDirectFriendly(target: string): boolean {
   }
 }
 
-export function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
+function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(ms)
   return outer ? AbortSignal.any([outer, timeout]) : timeout
 }
 
 /**
- * 按候选链拉取文本。
- * 全部通道失败时抛出**可读**的错误：区分「没配代理」与「配了但连不上」。
+ * 按候选链逐个尝试：命中首个 ok 响应即返回；非 ok 继续下一个候选，
+ * 全部失败抛出**可读**错误（区分「没配代理」与「配了但连不上」）。
+ * 目标自带 CORS 时直连优先，其余走自建代理（先根路径后 /proxy）。
+ * 不做公共代理兜底：直连不行就快速失败，明确提示去配自建代理。
  */
-export async function proxyFetch(
+async function runThroughChain(
   url: string,
-  selfProxyUrl?: string,
-  signal?: AbortSignal,
-): Promise<string> {
+  selfProxyUrl: string | undefined,
+  init: RequestInit,
+  outerSignal?: AbortSignal,
+): Promise<Response> {
   const configured = proxyCandidates(selfProxyUrl)
   // 目标自带 CORS 时直连优先，避免绕一圈
   const chain = isDirectFriendly(url)
@@ -83,13 +86,17 @@ export async function proxyFetch(
     : configured
 
   const problems: string[] = []
+  /** 最近一次「拿到了响应但状态码不是 2xx」的候选 —— 用于区分「链路不通」与「目标本身报错」 */
+  let lastHttp: { label: string; status: number } | null = null
   for (const candidate of chain) {
     try {
       const res = await fetch(candidate.build(url), {
-        signal: timeoutSignal(candidate.timeoutMs, signal),
+        ...init,
+        signal: timeoutSignal(candidate.timeoutMs, outerSignal),
       })
-      if (res.ok) return await res.text()
+      if (res.ok) return res
       // 404/403 这类是代理本身的问题（路径不对/白名单拦截），值得记下来
+      lastHttp = { label: candidate.label, status: res.status }
       problems.push(`${candidate.label} HTTP ${res.status}`)
     } catch (e) {
       const reason =
@@ -104,57 +111,23 @@ export async function proxyFetch(
 
   const detail = problems.join('；')
   if (!selfProxyUrl?.trim()) {
+    // 有状态码说明请求**已经到达**目标（DNS 通、TLS 通），问题在目标自己：
+    // 地址失效（404）、限流（429）、反爬（403/412）。
+    // 此时再提示「去配自建代理」是把用户支使到错误的方向 —— 配了代理照样是同一个状态码
+    if (lastHttp) {
+      throw new Error(`目标返回 HTTP ${lastHttp.status}（${detail}）`)
+    }
     throw new Error(`${NEEDS_PROXY_MESSAGE}（${detail}）`)
   }
   throw new Error(`自建代理不可达：${detail}`)
 }
 
-/**
- * 通用代理请求（Gist 同步等需要自定义方法 / 头 / body 的场景复用）。
- * 与 proxyFetch 同一候选链语义：目标自带 CORS 直连优先，其余走自建代理。
- * 返回 { ok, status, text } —— 调用方自行决定 404 等状态语义。
- */
-export interface ProxyRequestInit {
-  method?: string
-  headers?: Record<string, string>
-  body?: string
-  signal?: AbortSignal
-}
-
-export async function proxyRequest(
+/** 按候选链拉取文本（非 ok 继续下一个候选，全部失败抛错） */
+export async function proxyFetch(
   url: string,
   selfProxyUrl?: string,
-  init: ProxyRequestInit = {},
-): Promise<{ ok: boolean; status: number; text: string }> {
-  const configured = proxyCandidates(selfProxyUrl)
-  const chain = isDirectFriendly(url)
-    ? configured.filter((c) => !c.self).concat(configured.filter((c) => c.self))
-    : configured
-
-  const problems: string[] = []
-  for (const candidate of chain) {
-    try {
-      const res = await fetch(candidate.build(url), {
-        method: init.method ?? 'GET',
-        headers: init.headers,
-        body: init.body,
-        signal: timeoutSignal(candidate.timeoutMs, init.signal),
-      })
-      return { ok: res.ok, status: res.status, text: await res.text() }
-    } catch (e) {
-      const reason =
-        e instanceof Error
-          ? e.name === 'TimeoutError' || e.name === 'AbortError'
-            ? '超时'
-            : e.message
-          : '未知错误'
-      problems.push(`${candidate.label} ${reason}`)
-    }
-  }
-
-  const detail = problems.join('；')
-  if (!selfProxyUrl?.trim()) {
-    throw new Error(`${NEEDS_PROXY_MESSAGE}（${detail}）`)
-  }
-  throw new Error(`自建代理不可达：${detail}`)
+  signal?: AbortSignal,
+): Promise<string> {
+  const res = await runThroughChain(url, selfProxyUrl, {}, signal)
+  return await res.text()
 }

@@ -9,19 +9,25 @@ import { describe, expect, it } from 'vitest'
 import { stripLocalOnly } from '../sync/SyncService'
 
 describe('同步导出剥离本机独有字段', () => {
-  it('情报源剥离抓取时间与错误', () => {
+  it('情报源剥离抓取时间、错误与失败计数', () => {
     const rows = [
       {
         id: 's1',
         name: 'GitHub 实用项目',
         lastFetchedAt: '2026-09-12T04:00:00.000Z',
         lastError: 'HTTP 429',
+        lastSuccessAt: '2026-09-11T04:00:00.000Z',
+        failCount: 3,
         updatedAt: '2026-09-01T00:00:00.000Z',
       },
     ]
     const out = stripLocalOnly('intelligenceSources', rows) as Record<string, unknown>[]
     expect(out[0]).not.toHaveProperty('lastFetchedAt')
     expect(out[0]).not.toHaveProperty('lastError')
+    // 失败计数是本机状态：若跟着快照走，A 机失败 1 次会因为 B 机同步而变成 N 次，
+    // 退避时间凭空变长
+    expect(out[0]).not.toHaveProperty('lastSuccessAt')
+    expect(out[0]).not.toHaveProperty('failCount')
     // 参与合并的字段必须留下，否则 LWW 失去依据
     expect(out[0].updatedAt).toBe('2026-09-01T00:00:00.000Z')
     expect(out[0].name).toBe('GitHub 实用项目')

@@ -54,7 +54,7 @@ export function Hotkeys() {
         <KbdRow keys={['?']} desc="打开此速查表" />
         <KbdRow keys={['Esc']} desc="关闭弹层 / 面板" />
       </div>
-      <p className="mt-3 text-[11px] text-ink-faint">输入框聚焦时快捷键自动失效。</p>
+      <p className="mt-3 text-xs text-ink-faint">输入框聚焦时快捷键自动失效。</p>
     </Dialog>
   )
 }
@@ -66,7 +66,7 @@ function KbdRow({ keys, desc }: { keys: string[]; desc: string }) {
         {keys.map((k) => (
           <kbd
             key={k}
-            className="min-w-6 rounded-[4px] border border-line bg-nested px-1.5 py-0.5 text-center font-mono text-xs text-ink"
+            className="min-w-6 rounded-control border border-line bg-nested px-1.5 py-0.5 text-center font-mono text-xs text-ink"
           >
             {k}
           </kbd>

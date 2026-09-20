@@ -23,6 +23,13 @@ export interface Task {
   repeat: Repeat
   /** 每月固定日提醒（1-31，如每月 27 号交话费） */
   monthlyDay?: number | null
+  /**
+   * 每周固定提醒的星期几（0-6，0=周日…6=周六，如每周三做复盘）。
+   * 取值域刻意与 JS Date.getDay() 同构（0=周日），也与项目里
+   * weekdayCN()、WeeklySlot.weekday 同一套约定 —— 整条链路无需任何
+   * ±1 换算，避免「0/1 错位」类 bug；存量任务无此字段时视为「非每周固定」。
+   */
+  weeklyDay?: number | null
   /** 关联项目 / 关联课程 */
   projectId?: ID | null
   courseId?: ID | null
@@ -348,10 +355,6 @@ export type IntelligenceProviderId =
   | 'atom'
   | 'json'
   | 'rest'
-  | 'mock'
-  | 'game'
-  | 'anime'
-  | 'official'
   | 'web'
   | 'custom'
   | 'steam'
@@ -373,6 +376,15 @@ export interface IntelligenceSource {
   config?: string
   lastFetchedAt?: string
   lastError?: string
+  /**
+   * 上次**成功**抓到数据的时刻。
+   * 与 lastFetchedAt 的区别是语义：lastFetchedAt 每次尝试都写（失败也写），
+   * 用它判断「源还活着吗」会把持续失败的源显示成刚刚抓过；
+   * 用户真正想知道的是「这个源最后一次正常出数据是什么时候」。
+   */
+  lastSuccessAt?: string
+  /** 连续失败次数：成功即清零。界面据此显示失败程度，抓取编排据此退避（避免红叉源被反复重试） */
+  failCount?: number
   createdAt: string
   updatedAt: string
 }
@@ -389,15 +401,6 @@ export interface Tombstone {
   entityId: string
   /** 删除时刻 ISO，用于过期清理 */
   deletedAt: string
-}
-
-/** 持久化同步队列记录 */
-export interface SyncQueueRecord {
-  id: ID
-  entity: string
-  op: 'create' | 'update' | 'delete'
-  ts: number
-  payload?: unknown
 }
 
 /** 同步元数据（设备 / 版本 / 时间，供 LWW） */
@@ -467,6 +470,17 @@ export type AIResourceType =
   | 'plugin'
   | 'prompt'
   | 'workflow'
+
+/** 术类型旧枚举键 → 数据化后的显示名（仅供一次性迁移旧数据使用） */
+export const AI_TYPE_LEGACY_LABEL: Record<AIResourceType, string> = {
+  model: '模型',
+  tool: 'Tool',
+  skill: 'Skill',
+  agent: 'Agent',
+  plugin: 'Plugin',
+  prompt: 'Prompt',
+  workflow: 'Workflow',
+}
 
 /** AI 资源（术） */
 export interface AIResource {

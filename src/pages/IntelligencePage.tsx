@@ -2,252 +2,32 @@
  * 情 —— Intelligence Feed（信息流，非后台列表）
  * 顶部聚合页签 → 搜索/筛选 → 纵向信息流
  * 每条：标题 / 摘要 / 来源 / 分类 / 时间 / 标签；操作仅保留 收藏·稍后·更多，其余进 Inspector
+ *
+ * 拆分说明（2026-09-20 路线图第 4 步）：本文件只留「状态 + 数据流 + 区块组合」，
+ * 行 / 页签 / 筛选条 / 失败报告 / 关注面板 / 分类弹层各自成文件放在 ./intelligence/ 下，
+ * 依赖一律**显式传参**，不再依赖组件内的闭包 —— 这正是上一轮"抽子组件"失败的原因。
  */
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Bookmark, Clock, Languages, MoreHorizontal, Plus, RefreshCw, Rss, Settings2, SlidersHorizontal, Star, Trash2, X } from 'lucide-react'
+import { RefreshCw, Rss } from 'lucide-react'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useSourceStore } from '../stores/useSourceStore'
 import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
 import { useFollowStore } from '../stores/useLifeStores'
-import { dedupeKey } from '../components/source/SourceManager'
-import {
-  fetchAllFromSources,
-  type SourceFetchFailure,
-} from '../services/intelligence/providers/registry'
-import { saveFetchedItems } from '../services/intelligence/retention'
-import { aiService } from '../services/ai/ai-service'
+import { refreshAll, retrySource } from '../services/intelligence/run'
 import { playSound } from '../services/sound'
 import { useInspectorStore } from '../components/inspector/Inspector'
 import { IntelTidy } from '../components/intelligence/IntelTidy'
 import type { IntelligenceItem, SourceType } from '../types/entities'
-import { diffDays, formatHM, friendlyDate } from '../utils/id'
+import { diffDays } from '../utils/id'
 import { cn } from '../utils/cn'
-import { Badge, Button, Dialog, EmptyState, Input, PageHeader, Select, Tooltip, useToast } from '../components/ui'
-const SOURCE_OPTIONS: { value: SourceType | 'all'; label: string }[] = [
-  { value: 'all', label: '全部来源' },
-  { value: 'bilibili', label: 'B 站' },
-  { value: 'github', label: 'GitHub' },
-  { value: 'rss', label: 'RSS' },
-  { value: 'official', label: '官方' },
-  { value: 'ai', label: 'AI' },
-  { value: 'web', label: 'Web' },
-  { value: 'game', label: '游戏' },
-  { value: 'anime', label: '动漫' },
-]
-
-const TIME_OPTIONS = [
-  { value: 'all', label: '全部时间' },
-  { value: 'today', label: '今天' },
-  { value: '3d', label: '近 3 天' },
-  { value: '7d', label: '近 7 天' },
-]
-
-/** 单次渲染条数：够首屏铺设，又不至于把几百条带图的行一次塞进 DOM */
-const PAGE_SIZE = 40
-
-/** 单条情报 AI 中文摘要（可折叠；外文标题/摘要 → 中文概括） */
-function FeedTranslate({ it }: { it: IntelligenceItem }) {
-  const [zh, setZh] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const toast = useToast().toast
-  const toggle = async () => {
-    if (zh) {
-      setZh(null)
-      return
-    }
-    setLoading(true)
-    try {
-      setZh(await aiService.translateSummary(it))
-    } catch {
-      toast('AI 摘要失败', 'danger')
-    } finally {
-      setLoading(false)
-    }
-  }
-  return (
-    <>
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          void toggle()
-        }}
-        className={cn(
-          'flex items-center gap-1 rounded-control px-1.5 py-1 text-[11px] transition-colors',
-          zh ? 'text-teal' : 'text-ink-faint hover:text-teal',
-        )}
-      >
-        <Languages size={12} /> {loading ? '…' : zh ? '收起' : '中文摘要'}
-      </button>
-      {zh && (
-        <p className="mt-1 line-clamp-6 whitespace-pre-wrap rounded-[6px] border border-teal/20 bg-teal/5 px-2 py-1.5 text-[12px] leading-relaxed text-ink-soft">
-          {zh}
-        </p>
-      )}
-    </>
-  )
-}
-
-/** 媒体行（游戏/动漫等带图情报） */
-function FeedMediaRow({
-  it,
-  onOpen,
-  onFav,
-  onLater,
-}: {
-  it: IntelligenceItem
-  onOpen: () => void
-  onFav: () => void
-  onLater: () => void
-}) {
-  return (
-    <div
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
-      className={cn(
-        'group flex cursor-pointer items-start gap-3 rounded-tile border border-line bg-paper/50 px-3 py-3 transition-colors hover:border-line-strong active:bg-nested',
-        it.read && 'opacity-60',
-      )}
-    >
-      {it.image ? (
-        <img
-          src={it.image}
-          alt=""
-          loading="lazy"
-          className="h-16 w-16 shrink-0 rounded-control border border-line object-cover"
-          onError={(e) => {
-            ;(e.target as HTMLImageElement).style.display = 'none'
-          }}
-        />
-      ) : (
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-control border border-line bg-raised text-ink-faint">
-          <Rss size={18} strokeWidth={1.5} />
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-sm font-medium text-ink">{it.title}</span>
-          {!it.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cinnabar" />}
-        </div>
-        {it.summary && (
-          <p className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-ink-muted">{it.summary}</p>
-        )}
-        <FeedMeta it={it} />
-        <FeedTranslate it={it} />
-      </div>
-      <FeedActions it={it} onFav={onFav} onLater={onLater} onOpen={onOpen} />
-    </div>
-  )
-}
-
-/** 普通文本行 */
-function FeedRow({
-  it,
-  onOpen,
-  onFav,
-  onLater,
-}: {
-  it: IntelligenceItem
-  onOpen: () => void
-  onFav: () => void
-  onLater: () => void
-}) {
-  return (
-    <div
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
-      className={cn(
-        'group cursor-pointer items-start rounded-control px-3 py-2.5 transition-colors hover:bg-raised active:bg-nested',
-        it.read && 'opacity-60',
-      )}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="text-sm font-medium text-ink">{it.title}</span>
-        {!it.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cinnabar" />}
-      </div>
-      {it.summary && (
-        <p className="mt-0.5 line-clamp-2 text-[13px] leading-relaxed text-ink-muted">{it.summary}</p>
-      )}
-      <div className="mt-1 flex items-start justify-between gap-2">
-        <FeedMeta it={it} />
-        <FeedActions it={it} onFav={onFav} onLater={onLater} onOpen={onOpen} />
-      </div>
-      <FeedTranslate it={it} />
-    </div>
-  )
-}
-
-/** 元信息：来源 / 分类 / 时间 / 标签 */
-function FeedMeta({ it }: { it: IntelligenceItem }) {
-  return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-      <Badge tone={it.sourceType === 'github' || it.sourceType === 'game' ? 'teal' : it.sourceType === 'official' ? 'cinnabar' : 'plain'}>
-        {it.source}
-      </Badge>
-      {it.category && <Badge tone="plain">{it.category}</Badge>}
-      {it.publishedAt && (
-        <span className="tabular text-[11px] text-ink-faint">
-          {diffDays(it.publishedAt.slice(0, 10)) === 0
-            ? `今天 ${formatHM(it.publishedAt)}`
-            : friendlyDate(it.publishedAt.slice(0, 10))}
-        </span>
-      )}
-      {it.tags.slice(0, 3).map((t) => (
-        <span key={t} className="text-[11px] text-ink-faint">#{t}</span>
-      ))}
-    </div>
-  )
-}
-
-/** 操作：收藏 / 稍后 / 更多（其余进 Inspector） */
-function FeedActions({
-  it,
-  onFav,
-  onLater,
-  onOpen,
-}: {
-  it: IntelligenceItem
-  onFav: () => void
-  onLater: () => void
-  onOpen: () => void
-}) {
-  return (
-    <div
-      className="flex shrink-0 items-center gap-0.5"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-    >
-      <Tooltip label={it.favorite ? '取消收藏' : '收藏'}>
-        <button
-          onClick={onFav}
-          className="touch-target rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-bronze"
-          aria-label="收藏"
-        >
-          <Bookmark size={15} fill={it.favorite ? 'currentColor' : 'none'} />
-        </button>
-      </Tooltip>
-      <Tooltip label="稍后读">
-        <button
-          onClick={onLater}
-          className="touch-target rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-ink"
-          aria-label="稍后读"
-        >
-          <Clock size={15} />
-        </button>
-      </Tooltip>
-      <Tooltip label="详情 · 可删除">
-        <button
-          onClick={onOpen}
-          className="touch-target rounded-control p-1.5 text-ink-faint transition-colors hover:bg-raised hover:text-ink"
-          aria-label="详情"
-        >
-          <MoreHorizontal size={15} />
-        </button>
-      </Tooltip>
-    </div>
-  )
-}
+import { Button, EmptyState, PageHeader, useToast } from '../components/ui'
+import { FeedMediaRow, FeedRow } from './intelligence/Feed'
+import { FetchReportPanel } from './intelligence/FetchReportPanel'
+import { FeedTabs } from './intelligence/FeedTabs'
+import { FilterBar } from './intelligence/FilterBar'
+import { FollowPanel } from './intelligence/FollowPanel'
+import { CategoryDialog } from './intelligence/CategoryDialog'
+import { PAGE_SIZE, type FetchReport } from './intelligence/shared'
 
 export function IntelligencePage() {
   const items = useIntelligenceStore((s) => s.items)
@@ -268,11 +48,9 @@ export function IntelligencePage() {
   const [loading, setLoading] = useState(false)
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE)
   /** 最近一次抓取的结果：失败源要留在界面上，而不是只在 toast 里闪一下 */
-  const [fetchReport, setFetchReport] = useState<{
-    fetched: number
-    added: number
-    failures: SourceFetchFailure[]
-  } | null>(null)
+  const [fetchReport, setFetchReport] = useState<FetchReport | null>(null)
+  /** 正在单独重试的源 id：让用户看清「在重试哪一个」，而不是整个页面进入 loading */
+  const [retryingId, setRetryingId] = useState<string | null>(null)
   /** 分类管理弹层：分类在使用的页签处就地增删（不再放设置页） */
   const [catMgrOpen, setCatMgrOpen] = useState(false)
   const [catDraft, setCatDraft] = useState('')
@@ -297,39 +75,67 @@ export function IntelligencePage() {
   const fetchIntelligence = async () => {
     setLoading(true)
     try {
-      const sourceList = useSourceStore.getState().items
-      let fresh: IntelligenceItem[] = []
-      let failures: SourceFetchFailure[] = []
-
-      const res = await fetchAllFromSources(sourceList)
-      fresh = res.items
-      failures = res.failures
-
-      // 去重：source + externalId | url | title + date
-      const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
-      const newItems = fresh.filter((x) => !known.has(dedupeKey(x)))
-      // 落库并顺带按上限裁剪（情报是唯一会持续自动增长的表，不裁剪会让快照无限膨胀）
-      const { added } = await saveFetchedItems(newItems)
-      if (newItems.length > 0 && added === 0) {
-        toast('情报已拉取但保存失败，请检查存储空间', 'danger')
-        return
-      }
+      // 拉取、去重、落库、退避全在 refreshAll 里：情报页 / 命令面板 / 定时器
+      // 共用同一条链路，不会出现「这个入口会退避、那个入口不会」的漂移
+      const res = await refreshAll()
 
       // 失败原因必须留在界面上：以前失败被丢在 Promise.allSettled 里，
       // 用户只看得到「拉取 0 条」，无从判断是没配代理还是被限流
-      setFetchReport({ fetched: fresh.length, added: newItems.length, failures })
-      if (newItems.length > 0) playSound('intel-new')
+      setFetchReport({ added: res.added, failures: res.failures, skipped: res.skipped })
+      if (res.added > 0) playSound('intel-new')
       // 全部成功不弹 toast：页内报告已展示新增数，避免频繁打断（更克制的通知策略）
-      if (failures.length > 0) {
+      if (res.failures.length > 0) {
         toast(
-          `新增 ${newItems.length} 条 · ${failures.length} 个源失败`,
-          fresh.length === 0 ? 'danger' : 'info',
+          `新增 ${res.added} 条 · ${res.failures.length} 个源失败`,
+          res.items.length === 0 ? 'danger' : 'info',
         )
       }
     } catch (e) {
       toast(`拉取失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
     } finally {
       setLoading(false)
+    }
+  }
+
+  /**
+   * 单源重试：只重打这一个源。
+   * 整轮重试会让已经正常的源再次被请求 —— 那正是限流的来源，
+   * 所以失败报告里给出的入口必须是「只重试坏的这一个」。
+   */
+  const retryOne = async (sourceId: string) => {
+    const source = useSourceStore.getState().items.find((s) => s.id === sourceId)
+    if (!source) {
+      toast('该情报源已被删除', 'danger')
+      setFetchReport((prev) => (prev ? { ...prev, failures: prev.failures.filter((f) => f.sourceId !== sourceId) } : prev))
+      return
+    }
+    setRetryingId(sourceId)
+    try {
+      const res = await retrySource(source)
+      if (res.failure) {
+        // 更新为最新一次的错误，而不是留着上一次的旧文案
+        setFetchReport((prev) =>
+          prev
+            ? { ...prev, failures: prev.failures.map((f) => (f.sourceId === sourceId ? res.failure! : f)) }
+            : prev,
+        )
+        toast(`重试「${source.name}」仍失败：${res.failure.message}`, 'danger')
+      } else {
+        setFetchReport((prev) =>
+          prev
+            ? {
+                ...prev,
+                added: prev.added + res.added,
+                failures: prev.failures.filter((f) => f.sourceId !== sourceId),
+              }
+            : prev,
+        )
+        toast(`重试「${source.name}」成功：新增 ${res.added} 条`, res.added > 0 ? 'success' : 'info')
+      }
+    } catch (e) {
+      toast(`重试失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+    } finally {
+      setRetryingId(null)
     }
   }
 
@@ -431,173 +237,46 @@ export function IntelligencePage() {
         }
       />
 
-      {/* 抓取失败报告：失败原因、以及「要不要去配代理」一眼可见 */}
-      {fetchReport && fetchReport.failures.length > 0 && (
-        <div className="mb-3 rounded-tile border border-cinnabar/30 bg-cinnabar/5 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[13px] text-ink">
-            <AlertTriangle size={13} className="shrink-0 text-cinnabar" />
-            <span>
-              {fetchReport.failures.length} 个源抓取失败
-              {fetchReport.added > 0 && (
-                <span className="ml-1.5 text-ink-muted">· 另新增 {fetchReport.added} 条</span>
-              )}
-            </span>
-            <button
-              onClick={() => setFetchReport(null)}
-              className="ml-auto shrink-0 text-[11px] text-ink-faint transition-colors hover:text-ink"
-            >
-              收起
-            </button>
-          </div>
-          <div className="mt-1.5 space-y-1">
-            {fetchReport.failures.map((f) => (
-              <div key={f.sourceId} className="text-[11px] leading-relaxed text-ink-muted">
-                <span className="text-ink-soft">{f.sourceName}</span>
-                {f.kind === 'config' ? (
-                  <span className="ml-1.5 text-bronze">需要转发端点</span>
-                ) : (
-                  <span className="ml-1.5">· {f.message}</span>
-                )}
-              </div>
-            ))}
-          </div>
-          {fetchReport.failures.some((f) => f.kind === 'config') && (
-            <p className="mt-2 border-t border-cinnabar/20 pt-1.5 text-[11px] leading-relaxed text-bronze">
-              在「系统 · 情报源 · 自建代理」填入转发地址即可启用这批源（部署说明见仓库 proxy/ 与
-              cloudflare-worker/README.md）
-            </p>
-          )}
-        </div>
+      {fetchReport && (
+        <FetchReportPanel
+          report={fetchReport}
+          retryingId={retryingId}
+          onRetry={(id) => void retryOne(id)}
+          onDismiss={() => setFetchReport(null)}
+        />
       )}
 
-      {/* 聚合页签（行尾 + 号就地管理分类） */}
-      <div className="no-scrollbar -mx-1 mb-3 flex items-center gap-1 overflow-x-auto px-1 pb-1">
-        {feedTabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn(
-              'shrink-0 rounded-tile px-3.5 py-2 text-sm transition-colors',
-              tab === t ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:bg-nested hover:text-ink',
-            )}
-          >
-            {t}
-          </button>
-        ))}
-        <Tooltip label="管理分类">
-          <button
-            onClick={() => setCatMgrOpen(true)}
-            className="shrink-0 rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
-            aria-label="管理分类"
-          >
-            <Plus size={14} />
-          </button>
-        </Tooltip>
-      </div>
+      <FeedTabs tabs={feedTabs} active={tab} onChange={setTab} onManage={() => setCatMgrOpen(true)} />
 
-      {/* 筛选条：手机上只留高频（搜索+分类），来源/时间/收藏/未读收进「筛选」折叠，
-          避免 6 个控件挤在首屏（此前 375px 下一行塞满、换行后仍是三行小控件堆叠） */}
-      <div className="mb-4 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="搜索标题 / 标签"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="!w-40 !py-1.5 !pl-3 text-sm sm:!w-52"
-          />
-          <Select value={category} onChange={(e) => setCategory(e.target.value)} className="!w-auto !py-1.5 text-sm">
-            {catOptions.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </Select>
-          <button
-            onClick={() => setMoreFiltersOpen((v) => !v)}
-            className={cn(
-              'flex items-center gap-1 rounded-tile px-2.5 py-2 text-sm transition-colors',
-              moreFiltersOpen || filtersActive
-                ? 'bg-teal/10 text-teal'
-                : 'bg-raised text-ink-muted hover:text-ink',
-            )}
-            aria-expanded={moreFiltersOpen}
-          >
-            <SlidersHorizontal size={13} /> 筛选
-          </button>
-          <span className="ml-auto hidden text-xs text-ink-faint sm:inline">
-            {list.length} 条{mediaCount > 0 ? ` · ${mediaCount} 条含图` : ''}
-          </span>
-        </div>
-        {moreFiltersOpen && (
-          <div className="flex flex-wrap items-center gap-2 rounded-tile border border-line bg-raised px-2.5 py-2">
-            <Select
-              value={sourceType}
-              onChange={(e) => setSourceType(e.target.value as SourceType | 'all')}
-              className="!w-auto !py-1 text-sm"
-            >
-              {SOURCE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </Select>
-            <Select value={time} onChange={(e) => setTime(e.target.value)} className="!w-auto !py-1 text-sm">
-              {TIME_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </Select>
-            <button
-              onClick={() => setOnlyFav((v) => !v)}
-              className={cn(
-                'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
-                onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
-              )}
-            >
-              <Bookmark size={13} /> 收藏
-            </button>
-            <button
-              onClick={() => setOnlyUnread((v) => !v)}
-              className={cn(
-                'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
-                onlyUnread ? 'bg-teal/15 text-teal' : 'bg-raised text-ink-muted hover:text-ink',
-              )}
-            >
-              未读
-            </button>
-          </div>
-        )}
-      </div>
+      <FilterBar
+        query={query}
+        onQuery={setQuery}
+        category={category}
+        onCategory={setCategory}
+        catOptions={catOptions}
+        moreOpen={moreFiltersOpen}
+        onToggleMore={() => setMoreFiltersOpen((v) => !v)}
+        sourceType={sourceType}
+        onSourceType={setSourceType}
+        time={time}
+        onTime={setTime}
+        onlyFav={onlyFav}
+        onToggleFav={() => setOnlyFav((v) => !v)}
+        onlyUnread={onlyUnread}
+        onToggleUnread={() => setOnlyUnread((v) => !v)}
+        filtersActive={filtersActive}
+        count={list.length}
+        mediaCount={mediaCount}
+      />
 
-      {/* 关注管理：关注此前只能加不能删、也看不到加了什么，是个单向入口 */}
       {tab === '关注' && (
-        <div className="mb-3 rounded-tile border border-line bg-raised px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[13px] text-ink">
-            <Star size={13} className="shrink-0 text-bronze" />
-            已关注 {follows.length} 个关键词
-            <span className="ml-auto text-[11px] text-ink-faint">点 × 取消</span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {follows.map((f) => (
-              <span
-                key={f.id}
-                className="inline-flex items-center gap-1 rounded-control border border-line bg-paper px-2 py-1 text-xs text-ink-soft"
-              >
-                {f.keyword}
-                <button
-                  onClick={() => {
-                    void useFollowStore.getState().remove(f.id)
-                    toast(`已取消关注「${f.keyword}」`)
-                  }}
-                  className="text-ink-faint transition-colors hover:text-cinnabar"
-                  aria-label={`取消关注 ${f.keyword}`}
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-            {follows.length === 0 && (
-              <span className="text-xs text-ink-faint">
-                还没有关注。在情报详情里点「关注」即可追踪某个来源或主题
-              </span>
-            )}
-          </div>
-        </div>
+        <FollowPanel
+          follows={follows}
+          onRemove={(f) => {
+            void useFollowStore.getState().remove(f.id)
+            toast(`已取消关注「${f.keyword}」`)
+          }}
+        />
       )}
 
       {/* 信息流 */}
@@ -652,56 +331,19 @@ export function IntelligencePage() {
       )}
 
       {/* 分类管理：就地增删（移除不影响已有情报，仅收起页签） */}
-      <Dialog open={catMgrOpen} onClose={() => setCatMgrOpen(false)} title="管理情报分类">
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-1.5">
-            {intelCategories.map((c) => (
-              <span
-                key={c}
-                className="inline-flex items-center gap-1 rounded-control border border-line bg-raised px-2 py-1 text-xs text-ink-soft"
-              >
-                {c}
-                <button
-                  onClick={() => removeCategoryName(c)}
-                  className="text-ink-faint transition-colors hover:text-cinnabar"
-                  aria-label={`移除 ${c}`}
-                >
-                  <Trash2 size={11} />
-                </button>
-              </span>
-            ))}
-            {intelCategories.length === 0 && (
-              <span className="text-xs text-ink-faint">暂无自定义分类，情报将全部归入「其他」</span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              autoFocus
-              value={catDraft}
-              onChange={(e) => setCatDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addCategoryName(catDraft)}
-              placeholder="新增分类名…"
-              className="max-w-[200px]"
-            />
-            <Button size="sm" variant="secondary" onClick={() => addCategoryName(catDraft)} disabled={!catDraft.trim()}>
-              <Plus size={13} /> 添加
-            </Button>
-          </div>
-          <div className="flex items-center justify-between border-t border-line pt-3">
-            <p className="text-[11px] text-ink-faint">新增后可作为情报源的分类与筛选页签</p>
-            <Button
-              size="sm"
-              variant="tertiary"
-              onClick={() => {
-                void resetCategories('intel')
-                setTab('全部')
-              }}
-            >
-              <Settings2 size={13} /> 恢复默认
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+      <CategoryDialog
+        open={catMgrOpen}
+        onClose={() => setCatMgrOpen(false)}
+        categories={intelCategories}
+        draft={catDraft}
+        onDraft={setCatDraft}
+        onAdd={() => addCategoryName(catDraft)}
+        onRemove={removeCategoryName}
+        onReset={() => {
+          void resetCategories('intel')
+          setTab('全部')
+        }}
+      />
     </div>
   )
 }

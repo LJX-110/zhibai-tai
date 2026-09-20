@@ -53,7 +53,7 @@ export function Calendar({ month, onMonthChange, marks, onSelectDate, selected }
       </div>
       <div className="grid grid-cols-7 gap-1 text-center">
         {weekdays().map((w) => (
-          <div key={w} className="py-1 text-[10px] tracking-wider text-ink-faint">
+          <div key={w} className="py-1 text-xs tracking-wider text-ink-faint">
             {w}
           </div>
         ))}

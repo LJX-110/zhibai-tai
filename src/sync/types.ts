@@ -1,36 +1,13 @@
 /**
- * 同步模块 —— Phase 1 接口定义
- * 未来实现：浏览器 → IndexedDB → 加密 → GitHub Private Repository
+ * 同步模块 —— 类型定义
+ * 同步以全量加密快照在设备间流转（实现已完整）。
  */
-import type { ID } from '../types/entities'
+import type { SyncFile } from './SyncService'
 
-export type SyncOp = 'create' | 'update' | 'delete'
-
-/** 同步记录：表示某实体的一次变更 */
-export interface SyncRecord {
-  id: ID
-  entity: string
-  op: SyncOp
-  /** 本地变更时间戳 */
-  ts: number
-  payload?: unknown
-}
-
-export interface SyncResult {
-  ok: boolean
-  pushed: number
-  pulled: number
-  message?: string
-}
-
-/** 同步 Provider 抽象（GitHub / 未来其他后端均可实现） */
+/** 同步 Provider 抽象（GitHub 私有仓库等均可实现） */
 export interface SyncProvider {
   id: string
   name: string
-  /** 推送本地变更到远端 */
-  push(records: SyncRecord[]): Promise<SyncResult>
-  /** 从远端拉取变更 */
-  pull(since: number): Promise<{ records: SyncRecord[]; since: number }>
-  /** 连通性检查 */
-  ping(): Promise<boolean>
+  readSyncFile(): Promise<SyncFile | null>
+  writeSyncFile(f: SyncFile): Promise<void>
 }

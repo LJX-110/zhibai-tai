@@ -1,14 +1,13 @@
 /**
  * 观 —— 知白台首页（今日炁象 + 今日案台）
  * 打开即知今天：四维状态（非堆数字）→ 今日任务/课程/到期 → 天机入口（简报/问答在天机）
+ *
+ * 拆分说明（2026-09-20 路线图第 4 步）：罗盘 / 本周回顾 / 今日轨迹与「全部轨迹」抽屉
+ * 各自成文件放在 ./overview/ 下；本文件只留状态、派生数据与区块组合。
  */
 import { useMemo, useState } from 'react'
-import { ArrowRight, Bell, CheckCircle2, Plus, Sparkles } from 'lucide-react'
+import { Bell, CheckCircle2, Plus, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
-import { useTaskStore } from '../stores/useTaskStore'
-import { usePomodoroStore } from '../stores/usePomodoroStore'
-import { useFinanceStore } from '../stores/useFinanceStore'
-import { useHabitLogStore } from '../stores/useHabitStore'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useCourseStore } from '../stores/useStudyStore'
 import { useActivityStore, useFollowStore } from '../stores/useLifeStores'
@@ -16,300 +15,15 @@ import { useTodayStats } from '../hooks/useTodayStats'
 import { useCultivation } from '../hooks/useCultivation'
 import { useTaskActions } from '../hooks/useTaskActions'
 import { useInspectorStore } from '../components/inspector/Inspector'
-import { useResolvedLayout } from '../layouts/useResolvedLayout'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
-import { Section, EmptyState, Timeline, Button, Sheet, Taiji, PageHeader } from '../components/ui'
+import { Section, EmptyState, Button, PageHeader, Taiji } from '../components/ui'
 import { formatHM, todayISO } from '../utils/id'
-import { cn } from '../utils/cn'
 import type { Task } from '../types/entities'
-
-function greeting(hour: number): string {
-  if (hour < 5) return '夜深了，注意休息'
-  if (hour < 9) return '晨光初照，宜静心开卷'
-  if (hour < 12) return '上午好，把握当下'
-  if (hour < 14) return '午后小憩，气定神闲'
-  if (hour < 18) return '下午好，继续推进'
-  if (hour < 23) return '晚间好，收束今日'
-  return '夜深了，注意休息'
-}
-
-/** 炁象维度（克制，非堆数字） */
-interface QiDim {
-  key: string
-  label: string
-  sub: string
-  value: number
-  max: number
-  tone: 'teal' | 'cinnabar' | 'bronze' | 'plain'
-}
-
-const DIM_COLOR: Record<QiDim['tone'], string> = {
-  cinnabar: 'var(--color-cinnabar)',
-  teal: 'var(--color-teal)',
-  bronze: 'var(--color-gold-btn)',
-  plain: 'var(--color-ink-muted)',
-}
-
-/** 微型环形进度（四象节点） */
-function RingGauge({ value, max, color, size = 40 }: { value: number; max: number; color: string; size?: number }) {
-  const r = (size - 6) / 2
-  const c = 2 * Math.PI * r
-  const p = max > 0 ? Math.min(value / max, 1) : 0
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90 shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-line)" strokeWidth={4} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={4}
-        strokeLinecap="round"
-        strokeDasharray={`${c * p} ${c}`}
-        style={{ transition: 'stroke-dasharray 600ms var(--ease-standard)' }}
-      />
-    </svg>
-  )
-}
-
-/** 四象节点（罗盘方位牌）；窄屏用 'block' 排进 2×2 网格，不再绝对定位互挤 */
-function QuadNode({
-  beast,
-  char,
-  dim,
-  pos,
-}: {
-  beast: string
-  char: string
-  dim: QiDim
-  pos: 'top' | 'bottom' | 'left' | 'right' | 'block'
-}) {
-  const color = DIM_COLOR[dim.tone]
-  const posClass = {
-    top: 'absolute left-1/2 top-0 w-[120px] -translate-x-1/2',
-    bottom: 'absolute left-1/2 bottom-0 w-[120px] -translate-x-1/2',
-    left: 'absolute left-0 top-1/2 w-[120px] -translate-y-1/2',
-    right: 'absolute right-0 top-1/2 w-[120px] -translate-y-1/2',
-    block: 'w-full',
-  }[pos]
-  return (
-    <div className={cn('flex flex-col items-center gap-1 rounded-[8px] border border-line bg-paper/75 px-2 py-1.5', posClass)}>
-      <span className="mono-meta text-[9px] text-ink-faint">
-        {char} · {beast}
-      </span>
-      <div className="flex items-center gap-1.5">
-        <RingGauge value={dim.value} max={dim.max} color={color} size={32} />
-        <div className="flex flex-col items-start">
-          <span className="scribal-title text-sm leading-none" style={{ color }}>
-            {dim.label}
-          </span>
-          <span className="mt-0.5 text-[10px] leading-tight text-ink-muted">{dim.sub}</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** 四象罗盘 —— 今日炁象（外环八卦固定 · 24 刻度缓转 · 四象方位牌 · 中央太极）
- *  窄屏收起刻度环与八卦环，四象牌改为太极下方 2×2 —— 罗盘不再独占一整屏，
- *  四块方位牌也不会在 375px 宽下互相压字。 */
-function FourSymbolsCompass({ qiDims, gradeTitle }: { qiDims: QiDim[]; gradeTitle: string }) {
-  const compact = useResolvedLayout() === 'mobile'
-  const ticks = Array.from({ length: 24 }, (_, i) => {
-    const a = (i * 15 * Math.PI) / 180
-    const cardinal = i % 6 === 0
-    const r1 = cardinal ? 176 : 164
-    const r2 = cardinal ? 160 : 154
-    return {
-      x1: 180 + r1 * Math.cos(a),
-      y1: 180 + r1 * Math.sin(a),
-      x2: 180 + r2 * Math.cos(a),
-      y2: 180 + r2 * Math.sin(a),
-      cardinal,
-    }
-  })
-  const TRIGRAMS = ['☰', '☱', '☲', '☳', '☴', '☵', '☶', '☷']
-  return (
-    <div>
-      <div
-        className={cn(
-          'relative mx-auto aspect-square w-full select-none',
-          compact ? 'max-w-[240px]' : 'max-w-[460px]',
-        )}
-      >
-        <svg viewBox="0 0 360 360" className="absolute inset-0 h-full w-full" aria-hidden="true">
-          {/* 外环（鎏金骨架） */}
-          <circle cx="180" cy="180" r="164" fill="none" stroke="var(--color-gold-btn)" strokeWidth="1.2" opacity="0.85" />
-          <circle cx="180" cy="180" r="151" fill="none" stroke="var(--color-gold-btn)" strokeWidth="0.5" strokeDasharray="2 5" opacity="0.55" />
-          {/* 八卦环（固定，不随转；窄屏省略） */}
-          {!compact &&
-            TRIGRAMS.map((t, i) => {
-              const a = ((i * 45 - 90) * Math.PI) / 180
-              return (
-                <text
-                  key={t}
-                  x={180 + 146 * Math.cos(a)}
-                  y={180 + 146 * Math.sin(a)}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize="10"
-                  fill="var(--color-gold-btn)"
-                  opacity="0.85"
-                >
-                  {t}
-                </text>
-              )
-            })}
-          {/* 24 刻度（缓转，四正位朱砂强调，余者鎏金；窄屏省略） */}
-          {!compact && (
-            <g className="compass-ring">
-              {ticks.map((t, i) => (
-                <line
-                  key={i}
-                  x1={t.x1}
-                  y1={t.y1}
-                  x2={t.x2}
-                  y2={t.y2}
-                  stroke={t.cardinal ? 'var(--color-cinnabar)' : 'var(--color-gold-btn)'}
-                  strokeWidth={t.cardinal ? 1 : 0.7}
-                  opacity={t.cardinal ? 0.85 : 0.65}
-                />
-              ))}
-            </g>
-          )}
-          {/* 中环 */}
-          <circle cx="180" cy="180" r="104" fill="none" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.6" />
-          {/* 四向虚十字 */}
-          <line x1="180" y1="44" x2="180" y2="316" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
-          <line x1="44" y1="180" x2="316" y2="180" stroke="var(--color-gold-btn)" strokeWidth="1" opacity="0.4" strokeDasharray="3 5" />
-        </svg>
-        {/* 中央太极：锚定 svg 真实圆心（180,180）。
-            此前用 inset-0 容器居中包住"太极+文字"纵向堆叠，
-            文字把太极顶离了圆心约 15px —— 现太极独占圆心，文字锚在其下 */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <Taiji size={compact ? 40 : 52} className="glow-bronze" />
-        </div>
-        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 translate-y-[32px]">
-          <div className="scribal-title text-lg text-ink">{gradeTitle}</div>
-        </div>
-        {!compact && (
-          <>
-            {/* 四象 */}
-            <QuadNode pos="right" beast="青龙" char="东" dim={qiDims[0]} />
-            <QuadNode pos="bottom" beast="朱雀" char="南" dim={qiDims[1]} />
-            <QuadNode pos="left" beast="白虎" char="西" dim={qiDims[2]} />
-            <QuadNode pos="top" beast="玄武" char="北" dim={qiDims[3]} />
-          </>
-        )}
-      </div>
-      {compact && (
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <QuadNode pos="block" beast="青龙" char="东" dim={qiDims[0]} />
-          <QuadNode pos="block" beast="朱雀" char="南" dim={qiDims[1]} />
-          <QuadNode pos="block" beast="白虎" char="西" dim={qiDims[2]} />
-          <QuadNode pos="block" beast="玄武" char="北" dim={qiDims[3]} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** 本周回顾 —— 数据看板（周一起算；克制四格 + 近 4 周完成趋势） */
-function weekStart(weeksAgo = 0): Date {
-  const d = new Date()
-  const day = (d.getDay() + 6) % 7
-  const s = new Date(d)
-  s.setDate(d.getDate() - day - weeksAgo * 7)
-  s.setHours(0, 0, 0, 0)
-  return s
-}
-
-function WeekReview() {
-  const tasks = useTaskStore((s) => s.items)
-  const pomos = usePomodoroStore((s) => s.items)
-  const finances = useFinanceStore((s) => s.items)
-  const habitLogs = useHabitLogStore((s) => s.items)
-
-  const data = useMemo(() => {
-    const ws = weekStart()
-    const we = new Date(ws.getTime() + 7 * 864e5)
-    const inRange = (iso: string | undefined, from: Date, to: Date) => {
-      if (!iso) return false
-      const t = new Date(iso).getTime()
-      return t >= from.getTime() && t < to.getTime()
-    }
-    const doneThisWeek = tasks.filter((t) => t.done && inRange(t.updatedAt, ws, we)).length
-    const focusMin = pomos
-      .filter((p) => inRange(p.startAt, ws, we))
-      .reduce((s, p) => s + p.durationMin, 0)
-    const month = todayISO().slice(0, 7)
-    const income = finances
-      .filter((f) => f.kind === 'income' && f.date.startsWith(month))
-      .reduce((s, f) => s + f.amount, 0)
-    const expense = finances
-      .filter((f) => f.kind === 'expense' && f.date.startsWith(month))
-      .reduce((s, f) => s + f.amount, 0)
-    const habitDays = new Set(
-      habitLogs.filter((h) => inRange(h.date, ws, we)).map((h) => h.date),
-    ).size
-    const trend = [3, 2, 1, 0].map((i) => {
-      const from = weekStart(i)
-      const to = new Date(from.getTime() + 7 * 864e5)
-      return {
-        label: i === 0 ? '本周' : `${from.getMonth() + 1}/${from.getDate()}`,
-        done: tasks.filter((t) => t.done && inRange(t.updatedAt, from, to)).length,
-      }
-    })
-    return { doneThisWeek, focusMin, income, expense, habitDays, trend }
-  }, [tasks, pomos, finances, habitLogs])
-
-  const cells = [
-    { label: '待办完成', value: `${data.doneThisWeek}`, unit: '件', tone: 'text-teal' },
-    { label: '专注时长', value: `${data.focusMin}`, unit: '分钟', tone: 'text-cinnabar' },
-    {
-      label: '本月结余',
-      value: `${data.income - data.expense >= 0 ? '+' : ''}${data.income - data.expense}`,
-      unit: '元',
-      tone: data.income - data.expense >= 0 ? 'text-teal' : 'text-cinnabar',
-    },
-    { label: '斩三尸打卡', value: `${data.habitDays}`, unit: '天', tone: 'text-bronze' },
-  ]
-
-  return (
-    <Section title="本周回顾" hint="周一为始 · 数据即所得">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cells.map((c) => (
-          <div key={c.label} className="rounded-paper bg-raised px-3 py-3">
-            <div className="text-[11px] text-ink-muted">{c.label}</div>
-            <div className={cn('tabular mt-0.5 text-lg font-semibold', c.tone)}>
-              {c.value}
-              <span className="ml-1 text-[11px] font-normal text-ink-faint">{c.unit}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 rounded-tile border border-line bg-raised p-3">
-        <div className="mb-1.5 text-[11px] text-ink-faint">近 4 周完成待办</div>
-        <div className="space-y-1.5">
-          {data.trend.map((t) => (
-            <div key={t.label} className="flex items-center gap-2">
-              <span className="w-12 shrink-0 text-[11px] text-ink-muted">{t.label}</span>
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-nested">
-                <div
-                  className="h-full rounded-full bg-gold-btn"
-                  style={{ width: `${Math.min(100, (t.done / Math.max(1, ...data.trend.map((x) => x.done))) * 100)}%` }}
-                />
-              </div>
-              <span className="tabular w-8 shrink-0 text-right text-[11px] text-ink-soft">{t.done}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Section>
-  )
-}
+import { FourSymbolsCompass } from './overview/Compass'
+import { WeekReview } from './overview/WeekReview'
+import { TodayTraceSection, AllTraceSheet } from './overview/Trace'
+import type { QiDim } from './overview/shared'
 
 export function OverviewPage() {
   const stats = useTodayStats()
@@ -332,24 +46,26 @@ export function OverviewPage() {
   // 今日待上课（按周几匹配课程表）：
   // 只保留「未开始或进行中」，已结束的课不再展示 —— 实测反馈早上上完的课刷新后仍在提示
   const todayWeekday = now.getDay()
-  const todayClasses = useMemo(() => {
-    return courses
-      .flatMap((c) =>
-        (c.schedule ?? [])
-          .filter((s) => s.weekday === todayWeekday)
-          .map((s) => ({
-            name: c.name,
-            room: c.room,
-            teacher: c.teacher,
-            start: s.start,
-            end: s.end,
-            // 进行中：开始时刻 ≤ 现在 < 结束时刻
-            ongoing: s.start <= nowHMStr && nowHMStr < s.end,
-          })),
-      )
-      .filter((s) => s.end > nowHMStr)
-      .sort((a, b) => a.start.localeCompare(b.start))
-  }, [courses, todayWeekday, nowHMStr])
+  // 今日待上课（按周几匹配课程表）：courses 来自 useCourseStore，其 items 全程不可变更新
+  // （stores/factory.ts 每次写都 set 新数组），courses 引用随数据变化而变；此处去掉手写 useMemo、
+  // 改为普通派生值，交 React Compiler 按真实依赖自动记忆化，消除 preserve-manual-memoization 告警，
+  // 行为与原 memo 等价
+  const todayClasses = courses
+    .flatMap((c) =>
+      (c.schedule ?? [])
+        .filter((s) => s.weekday === todayWeekday)
+        .map((s) => ({
+          name: c.name,
+          room: c.room,
+          teacher: c.teacher,
+          start: s.start,
+          end: s.end,
+          // 进行中：开始时刻 ≤ 现在 < 结束时刻
+          ongoing: s.start <= nowHMStr && nowHMStr < s.end,
+        })),
+    )
+    .filter((s) => s.end > nowHMStr)
+    .sort((a, b) => a.start.localeCompare(b.start))
 
   // 今日轨迹：同一分钟内对同一记录的连续操作（连续点「斩三尸 +1」等）合并为一条带计数，
   // 否则连点几下首页时间轴就被同一条刷屏（前述截图里 1 分钟内出现 6 条 +1 即此问题）
@@ -412,7 +128,9 @@ export function OverviewPage() {
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       {/* 页头：与其他板块统一（书法大标题 + 引首诗句） */}
-      <PageHeader poem={greeting(now.getHours())} title="观 · 观照" />
+      {/* 与其他板块一致用古文名句；此处取《道德经》十六章「万物并作，吾以观复」——
+          "观复"正对「观 · 观照」，也比原先的动态问候语更合这一行的调性 */}
+      <PageHeader poem="万物并作，吾以观复" title="观 · 观照" />
 
       {/* 下一件事：时序感的第一入口 */}
       {(nextClass || nextDue) && (
@@ -442,8 +160,10 @@ export function OverviewPage() {
       )}
 
       {/* 今日炁象：四象罗盘 */}
-      <section className="relative overflow-hidden rounded-paper border border-line px-6 pb-4 pt-5">
-        <div className="mb-2 flex items-center justify-between">
+      <section className="relative overflow-hidden rounded-paper border border-line px-4 pb-4 pt-5 sm:px-6">
+        {/* 卡头允许换行：窄屏上「今日炁象」与「等级 + 太极 + 关注更新」并排会超出，
+            而外层是 overflow-hidden —— 超出的部分会被直接裁掉 */}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-y-1">
           <div className="flex items-center gap-2 mono-meta text-ink-faint">
             <Sparkles size={13} className="text-bronze" />
             今日炁象 · QI COMPASS
@@ -454,7 +174,7 @@ export function OverviewPage() {
             {followNotice > 0 && (
               <button
                 onClick={() => setSection('intelligence')}
-                className="flex items-center gap-1.5 rounded-[6px] bg-cinnabar/10 px-2.5 py-1 text-xs text-cinnabar transition-colors hover:bg-cinnabar/15"
+                className="flex items-center gap-1.5 rounded-tile bg-cinnabar/10 px-2.5 py-1 text-xs text-cinnabar transition-colors hover:bg-cinnabar/15"
               >
                 <Bell size={12} /> 关注更新 {followNotice}
               </button>
@@ -463,7 +183,7 @@ export function OverviewPage() {
         </div>
         <FourSymbolsCompass qiDims={qiDims} gradeTitle={grade.title} />
         {/* 方位口诀：桌面用一句话收束罗盘；窄屏四象牌已带方位名，重复说明藏掉 */}
-        <p className="mt-2 hidden text-center text-[11px] text-ink-faint md:block">
+        <p className="mt-2 hidden text-center text-xs text-ink-faint md:block">
           东·行 · 南·专 · 西·学 · 北·创 —— 五行流转，今日炁象
         </p>
       </section>
@@ -520,11 +240,13 @@ export function OverviewPage() {
                   <div key={i} className="row">
                     <span className="flex w-16 shrink-0 items-center gap-1">
                       <span className="tabular text-xs text-ink-faint">{c.start}</span>
+                      {/* 字号例外：这一列是固定 w-16 的「时间 + 状态」同排，
+                          「08:00」已占满大半，用 12px 会把「上课中」顶出固定宽并压到课名上 */}
                       {c.ongoing && <span className="text-[10px] text-cinnabar">上课中</span>}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm text-ink">{c.name?.trim() || c.room?.trim() || '课程'}</div>
-                      <div className="truncate text-[11px] text-ink-faint">
+                      <div className="truncate text-xs text-ink-faint">
                         {[c.room, c.teacher].filter(Boolean).join(' · ') || '—'}
                       </div>
                     </div>
@@ -566,25 +288,7 @@ export function OverviewPage() {
 
       {/* 今日轨迹 */}
       <div className="mt-2">
-        <Section
-          title="今日轨迹"
-          hint={`${track.length} 条`}
-          action={
-            <Button size="sm" variant="tertiary" onClick={() => setAllTraceOpen(true)}>
-              全部 <ArrowRight size={13} />
-            </Button>
-          }
-        >
-          {track.length > 0 ? (
-            <Timeline items={track} />
-          ) : (
-            <EmptyState
-              title="今日尚无轨迹"
-              desc="完成待办、专注、记录或收藏后会自动出现在这里"
-              step="先做一件事，轨迹自会浮现"
-            />
-          )}
-        </Section>
+        <TodayTraceSection track={track} onOpenAll={() => setAllTraceOpen(true)} />
       </div>
 
       <TaskEditor
@@ -598,24 +302,7 @@ export function OverviewPage() {
       />
 
       {/* 全部轨迹 Sheet */}
-      <Sheet open={allTraceOpen} onClose={() => setAllTraceOpen(false)} title="个人轨迹">
-        {activities.length > 0 ? (
-          <div className="max-h-[60vh] overflow-y-auto">
-            {[...activities]
-              .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-              .slice(0, 60)
-              .map((a) => (
-                <div key={a.id} className="row">
-                  <span className="tabular w-12 shrink-0 text-xs text-ink-faint">{formatHM(a.timestamp)}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink">{a.title}</span>
-                  {a.metadata && <span className="truncate text-xs text-ink-faint">{a.metadata}</span>}
-                </div>
-              ))}
-          </div>
-        ) : (
-          <EmptyState title="还没有轨迹" desc="使用待办、番茄钟、喝水、收藏等会自动记录" />
-        )}
-      </Sheet>
+      <AllTraceSheet open={allTraceOpen} onClose={() => setAllTraceOpen(false)} activities={activities} />
     </div>
   )
 }

@@ -1,19 +1,20 @@
 /**
- * ErrorBoundary —— 错误边界（P0-A）
+ * ErrorBoundary —— 错误边界
  *
  * 捕获子树渲染期异常，降级为可读的错误卡片，避免整页白屏。
  * 两处挂载：
  *   · App 根 —— 兜底，任何未捕获异常都不会让用户面对空白页
  *   · PageRouter —— 按页隔离，切换导航（resetKey 变化）自动恢复
  *
- * 说明：React 错误边界只捕获渲染/lifecycle 异常，
- * 事件回调与异步任务中的错误由 reportError 主动上报。
+ * 说明：React 错误边界只捕获渲染/lifecycle 异常。
+ * 事件回调与异步任务中的错误由 `services/error-log.ts` 的全局处理器兜底
+ * （在 main.tsx 里安装），这里只额外把渲染异常也记进同一份故障流水。
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { TriangleAlert, RefreshCw } from 'lucide-react'
 // 深路径导入：barrel 会拉入 CommandMenu→stores，与本层形成重量级依赖
 import { Button } from '../components/ui/Button'
-import { useToastStore } from '../components/ui/Toast'
+import { recordError } from '../services/error-log'
 
 interface Props {
   children: ReactNode
@@ -39,6 +40,14 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // 仅记录到控制台，不写入任何用户数据
     console.error('[知白台] 渲染异常:', error, info.componentStack)
+    // 同时进故障流水：控制台是要用户开 DevTools 才看得到的，
+    // 而设置页的记录他随时能翻 —— 这正是「白屏 / 点了没反应」类反馈唯一的线索来源
+    recordError({
+      kind: 'render',
+      message: error.message || error.name || '渲染异常',
+      where: this.props.title ?? '页面渲染',
+      detail: info.componentStack ?? error.stack,
+    })
   }
 
   componentDidUpdate(prev: Props) {
@@ -97,16 +106,4 @@ export class ErrorBoundary extends Component<Props, State> {
       </div>
     )
   }
-}
-
-/**
- * 主动上报非渲染期错误（事件回调 / 异步任务 / Promise rejection）。
- * 这类错误 React 错误边界捕获不到，统一走这里提示用户。
- */
-export function reportError(context: string, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error)
-  console.error(`[知白台] ${context}:`, error)
-  // Toast 已被多处静态导入（NotificationGate/CommandMenu 等），
-  // 动态 import 不会切分 chunk，反而触发 vite 的 INEFFECTIVE_DYNAMIC_IMPORT 警告
-  useToastStore.getState().push(`${context}失败：${message}`, 'danger')
 }

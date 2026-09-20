@@ -1,34 +1,32 @@
 /**
  * 情报源注册表 —— 源驱动分发 + 默认源
  * fetchFromSource(source)：按 source.provider 分发到对应 Provider
- * fetchAllFromSources(sources)：拉取全部启用源
+ *
+ * 这里**只做分发**：状态记录（lastFetchedAt / lastSuccessAt / lastError / failCount）、
+ * 并发、退避、失败汇总都在 ../run。把状态写在这里会把「怎么抓」和
+ * 「抓完记什么」耦在一起 —— 之前确实如此，于是三处调用点各写各的重试与落库逻辑，
+ * 出现「手动抓取刷新了源状态、定时抓取却忘了刷新」这类不对称。
  */
 import type { IntelligenceItem, IntelligenceProviderId, IntelligenceSource } from '../../../types/entities'
 import { createId } from '../../../utils/id'
 import { db } from '../../../db/db'
 import { useSettingsStore } from '../../../stores/useSettingsStore'
-import { mockProvider } from './mock'
 import { githubProvider } from './github'
 import { rssProvider } from './rss'
-import { animeProvider, customProvider, gameProvider, officialProvider } from './vertical'
+import { customProvider } from './vertical'
 import { jikanProvider, rawgProvider, steamProvider } from './extended'
 import { bilibiliProvider } from './bilibili'
 import { aiProvider } from './ai'
 import { jsonProvider, webProvider } from './scraper'
-import { classifyFetchError, type FetchErrorKind } from './scraper'
 import type { IntelligenceProvider } from './index'
 
 /** Provider 实现映射（新 Provider 在此注册，不改 UI） */
 export const PROVIDERS: Record<IntelligenceProviderId, IntelligenceProvider> = {
-  mock: mockProvider,
   github: githubProvider,
   rss: rssProvider,
   atom: rssProvider, // Atom 与 RSS 同解析
   json: jsonProvider,
   rest: jsonProvider, // REST JSON 同映射
-  game: gameProvider,
-  anime: animeProvider,
-  official: officialProvider,
   web: webProvider,
   custom: customProvider,
   steam: steamProvider,
@@ -38,93 +36,17 @@ export const PROVIDERS: Record<IntelligenceProviderId, IntelligenceProvider> = {
   ai: aiProvider,
 }
 
-/** 拉取单个源（记录 lastFetchedAt / lastError；失败向上抛出，由调用方决定提示方式） */
+/**
+ * 拉取单个源，**不写任何状态**（纯分发）。
+ * 失败原样抛出，由调用方（run.ts）决定记录与提示方式。
+ */
 export async function fetchFromSource(
   source: IntelligenceSource,
   signal?: AbortSignal,
 ): Promise<IntelligenceItem[]> {
   const provider = PROVIDERS[source.provider]
-  if (!provider) throw new Error('未知 Provider')
-  const now = new Date().toISOString()
-  try {
-    const items = await provider.fetch(source, signal)
-    await db.intelligenceSources.update(source.id, { lastFetchedAt: now, lastError: undefined })
-    return items
-  } catch (e) {
-    await db.intelligenceSources.update(source.id, {
-      lastFetchedAt: now,
-      lastError: e instanceof Error ? e.message : '拉取失败',
-    })
-    console.warn(`[intel:${source.provider}] ${source.name} 拉取失败`, e)
-    throw e
-  }
-}
-
-/** 测试单源：保留错误并抛出（供「测试→预览」使用，便于错误分类） */
-export async function testSource(
-  source: IntelligenceSource,
-  signal?: AbortSignal,
-): Promise<IntelligenceItem[]> {
-  const provider = PROVIDERS[source.provider]
-  if (!provider) throw new Error('未知 Provider')
-  const now = new Date().toISOString()
-  try {
-    const items = await provider.fetch(source, signal)
-    await db.intelligenceSources.update(source.id, { lastFetchedAt: now, lastError: undefined })
-    return items
-  } catch (e) {
-    await db.intelligenceSources.update(source.id, {
-      lastFetchedAt: now,
-      lastError: e instanceof Error ? e.message : '拉取失败',
-    })
-    throw e
-  }
-}
-
-/**
- * 拉取全部启用源。
- *
- * 返回值必须带上**每个失败源的原因** —— 此前这里用 allSettled 后只取 fulfilled，
- * 失败被整个丢弃，界面上永远只说「拉取 0 条情报」，用户无法判断是没配代理、
- * 被限流、还是源本身坏了。错误既然已经拿到，就不该在这里丢掉。
- */
-export interface SourceFetchFailure {
-  sourceId: string
-  sourceName: string
-  kind: FetchErrorKind
-  message: string
-}
-
-export interface FetchAllResult {
-  items: IntelligenceItem[]
-  failures: SourceFetchFailure[]
-  /** 本次尝试拉取的源数量（启用的） */
-  attempted: number
-}
-
-export async function fetchAllFromSources(
-  sources: IntelligenceSource[],
-  signal?: AbortSignal,
-): Promise<FetchAllResult> {
-  const enabled = sources.filter((s) => s.enabled)
-  const results = await Promise.allSettled(enabled.map((s) => fetchFromSource(s, signal)))
-  const items: IntelligenceItem[] = []
-  const failures: SourceFetchFailure[] = []
-  results.forEach((result, i) => {
-    const source = enabled[i]
-    if (result.status === 'fulfilled') {
-      items.push(...result.value)
-      return
-    }
-    const info = classifyFetchError(result.reason)
-    failures.push({
-      sourceId: source.id,
-      sourceName: source.name,
-      kind: info.kind,
-      message: info.message,
-    })
-  })
-  return { items, failures, attempted: enabled.length }
+  if (!provider) throw new Error(`未知 Provider：${source.provider}`)
+  return provider.fetch(source, signal)
 }
 
 /** 首次启动的默认源 —— 按用户兴趣精选（宁少勿杂）。
@@ -268,7 +190,7 @@ export async function migrateBilibiliSources(
 }
 
 /** 修复迁移：
- *  1) v0.3 将 B站默认源播种为停用，老数据里它们仍是 enabled:false ——
+ *  1) 早期将 B站默认源播种为停用，老数据里它们仍是 enabled:false ——
  *     只补「从未成功抓取过」的源（lastFetchedAt 为空说明用户没在用），
  *     用户主动停用且用过的源不动。
  *  2) 机器之心官方 RSS 已下线，仍指向死地址的默认源直接移除（走墓碑）；

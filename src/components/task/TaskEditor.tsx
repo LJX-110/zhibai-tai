@@ -3,7 +3,7 @@
  */
 import { useState } from 'react'
 import type { Priority, Repeat, Task } from '../../types/entities'
-import { createId, todayISO } from '../../utils/id'
+import { createId, todayISO, nowISO } from '../../utils/id'
 import { useCourseStore } from '../../stores/useStudyStore'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { Button } from '../ui/Button'
@@ -25,6 +25,7 @@ const EMPTY = {
   dueDate: '',
   repeat: 'none' as Repeat,
   monthlyDay: null as number | null,
+  weeklyDay: null as number | null,
   tagsText: '',
   projectId: '',
   courseId: '',
@@ -49,6 +50,7 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
       dueDate: task?.dueDate ?? '',
       repeat: task?.repeat ?? 'none',
       monthlyDay: task?.monthlyDay ?? null,
+      weeklyDay: task?.weeklyDay ?? null,
       tagsText: (task?.tags ?? []).join(' '),
       projectId: task?.projectId ?? '',
       courseId: task?.courseId ?? '',
@@ -60,7 +62,7 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
 
   const submit = () => {
     if (!form.title.trim()) return
-    const now = new Date().toISOString()
+    const now = nowISO()
     const tags = form.tagsText
       .split(/[\s,，]+/)
       .map((s) => s.trim())
@@ -75,6 +77,7 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
       tags,
       repeat: form.repeat,
       monthlyDay: form.repeat === 'monthly' ? form.monthlyDay : null,
+      weeklyDay: form.repeat === 'weekly' ? form.weeklyDay : null,
       projectId: form.projectId || null,
       courseId: form.courseId || null,
       createdAt: task?.createdAt ?? now,
@@ -146,6 +149,29 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
               }}
               aria-label="每月几号"
             />
+          ) : form.repeat === 'weekly' ? (
+            <Select
+              value={form.weeklyDay ?? ''}
+              onChange={(e) => {
+                const v = e.target.value
+                const n = Number(v)
+                // 与 monthlyDay 同一校验风格：非法 / 越界一律回退 null
+                setForm({
+                  ...form,
+                  weeklyDay: v === '' || !Number.isFinite(n) || n < 0 || n > 6 ? null : n,
+                })
+              }}
+              aria-label="每周几"
+            >
+              <option value="">每周几</option>
+              <option value="0">周日</option>
+              <option value="1">周一</option>
+              <option value="2">周二</option>
+              <option value="3">周三</option>
+              <option value="4">周四</option>
+              <option value="5">周五</option>
+              <option value="6">周六</option>
+            </Select>
           ) : (
             <Input
               type="date"

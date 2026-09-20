@@ -60,11 +60,11 @@ export function NoteItem({ note, onOpen, onEdit, onDelete, onTogglePin }: NoteIt
               {note.kind === 'inspiration' ? '灵感' : '笔记'}
             </Badge>
             {note.tags?.map((t) => (
-              <span key={t} className="text-[11px] text-ink-faint">
+              <span key={t} className="text-xs text-ink-faint">
                 #{t}
               </span>
             ))}
-            <span className="tabular text-[11px] text-ink-faint">
+            <span className="tabular text-xs text-ink-faint">
               {formatHM(note.createdAt)}
             </span>
           </div>
@@ -75,19 +75,20 @@ export function NoteItem({ note, onOpen, onEdit, onDelete, onTogglePin }: NoteIt
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          <button className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted hover:border-bronze/50 hover:text-bronze" onClick={() => onTogglePin(note)} aria-label="置顶">
+          <button className="rounded-control border border-line bg-raised p-1.5 text-ink-muted hover:border-bronze/50 hover:text-bronze" onClick={() => onTogglePin(note)} aria-label="置顶">
             <Pin size={13} />
           </button>
-          <button className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted hover:border-teal/50 hover:text-teal" onClick={() => onEdit(note)} aria-label="编辑">
+          <button className="rounded-control border border-line bg-raised p-1.5 text-ink-muted hover:border-teal/50 hover:text-teal" onClick={() => onEdit(note)} aria-label="编辑">
             <Pencil size={13} />
           </button>
-          <button className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted hover:border-cinnabar/50 hover:text-cinnabar" onClick={() => onDelete(note)} aria-label="删除">
+          <button className="rounded-control border border-line bg-raised p-1.5 text-ink-muted hover:border-cinnabar/50 hover:text-cinnabar" onClick={() => onDelete(note)} aria-label="删除">
             <Trash2 size={13} />
           </button>
         </div>
       </div>
+      {/* 卡片是 overflow-hidden，长 URL / 长英文词若不断词会被裁掉，故加 break-words */}
       {note.body && (
-        <p className="mt-2 line-clamp-5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-muted">
+        <p className="mt-2 line-clamp-5 break-words whitespace-pre-wrap text-sm leading-relaxed text-ink-muted">
           {note.body}
         </p>
       )}

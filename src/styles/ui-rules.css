@@ -1,0 +1,45 @@
+/* ============================================================
+   UI 组件兜底规则
+
+   这里只放两类东西（其余样式一律走 tokens + Tailwind 工具类）：
+   1. 必须越过 index.css 未分层样式才能生效的规则。
+      index.css 里 .talisman、:focus-visible 等写在 @layer 之外，
+      而未分层的声明优先级高于任何 @layer —— 工具类（rounded-* / border-*）
+      会被它们静默吃掉，看不出报错，只是"改了没反应"。
+   2. 只有伪元素能表达的交互态（如悬停墨韵的禁用抑制）。
+   本文件由 tokens.css 以 @import 引入，保持"样式只有一个入口"。
+   ============================================================ */
+
+/* ---- 浮层形制：圆角与贴边边框 ----
+   Dialog / Sheet / Inspector 都用 .talisman 作面板皮肤，而 .talisman 未分层地
+   写了 border-radius: 10px 与四边 1px 边框 —— 组件里写的 rounded-*
+   （--radius-sheet）与 border-x-0 实际全部失效，三家圆角因此各说各话。
+   浮层圆角按 tokens 约定取最大档 --radius-sheet，这里用双类名提权钉住。 */
+.talisman.overlay-panel {
+  border-radius: var(--radius-sheet);
+}
+/* 贴屏幕边的浮层（底部 Sheet / 移动端详情）：只留上圆角。
+   左右下三条边贴在屏幕边缘，1px 边框会在边上画出一道竖线/横线，
+   而下方两角是圆的话还会在屏幕底角露出遮罩。 */
+.talisman.overlay-panel--edge {
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  border-left-width: 0;
+  border-right-width: 0;
+  border-bottom-width: 0;
+}
+
+/* ---- Button 禁用态 ----
+   .ink-btn 的悬停墨韵（::before）、亮度提升、落印（:active）与 paper 变体的
+   朱砂起笔线（::after）只认 :hover / :active，禁用按钮照旧响应 ——
+   表现为"灰着的按钮还会晕墨、还会被按下去"，读起来像是能点。 */
+.ink-btn:disabled:hover,
+.ink-btn:disabled:active {
+  filter: none;
+  transform: none;
+}
+.ink-btn:disabled:hover::before {
+  opacity: 0;
+}
+.ink-btn:disabled:hover::after {
+  transform: scaleX(0);
+}

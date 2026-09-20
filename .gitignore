@@ -14,6 +14,10 @@ dist-ssr
 # 既不进版本库，也不该被 lint 扫（否则本地跑过 dev 后 lint 警告会凭空多 19 条）
 dev-dist
 *.local
+# 环境变量文件：可能含代理 Token / AI Key，一律不进版本库（*.local 只覆盖 .env.local 一类，
+# 挡不住 .env 本身）；保留 !.env.example，将来放不含密钥的占位模板供他人照抄
+.env*
+!.env.example
 .npm-cache
 .npmrc
 /backup

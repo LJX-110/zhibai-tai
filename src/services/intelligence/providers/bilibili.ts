@@ -19,7 +19,7 @@ import { useSettingsStore } from '../../../stores/useSettingsStore'
 import { keyFromUrl, signedQuery, type WbiKeys } from '../wbi'
 import { NEEDS_PROXY_MESSAGE, proxyFetch } from './proxy'
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
-import type { IntelligenceProvider } from './index'
+import { cfgOf, type IntelligenceProvider } from './index'
 
 const SEARCH_ENDPOINT = 'https://api.bilibili.com/x/web-interface/wbi/search/type'
 const NAV_ENDPOINT = 'https://api.bilibili.com/x/web-interface/nav'
@@ -31,15 +31,6 @@ interface BiliConfig {
   order?: string
   /** 条数（默认 12，上限 30） */
   limit?: number
-}
-
-function cfgOf(source: IntelligenceSource): BiliConfig {
-  if (!source.config) return {}
-  try {
-    return JSON.parse(source.config) as BiliConfig
-  } catch {
-    return {}
-  }
 }
 
 /** 上游被风控拦截时会返回 HTML 错误页，直接 JSON.parse 抛出的
@@ -129,7 +120,7 @@ export const bilibiliProvider: IntelligenceProvider = {
   id: 'bilibili',
   name: 'B 站',
   fetch: async (source, signal) => {
-    const cfg = cfgOf(source)
+    const cfg = cfgOf<BiliConfig>(source)
     const keyword = (cfg.keyword ?? '').trim()
     if (!keyword) return []
 

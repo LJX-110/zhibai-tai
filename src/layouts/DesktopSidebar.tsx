@@ -4,8 +4,7 @@
  */
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
-import { useSyncStore } from '../stores/useSyncStore'
-import { useAIChatStore } from '../components/ai/AiChatPanel'
+import { useAIChatStore } from '../components/ai/chat-store'
 import { Bot } from 'lucide-react'
 import { Taiji } from '../components/ui/Taiji'
 import { NAV_SECTIONS, SYSTEM_SECTION, type SectionId } from '../app/navigation'
@@ -31,7 +30,7 @@ function NavButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'group relative flex w-full items-center gap-3 rounded-[6px] px-3 py-2 transition-colors duration-fast',
+        'group relative flex w-full items-center gap-3 rounded-chip px-3 py-2 transition-colors duration-fast',
         active ? 'bg-paper/10 text-on-sidebar' : 'text-on-sidebar-muted hover:bg-paper/6 hover:text-on-sidebar',
       )}
     >
@@ -41,7 +40,7 @@ function NavButton({
       )}
       <span
         className={cn(
-          'mono-meta w-6 shrink-0 text-right text-[10px]',
+          'mono-meta w-6 shrink-0 text-right text-xs',
           active ? 'text-bronze' : 'text-on-sidebar-muted/60 group-hover:text-on-sidebar-muted',
         )}
       >
@@ -51,7 +50,9 @@ function NavButton({
         <span className={cn('text-sm font-medium', active && 'scribal-title text-base')}>{label}</span>
         <span
           className={cn(
-            'mono-meta text-[9px]',
+            // 不再写 text-[9px]：.mono-meta 在 index.css 里未分层，本就会压过工具类，
+            // 那个覆盖从未生效；字号统一由 .mono-meta（12px 令牌）决定
+            'mono-meta',
             active ? 'text-bronze' : 'text-on-sidebar-muted/50',
           )}
         >
@@ -71,7 +72,6 @@ export function DesktopSidebar() {
   const setSection = useAppStore((s) => s.setSection)
   const lastSyncedAt = useSettingsStore((s) => s.lastSyncedAt)
   const syncStatus = useSettingsStore((s) => s.syncStatus)
-  const pending = useSyncStore((s) => s.pending)
 
   const go = (id: SectionId) => {
     if (id !== section) playSound('ui-click')
@@ -91,14 +91,15 @@ export function DesktopSidebar() {
         {/* 符箓金线 */}
         <div className="mt-4 flex items-center gap-2">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-bronze/60 to-bronze/20" />
-          <span className="scribal text-[11px] tracking-[0.3em] text-bronze/80">知白法台</span>
+          <span className="scribal text-xs tracking-[0.3em] text-bronze/80">知白法台</span>
           <span className="h-px flex-1 bg-gradient-to-l from-transparent via-bronze/60 to-bronze/20" />
         </div>
       </div>
 
       {/* 导航：编号 + 主名 + 副名 */}
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-        <div className="mb-1 px-3 mono-meta text-[9px] text-on-sidebar-muted/50">
+        {/* 字号交给 .mono-meta（12px 令牌），此处原先的 text-[9px] 被层外规则静默吃掉 */}
+        <div className="mb-1 px-3 mono-meta text-on-sidebar-muted/50">
           空间 · SPACES
         </div>
         {NAV_SECTIONS.map((s) => (
@@ -119,14 +120,14 @@ export function DesktopSidebar() {
         <button
           type="button"
           onClick={() => useAIChatStore.getState().setOpen(true)}
-          className="flex w-full items-center gap-2.5 rounded-[6px] border border-teal/30 bg-teal/12 px-3 py-2 text-left transition-colors hover:border-teal/50 hover:bg-teal/18"
+          className="flex w-full items-center gap-2.5 rounded-chip border border-teal/30 bg-teal/12 px-3 py-2 text-left transition-colors hover:border-teal/50 hover:bg-teal/18"
         >
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal text-on-sidebar">
             <Bot size={13} />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-on-sidebar">天机</span>
-            <span className="block text-[9px] text-on-sidebar-muted">AI 问答 · 一键简报</span>
+            <span className="block text-xs text-on-sidebar-muted">AI 问答 · 一键简报</span>
           </span>
         </button>
         <NavButton
@@ -137,12 +138,12 @@ export function DesktopSidebar() {
           active={section === SYSTEM_SECTION.id}
           onClick={() => go(SYSTEM_SECTION.id)}
         />
-        {/* 同步状态：点击直达系统页（状态前置，P1） */}
+        {/* 同步状态：点击直达系统页（状态前置） */}
         <button
           type="button"
           onClick={() => go(SYSTEM_SECTION.id)}
           title={lastSyncedAt ? `上次同步 ${new Date(lastSyncedAt).toLocaleString('zh-CN')}` : '尚未同步 · 点击配置'}
-          className="mt-2 flex w-full cursor-pointer items-center gap-1.5 rounded-control px-3 py-1 text-[10px] text-on-sidebar-muted transition-colors hover:bg-white/10 hover:text-on-sidebar"
+          className="mt-2 flex w-full cursor-pointer items-center gap-1.5 rounded-control px-3 py-1 text-xs text-on-sidebar-muted transition-colors hover:bg-white/10 hover:text-on-sidebar"
         >
           <span
             className={cn(
@@ -165,7 +166,6 @@ export function DesktopSidebar() {
                   ? `已同步 · ${lastSyncedAt.slice(5, 16).replace('T', ' ')}`
                   : '本地优先 · 未同步'}
           </span>
-          {pending > 0 && <span className="tabular ml-auto">待同步 {pending}</span>}
         </button>
       </div>
     </aside>

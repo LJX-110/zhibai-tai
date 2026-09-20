@@ -2,8 +2,21 @@ import { StrictMode, useEffect, useState } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 /// <reference types="vite-plugin-pwa/client" />
 import './index.css'
-import App from './app/App.tsx'
+import { App } from './app/App.tsx'
+import { installGlobalErrorHandlers } from './services/error-log'
+import { useToastStore } from './components/ui/Toast'
 import { registerSW } from 'virtual:pwa-register'
+
+/* 全局故障兜底 —— 必须在 render 之前装上，否则启动阶段（Bootstrap 载数据、
+   SW 注册）抛的错就漏掉了。ErrorBoundary 只捕渲染期异常，事件回调与未处理的
+   Promise 拒绝是它管不到的盲区，这里正是补那一块：记入本机流水 + 打扰一次。
+   提示里点一下直达设置页，「已记录」是告诉用户"这不是一闪而过的、你能回看" */
+installGlobalErrorHandlers({
+  notify: (record) =>
+    useToastStore
+      .getState()
+      .push(`出了点问题（已记录）：${record.message}`, 'danger', '#/system'),
+})
 
 /**
  * PWA 更新横幅：SW 发现新版本（prompt 模式）→ 提示用户点击刷新，
@@ -24,7 +37,7 @@ function UpdateBanner() {
       <span>发现新版本</span>
       <button
         onClick={() => window.location.reload()}
-        className="link-underline text-[13px] text-gold"
+        className="link-underline text-sm text-gold"
       >
         立即刷新
       </button>

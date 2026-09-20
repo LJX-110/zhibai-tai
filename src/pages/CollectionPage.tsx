@@ -5,83 +5,29 @@
  *  · 「类型」= 介质（小说/动漫/游戏/GitHub…，items 上的 type 字段），固定枚举；
  *  · 「分类」= 你自建的主题标签（items 上的 category 字段），走 categories 业务表可增删、跨设备同步。
  *  两者默认名高度重合，界面上统一加「类型 · 」「分类 · 」前缀区分。
+ *
+ * 拆分说明（2026-09-20 路线图第 4 步）：列表卡 / 表单弹窗 / 详情抽屉 / AI 整理预览 /
+ * 分类管理 / 筛选行各自成文件放在 ./collection/ 下；本文件只留状态、数据流与区块组合。
  */
 import { useMemo, useState } from 'react'
-import { Plus, Search, Star, Pencil, Trash2, ExternalLink, Sparkles } from 'lucide-react'
+import { Plus, Search, Star } from 'lucide-react'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
-import { ProjectList } from '../components/project/ProjectList'
+import { ProjectList } from './collection/ProjectList'
 import { aiService } from '../services/ai/ai-service'
 import { recordActivity } from '../services/activity'
 import { playSound } from '../services/sound'
-import type { CollectionItem, CollectionType } from '../types/entities'
-import { createId } from '../utils/id'
+import type { CollectionItem } from '../types/entities'
+import { createId, nowISO } from '../utils/id'
 import { cn } from '../utils/cn'
-import {
-  Badge,
-  Button,
-  Dialog,
-  EmptyState,
-  Input,
-  PageHeader,
-  ScrollRow,
-  Section,
-  Select,
-  Textarea,
-  Sheet,
-  Tooltip,
-  useToast,
-} from '../components/ui'
-
-const TYPE_LABEL: Record<CollectionType, string> = {
-  novel: '小说',
-  anime: '动漫',
-  game: '游戏',
-  film: '影视',
-  book: '书籍',
-  github: 'GitHub',
-  project: '项目',
-  ui_ref: 'UI 参考',
-  inspiration: '灵感',
-  custom: '自定义',
-}
-
-const TYPE_ORDER: CollectionType[] = [
-  'novel',
-  'anime',
-  'game',
-  'film',
-  'book',
-  'github',
-  'project',
-  'ui_ref',
-  'inspiration',
-  'custom',
-]
-
-interface FormState {
-  title: string
-  type: CollectionType
-  category: string
-  tags: string
-  url: string
-  description: string
-  rating: string
-  status: string
-  notes: string
-}
-
-const EMPTY_FORM: FormState = {
-  title: '',
-  type: 'novel',
-  category: '',
-  tags: '',
-  url: '',
-  description: '',
-  rating: '',
-  status: '',
-  notes: '',
-}
+import { Button, EmptyState, Input, PageHeader, Section, useToast } from '../components/ui'
+import { CategoryFilterRow } from './collection/CategoryFilterRow'
+import { CollectionItemCard } from './collection/ItemCard'
+import { CollectionFormDialog } from './collection/FormDialog'
+import { ItemDetailSheet } from './collection/ItemDetailSheet'
+import { TidyDialog } from './collection/TidyDialog'
+import { CategoryManagerDialog } from './collection/CategoryManagerDialog'
+import { EMPTY_FORM, type FormState, type TidySuggestion } from './collection/shared'
 
 export function CollectionPage() {
   const items = useCollectionStore((s) => s.items)
@@ -99,7 +45,7 @@ export function CollectionPage() {
   const [editing, setEditing] = useState<CollectionItem | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [detail, setDetail] = useState<CollectionItem | null>(null)
-  const [tidy, setTidy] = useState<{ description: string; tags: string[]; category: string; reason: string } | null>(null)
+  const [tidy, setTidy] = useState<TidySuggestion | null>(null)
   const [tidyBusy, setTidyBusy] = useState(false)
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM })
   /** 分类管理弹层：与情页同交互（增/删/恢复默认），并显示各分类条目数 */
@@ -166,7 +112,7 @@ export function CollectionPage() {
 
   const save = async () => {
     if (!form.title.trim()) return
-    const now = new Date().toISOString()
+    const now = nowISO()
     const item: CollectionItem = {
       id: editing?.id ?? createId(),
       title: form.title.trim(),
@@ -227,7 +173,7 @@ export function CollectionPage() {
     const mergedTags = [...new Set([...detail.tags, ...tidy.tags])]
     if (mergedTags.join('|') !== detail.tags.join('|')) patch.tags = mergedTags
     if (Object.keys(patch).length > 0) {
-      patch.updatedAt = new Date().toISOString()
+      patch.updatedAt = nowISO()
       await useCollectionStore.getState().update(detail.id, patch)
       playSound('seal')
       toast('已应用 AI 整理', 'success')
@@ -263,345 +209,109 @@ export function CollectionPage() {
         <ProjectList />
       ) : (
         <>
-        <Section
-          title="藏品"
-          hint={`${list.length} 件`}
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
-                <Input
-                  placeholder="搜索"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="!w-28 !py-1.5 !pl-8 text-sm sm:!w-48"
-                />
-              </div>
-              <button
-                onClick={() => setOnlyFav((v) => !v)}
-                className={cn(
-                  'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
-                  onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
-                )}
-              >
-                <Star size={13} /> 仅收藏
-              </button>
-              <Button size="sm" variant="primary" onClick={openNew}>
-                <Plus size={14} /> 收藏
-              </Button>
-            </div>
-          }
-        >
-          {/* 筛选单行：全部 / 分类（可增删同步）/ 行尾「管理分类＋」。
-          介质（type）不进筛选行——与分类同名时避免重复。
-          空数据也保留「＋」入口 —— 否则要先有一条藏品才能建分类（鸡生蛋） */}
-          <div className="mb-3">
-              <ScrollRow
-                className="pb-1"
-                activeSelector={'[data-active="true"]'}
-                activeKey={catFilter}
-              >
-                <button
-                  data-active={catFilter === 'all' || undefined}
-                  onClick={() => setCatFilter('all')}
-                  className={cn(
-                    'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-                    catFilter === 'all' ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-                  )}
-                >
-                  全部 <span className="tabular text-xs opacity-60">{items.length}</span>
-                </button>
-                {collectionCategories.map((c) => {
-                  const count =
-                    c === '其他'
-                      ? items.filter((it) => !it.category || !collectionCategories.includes(it.category)).length
-                      : items.filter((it) => it.category === c).length
-                  return (
-                    <button
-                      key={`cat-${c}`}
-                      data-active={catFilter === c || undefined}
-                      onClick={() => setCatFilter(c)}
-                      className={cn(
-                        'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-                        catFilter === c ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
-                      )}
-                    >
-                      {c} <span className="tabular text-xs opacity-60">{count}</span>
-                    </button>
-                  )
-                })}
-                <Tooltip label="管理分类">
-                  <button
-                    onClick={() => setCatMgrOpen(true)}
-                    className="shrink-0 rounded-tile bg-raised p-2 text-ink-muted transition-colors hover:bg-nested hover:text-ink"
-                    aria-label="管理分类"
-                  >
-                    <Plus size={14} />
-                  </button>
-                </Tooltip>
-              </ScrollRow>
-          </div>
-        {list.length > 0 ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-            {list.map((it) => (
-              <div
-                key={it.id}
-                onClick={() => setDetail(it)}
-                className="group relative flex aspect-[3/4] cursor-pointer flex-col overflow-hidden rounded-tile border border-line bg-raised transition-all duration-fast hover:-translate-y-0.5 hover:shadow-soft active:scale-[0.98]"
-              >
-                {/* 左侧类型签条（与记事本同语言） */}
-                <span
-                  className={cn(
-                    'absolute inset-y-0 left-0 w-[3px]',
-                    it.type === 'github'
-                      ? 'bg-teal/60'
-                      : it.type === 'project'
-                        ? 'bg-cinnabar/55'
-                        : 'bg-gold-btn/70',
-                  )}
-                />
-                <div className="flex flex-1 flex-col p-3 pl-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-ink-muted">{TYPE_LABEL[it.type]}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleFav(it)
-                      }}
-                      className={cn(
-                        'rounded-[4px] p-1.5 transition-colors',
-                        it.favorite ? 'text-bronze' : 'text-ink-faint hover:text-bronze',
-                      )}
-                      aria-label="收藏"
-                    >
-                      <Star size={15} fill={it.favorite ? 'currentColor' : 'none'} />
-                    </button>
-                  </div>
-                  {/* 标题区：居中书法大字 */}
-                  <div className="flex flex-1 flex-col items-center justify-center gap-2 px-1 text-center">
-                    <span className="scribal-title line-clamp-2 text-xl leading-snug text-ink">
-                      {it.title}
-                    </span>
-                    {it.category && (
-                      <span className="text-[11px] text-ink-muted">{it.category}</span>
-                    )}
-                  </div>
-                  {/* 底部：状态/标签/评级 */}
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 border-t border-line/70 pt-2">
-                    {it.status && <Badge tone="plain">{it.status}</Badge>}
-                    {it.tags.slice(0, 2).map((t) => (
-                      <span key={t} className="text-[11px] text-ink-faint">#{t}</span>
-                    ))}
-                    {it.rating != null && (
-                      <span className="tabular text-[11px] text-bronze">
-                        {'★'.repeat(it.rating)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            title="还没有藏品"
-            desc="收藏小说、动漫、游戏、GitHub 项目、UI 参考…"
+          <Section
+            title="藏品"
+            hint={`${list.length} 件`}
             action={
-              <Button variant="primary" onClick={openNew}>
-                <Plus size={14} /> 添加第一件
-              </Button>
-            }
-          />
-        )}
-      </Section>
-
-      {/* 编辑弹窗 */}
-      <Dialog
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        title={editing ? '改藏品' : '新藏品'}
-        footer={
-          <>
-            <Button variant="tertiary" onClick={() => setFormOpen(false)}>取消</Button>
-            <Button variant="primary" onClick={save} disabled={!form.title.trim()}>保存</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <Input autoFocus placeholder="标题" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          {/* 两个下拉此前没有任何标签，窄屏上分不清哪个是哪个 —— 显式标注「类型=介质 / 分类=用途」 */}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="mb-1 block text-[11px] text-ink-faint">介质</span>
-              <Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CollectionType })}>
-                {TYPE_ORDER.map((t) => (
-                  <option key={t} value={t}>{TYPE_LABEL[t]}</option>
-                ))}
-              </Select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-[11px] text-ink-faint">用途</span>
-              <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
-                <option value="">不分类</option>
-                {collectionCategories.filter((c) => c !== '其他').map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </Select>
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input placeholder="#标签" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
-            <Input placeholder="评分 0-5" type="number" min={0} max={5} step={0.5} value={form.rating} onChange={(e) => setForm({ ...form, rating: e.target.value })} />
-          </div>
-          <Input placeholder="状态（如：在读/追更/已完）" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} />
-          <Input placeholder="URL（可选）" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
-          <Textarea placeholder="简介（可选）" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <Textarea placeholder="备注（可选）" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-        </div>
-      </Dialog>
-
-      {/* 详情面板 */}
-      <Sheet open={detail != null} onClose={() => setDetail(null)} title={detail?.title}>
-        {detail && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone="cinnabar">类型 · {TYPE_LABEL[detail.type]}</Badge>
-              {detail.category && <Badge tone="teal">{detail.category}</Badge>}
-              {detail.status && <Badge>{detail.status}</Badge>}
-              {detail.rating != null && (
-                <span className="tabular text-sm text-bronze">{'★'.repeat(detail.rating)}</span>
-              )}
-            </div>
-            {detail.description && (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">{detail.description}</p>
-            )}
-            {detail.notes && (
-              <div className="rounded-paper bg-raised p-3">
-                <p className="mb-1 text-xs text-ink-faint">备注</p>
-                <p className="whitespace-pre-wrap text-sm text-ink-soft">{detail.notes}</p>
-              </div>
-            )}
-            <div className="flex flex-wrap gap-1.5">
-              {detail.tags.map((t) => (
-                <span key={t} className="text-xs text-ink-faint">#{t}</span>
-              ))}
-            </div>
-            {detail.url && (
-              <a
-                href={detail.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-teal link-underline"
-              >
-                <ExternalLink size={14} /> 打开链接
-              </a>
-            )}
-            <div className="flex justify-end gap-2 border-t border-line pt-4">
-              <Button variant="secondary" onClick={() => runTidy(detail)} disabled={tidyBusy}>
-                <Sparkles size={13} /> {tidyBusy ? '整理中…' : 'AI 整理'}
-              </Button>
-              <Button variant="danger" onClick={() => remove(detail)}>
-                <Trash2 size={14} /> 删除
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setDetail(null)
-                  openEdit(detail)
-                }}
-              >
-                <Pencil size={14} /> 编辑
-              </Button>
-            </div>
-          </div>
-        )}
-      </Sheet>
-
-      {/* AI 整理预览 → 确认 */}
-      <Dialog
-        open={tidy != null}
-        onClose={() => setTidy(null)}
-        title="AI 整理 · 预览"
-        footer={
-          <>
-            <Button variant="tertiary" onClick={() => setTidy(null)}>取消</Button>
-            <Button variant="primary" onClick={applyTidy}>确认应用</Button>
-          </>
-        }
-      >
-        {tidy && (
-          <div className="space-y-3">
-            <div>
-              <div className="mb-1 text-[11px] text-ink-faint">简介</div>
-              <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink-soft">{tidy.description}</p>
-            </div>
-            <div>
-              <div className="mb-1 text-[11px] text-ink-faint">标签</div>
-              <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink">{tidy.tags.join('、')}</p>
-            </div>
-            <div>
-              <div className="mb-1 text-[11px] text-ink-faint">收藏原因</div>
-              <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink-muted">{tidy.reason}</p>
-            </div>
-            <p className="text-[11px] text-ink-faint">写入前请确认：AI 仅生成建议，可自行修改。</p>
-          </div>
-        )}
-      </Dialog>
-      {/* 分类管理：与情页同交互（增/删/恢复默认），附各分类条目数 */}
-      <Dialog open={catMgrOpen} onClose={() => setCatMgrOpen(false)} title="管理藏阁分类">
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-1.5">
-            {collectionCategories.map((c) => {
-              const count =
-                c === '其他'
-                  ? items.filter((it) => !it.category || !collectionCategories.includes(it.category)).length
-                  : items.filter((it) => it.category === c).length
-              return (
-                <span
-                  key={c}
-                  className="inline-flex items-center gap-1.5 rounded-control border border-line bg-raised px-2 py-1 text-xs text-ink-soft"
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
+                  <Input
+                    placeholder="搜索"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    className="!w-28 !py-1.5 !pl-8 text-sm sm:!w-48"
+                  />
+                </div>
+                <button
+                  onClick={() => setOnlyFav((v) => !v)}
+                  className={cn(
+                    'flex items-center gap-1 rounded-tile px-2.5 py-1.5 text-sm transition-colors',
+                    onlyFav ? 'bg-bronze/15 text-bronze' : 'bg-raised text-ink-muted hover:text-ink',
+                  )}
                 >
-                  {c}
-                  <span className="tabular text-[10px] text-ink-faint">{count}</span>
-                  <button
-                    onClick={() => removeCategoryName(c)}
-                    className="text-ink-faint transition-colors hover:text-cinnabar"
-                    aria-label={`移除 ${c}`}
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </span>
-              )
-            })}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              autoFocus
-              value={catDraft}
-              onChange={(e) => setCatDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addCategoryName(catDraft)}
-              placeholder="新增分类名…"
-              className="max-w-[200px]"
+                  <Star size={13} /> 仅收藏
+                </button>
+                <Button size="sm" variant="primary" onClick={openNew}>
+                  <Plus size={14} /> 收藏
+                </Button>
+              </div>
+            }
+          >
+            {/* 筛选单行：全部 / 分类（可增删同步）/ 行尾「管理分类＋」。
+                空数据也保留「＋」入口 —— 否则要先有一条藏品才能建分类（鸡生蛋） */}
+            <CategoryFilterRow
+              value={catFilter}
+              onChange={setCatFilter}
+              categories={collectionCategories}
+              onManage={() => setCatMgrOpen(true)}
             />
-            <Button size="sm" variant="secondary" onClick={() => addCategoryName(catDraft)} disabled={!catDraft.trim()}>
-              <Plus size={13} /> 添加
-            </Button>
-          </div>
-          <div className="flex items-center justify-between border-t border-line pt-3">
-            <p className="text-[11px] text-ink-faint">移除分类不删条目，相关条目归入「其他」</p>
-            <Button
-              size="sm"
-              variant="tertiary"
-              onClick={() => {
-                void resetCategories('collection')
-                setCatFilter('all')
-              }}
-            >
-              恢复默认
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+            {list.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                {list.map((it) => (
+                  <CollectionItemCard
+                    key={it.id}
+                    it={it}
+                    onOpen={() => setDetail(it)}
+                    onToggleFav={() => void toggleFav(it)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="还没有藏品"
+                desc="收藏小说、动漫、游戏、GitHub 项目、UI 参考…"
+                action={
+                  <Button variant="primary" onClick={openNew}>
+                    <Plus size={14} /> 添加第一件
+                  </Button>
+                }
+              />
+            )}
+          </Section>
+
+          {/* 编辑弹窗 */}
+          <CollectionFormDialog
+            open={formOpen}
+            onClose={() => setFormOpen(false)}
+            editing={editing}
+            form={form}
+            onForm={setForm}
+            categories={collectionCategories}
+            onSave={() => void save()}
+          />
+
+          {/* 详情面板 */}
+          <ItemDetailSheet
+            detail={detail}
+            onClose={() => setDetail(null)}
+            tidyBusy={tidyBusy}
+            onTidy={(it) => void runTidy(it)}
+            onRemove={(it) => void remove(it)}
+            onEdit={(it) => {
+              setDetail(null)
+              openEdit(it)
+            }}
+          />
+
+          {/* AI 整理预览 → 确认 */}
+          <TidyDialog tidy={tidy} onClose={() => setTidy(null)} onApply={() => void applyTidy()} />
+
+          {/* 分类管理：与情页同交互（增/删/恢复默认），附各分类条目数 */}
+          <CategoryManagerDialog
+            open={catMgrOpen}
+            onClose={() => setCatMgrOpen(false)}
+            categories={collectionCategories}
+            items={items}
+            draft={catDraft}
+            onDraft={setCatDraft}
+            onAdd={() => addCategoryName(catDraft)}
+            onRemove={removeCategoryName}
+            onReset={() => {
+              void resetCategories('collection')
+              setCatFilter('all')
+            }}
+          />
         </>
       )}
     </div>

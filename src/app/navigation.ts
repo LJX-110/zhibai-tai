@@ -70,10 +70,11 @@ export function navSectionOf(id: SectionId): NavSection {
 }
 
 /** 移动端底栏固定 4 格 + 1 个固定「更多」（不再可配置，见 MobileNav）
- *  精简原则：底栏只留最高频的四板，修/学/藏/奇/术都收进「更多」抽屉（含系统）。 */
+ *  精简原则：底栏只留最高频的四板「观 / 行 / 财 / 学」，修/藏/情/奇/术都收进「更多」抽屉（含系统）。
+ *  学业排在财之后：学生场景里「今天的课与作业」是高频刚需，情报更新可慢一步。 */
 export const DEFAULT_MOBILE_TABS: SectionId[] = [
   'overview',
   'action',
   'finance',
-  'intelligence',
+  'study',
 ]

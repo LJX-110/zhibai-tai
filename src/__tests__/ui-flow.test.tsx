@@ -21,6 +21,7 @@ describe('行 · 待办数据流', () => {
       tags: [],
       repeat: 'none',
       monthlyDay: null,
+      weeklyDay: null,
       projectId: null,
       courseId: null,
       createdAt: now,

@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, Info, X } from 'lucide-react'
 import { cn } from '../../utils/cn'
+import { recordNotice } from '../../services/notification'
 
 type ToastTone = 'info' | 'success' | 'danger'
 
@@ -13,20 +14,24 @@ interface ToastItem {
   id: number
   message: string
   tone: ToastTone
+  /** 带跳转目标时，点一下直达对应板块（与系统通知的深链共用同一套 hash） */
+  hash?: string
 }
 
 interface ToastStore {
   toasts: ToastItem[]
-  push: (message: string, tone: ToastTone) => void
+  push: (message: string, tone: ToastTone, hash?: string) => void
   dismiss: (id: number) => void
 }
 
 let seq = 0
 export const useToastStore = create<ToastStore>((set) => ({
   toasts: [],
-  push: (message, tone) => {
+  push: (message, tone, hash) => {
+    // 顺手记一笔历史：toast 一闪而过，错过的提醒要能回看
+    recordNotice(message, hash)
     const id = ++seq
-    set((s) => ({ toasts: [...s.toasts, { id, message, tone }] }))
+    set((s) => ({ toasts: [...s.toasts, { id, message, tone, hash }] }))
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
     }, 2600)
@@ -37,7 +42,10 @@ export const useToastStore = create<ToastStore>((set) => ({
 
 export function useToast() {
   const push = useToastStore((s) => s.push)
-  return { toast: (message: string, tone: ToastTone = 'info') => push(message, tone) }
+  return {
+    toast: (message: string, tone: ToastTone = 'info', hash?: string) =>
+      push(message, tone, hash),
+  }
 }
 
 const toneIcon: Record<ToastTone, typeof Info> = {
@@ -48,7 +56,7 @@ const toneIcon: Record<ToastTone, typeof Info> = {
 
 const toneColor: Record<ToastTone, string> = {
   info: 'text-bronze',
-  success: 'text-cinnabar',
+  success: 'text-teal',
   danger: 'text-cinnabar',
 }
 
@@ -75,14 +83,25 @@ export function ToastViewport() {
         return (
           <button
             key={t.id}
-            onClick={() => dismiss(t.id)}
+            onClick={() => {
+              // 带跳转目标的提醒（如课程提醒）点一下直达对应板块；
+              // 受限 WebView 里写 hash 可能抛错，失败就只关掉提示
+              if (t.hash) {
+                try {
+                  location.hash = t.hash
+                } catch {
+                  /* 忽略：不影响关闭提示 */
+                }
+              }
+              dismiss(t.id)
+            }}
             className={cn(
-              'pointer-events-auto flex items-center gap-2 rounded-[4px] border border-line-strong bg-ink px-3.5 py-2 text-sm text-on-dark shadow-overlay anim-toast',
+              'pointer-events-auto flex max-w-[92vw] items-center gap-2 rounded-control border border-line-strong bg-ink px-3.5 py-2 text-sm text-on-dark shadow-overlay anim-toast',
             )}
           >
-            <span className={cn('h-1.5 w-1.5 rotate-45', t.tone === 'danger' ? 'bg-cinnabar' : 'bg-bronze')} />
+            <span className={cn('h-1.5 w-1.5 rotate-45', t.tone === 'danger' ? 'bg-cinnabar' : t.tone === 'success' ? 'bg-teal' : 'bg-bronze')} />
             <Icon size={15} className={toneColor[t.tone]} />
-            <span>{t.message}</span>
+            <span className="break-all line-clamp-3">{t.message}</span>
           </button>
         )
       })}

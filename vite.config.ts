@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -11,10 +13,26 @@ const { version } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
 ) as { version: string }
 
+/** 仓库外的「非提交物」根目录：依赖、缓存、构建产物一律放这里，
+ *  知白台 目录内只保留要提交并部署到 GitHub 的正式文件。 */
+const projectRoot = fileURLToPath(new URL('.', import.meta.url))
+const externalRoot = resolve(projectRoot, '..')
+const devDistDir = resolve(externalRoot, 'dev-dist')
+
+/** 产物目录要分环境：CI（GitHub Actions）上 deploy.yml 上传的是仓库根下的
+ *  dist/，产物若跟着本地规则写到仓库外，部署只会拿到空目录。 */
+const outDir = process.env.CI ? 'dist' : resolve(externalRoot, 'dist')
+
 // https://vite.dev/config/
 export default defineConfig({
   // 构建期注入，应用内统一从 src/app/version.ts 读取
   define: { __APP_VERSION__: JSON.stringify(version) },
+  build: {
+    outDir,
+    // outDir 落在项目根之外时 Vite 默认拒绝清空并告警；
+    // 该目录专用于构建产物，显式声明清空是预期行为
+    emptyOutDir: true,
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -32,6 +50,9 @@ export default defineConfig({
         enabled: true,
         type: 'module',
         suppressWarnings: true,
+        // 插件默认把 dev 期的 service worker 写进项目内 dev-dist/，
+        // 同样改到仓库外，项目目录只留提交文件
+        resolveTempFolder: () => devDistDir,
       },
       manifest: {
         name: '知白台',
@@ -72,6 +93,11 @@ export default defineConfig({
         // 每次版本升级都会整包重拉。改为运行时 CacheFirst——
         // 首次在线访问后进入 fonts 缓存，此后离线可用、升级零流量。
         globPatterns: ['**/*.{js,css,html,svg,png}'],
+        // 点击系统通知要能聚焦窗口并跳到对应板块：generateSW 产出的 SW
+        // 本身不含业务逻辑，用 importScripts 注入 public/sw-notify.js；
+        // 该文件也会被上面的 glob 匹配到，故排除出预缓存清单避免重复注入
+        globIgnores: ['sw-notify.js'],
+        importScripts: ['sw-notify.js'],
         navigateFallback: 'index.html',
         runtimeCaching: [
           {

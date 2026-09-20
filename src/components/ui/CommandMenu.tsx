@@ -1,59 +1,22 @@
 /**
  * CommandMenu —— 命令面板（/ 或 Ctrl+K）
  * 命令：快速新建 / 跳转；搜索：全局分组检索 + 键盘导航
+ *
+ * 拆分说明（2026-09-20 路线图第 4 步）：命令清单、全局搜索、行形制各自成文件
+ * 放在 `./command-menu/` 下（**不对外导出**，`ui/index.ts` 的唯一出口约定保持不变）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Archive,
-  CheckSquare,
-  Coins,
-  GraduationCap,
-  Plus,
-  Search,
-  Sparkles,
-  Star,
-} from 'lucide-react'
+import { Search, Sparkles } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import { ALL_SECTIONS, type SectionId } from '../../app/navigation'
+import type { SectionId } from '../../app/navigation'
 import { useAppStore } from '../../stores/useAppStore'
-import { useInspectorStore, type InspectorType } from '../inspector/Inspector'
-import { useTaskStore } from '../../stores/useTaskStore'
+import { useInspectorStore } from '../inspector/Inspector'
 import { hasActiveOverlay } from './overlay'
-import { useNoteStore } from '../../stores/useNoteStore'
-import { useWaterStore } from '../../stores/useWaterStore'
-import { useCollectionStore } from '../../stores/useCollectionStore'
-import { useProjectStore } from '../../stores/useProjectStore'
-import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
-import { useCourseStore } from '../../stores/useStudyStore'
-import { useFinanceStore } from '../../stores/useFinanceStore'
-import { useSourceStore } from '../../stores/useSourceStore'
-import { saveDailySignRecord } from '../../stores/useDivinationStore'
-import { dedupeKey } from '../../components/source/SourceManager'
-import { fetchAllFromSources } from '../../services/intelligence/providers/registry'
-import { saveFetchedItems } from '../../services/intelligence/retention'
-import { runSync } from '../../sync/SyncService'
-import { createId, todayISO } from '../../utils/id'
 import { cn } from '../../utils/cn'
 import { useToast } from './Toast'
-
-interface Command {
-  id: string
-  label: string
-  group: string
-  hint?: string
-  run: () => void
-}
-
-interface SearchResult {
-  id: string
-  group: string
-  title: string
-  sub?: string
-  section: SectionId
-  /** 支持直达详情的条目带实体 id 与 Inspector 类型（笔记暂无详情面板，仅跳板块） */
-  entityId?: string
-  inspector?: InspectorType
-}
+import { buildCommands, groupBy, groupIcon, NEW_ICON, type Command } from './command-menu/commands'
+import { searchAll, type SearchResult } from './command-menu/search'
+import { CommandRow } from './command-menu/CommandRow'
 
 export function CommandMenu() {
   const [open, setOpen] = useState(false)
@@ -97,200 +60,13 @@ export function CommandMenu() {
   }, [setSection])
 
   /** 快速命令 */
-  const commands = useMemo<Command[]>(() => {
-    const now = new Date().toISOString()
-    return [
-      {
-        id: 'open-hotkeys',
-        label: '键盘速查',
-        group: '帮助',
-        hint: '？',
-        run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' })),
-       },
-
-{
-        id: 'task',
-        label: '新建待办',
-        group: '新建',
-        hint: '→ 行 · 今日',
-        run: () => go('action'),
-      },
-      {
-        id: 'note',
-        label: '新建笔记 / 灵感',
-        group: '新建',
-        hint: '→ 行 · 记事本',
-        run: () => go('action'),
-      },
-      {
-        id: 'water',
-        label: '记录喝水 +300ml',
-        group: '新建',
-        hint: '立即记录',
-        run: async () => {
-          await useWaterStore.getState().add({
-            id: createId(),
-            date: todayISO(),
-            amountMl: 300,
-            createdAt: now,
-          })
-          toast('已记录 +300ml', 'success')
-          setOpen(false)
-        },
-      },
-      {
-        id: 'expense',
-        label: '记一笔支出',
-        group: '新建',
-        hint: '→ 财 · 本月',
-        run: () => go('finance'),
-      },
-      {
-        id: 'collection',
-        label: '添加收藏',
-        group: '新建',
-        hint: '→ 藏 · 藏品',
-        run: () => go('collection'),
-      },
-      {
-        id: 'project',
-        label: '新建项目',
-        group: '新建',
-        hint: '→ 藏 · 项目中心',
-        run: () => go('collection'),
-      },
-      {
-        id: 'pomo',
-        label: '开始番茄钟',
-        group: '新建',
-        hint: '→ 学 · 番茄钟',
-        run: () => go('study'),
-      },
-      {
-        id: 'habit',
-        label: '记录斩三尸',
-        group: '新建',
-        hint: '→ 修 · 斩三尸',
-        run: () => go('cultivate'),
-      },
-      {
-        id: 'focus',
-        label: '进入专注模式',
-        group: '新建',
-        hint: '隐藏侧栏 · 只留任务与番茄钟',
-        run: () => {
-          useAppStore.getState().setFocusMode(true)
-          setOpen(false)
-        },
-      },
-      {
-        id: 'add-follow',
-        label: '管理关注',
-        group: '新建',
-        hint: '→ 情 · 关注流',
-        run: () => go('intelligence'),
-      },
-      {
-        id: 'new-game',
-        label: '新建游戏收藏',
-        group: '新建',
-        hint: '→ 藏 · 藏品',
-        run: () => go('collection'),
-      },
-      {
-        id: 'new-anime',
-        label: '新建动漫收藏',
-        group: '新建',
-        hint: '→ 藏 · 藏品',
-        run: () => go('collection'),
-      },
-      {
-        id: 'fetch-intel',
-        label: '抓取全部情报',
-        group: '情报',
-        hint: '从所有启用源拉取',
-        run: async () => {
-          const sources = useSourceStore.getState().items
-          const res = await fetchAllFromSources(sources)
-          // 与情报页同一去重口径（dedupeKey），且必须经 saveMany 落库：
-          // 直接 setState 只改内存，刷新即丢、也不会触发自动同步
-          const known = new Set(useIntelligenceStore.getState().items.map((x) => dedupeKey(x)))
-          const added = res.items.filter((x) => !known.has(dedupeKey(x)))
-          if (added.length > 0) await saveFetchedItems(added)
-          const failed = res.failures.length
-          toast(
-            failed === 0
-              ? `已拉取 ${res.items.length} 条情报（新增 ${added.length}）`
-              : `新增 ${added.length} 条 · ${failed} 个源失败（详情见「情」页）`,
-            failed > 0 && res.items.length === 0 ? 'danger' : 'success',
-          )
-          setOpen(false)
-        },
-      },
-      {
-        id: 'sync-github',
-        label: '同步 GitHub',
-        group: '情报',
-        hint: '拉取并推送私有仓库快照',
-        run: async () => {
-          setOpen(false)
-          try {
-            // 同步成功静默：顶栏状态点可见；只在失败时报错
-            await runSync()
-          } catch (e) {
-            toast('同步失败：' + (e instanceof Error ? e.message : ''), 'danger')
-          }
-        },
-      },
-      {
-        id: 'save-sign',
-        label: '记录今日签',
-        group: '情报',
-        hint: '存档到奇·历史',
-        run: async () => {
-          // 与占卜页共用同一实现，避免两处逻辑漂移
-          const { saved } = await saveDailySignRecord(todayISO())
-          toast(saved ? '今日签已入档' : '今日签已记', saved ? 'success' : undefined)
-          setOpen(false)
-        },
-      },
-      ...ALL_SECTIONS.map((s) => ({
-        id: `nav-${s.id}`,
-        label: `${s.index} ${s.label} · ${s.desc}`,
-        group: '跳转',
-        run: () => go(s.id),
-      })),
-    ]
-  }, [go, toast])
+  const commands = useMemo<Command[]>(
+    () => buildCommands({ go, toast, close: () => setOpen(false) }),
+    [go, toast],
+  )
 
   /** 全局搜索 */
-  const results = useMemo<SearchResult[]>(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return []
-    const matches = (s: string) => s.toLowerCase().includes(q)
-    const out: SearchResult[] = []
-    const push = (
-      g: string,
-      section: SectionId,
-      items: { id: string; title: string; sub?: string; inspector?: SearchResult['inspector'] }[],
-    ) => {
-      for (const it of items) {
-        if (matches(it.title) || matches(it.sub ?? '')) {
-          out.push({ id: `${g}-${it.id}`, group: g, title: it.title, sub: it.sub, section, entityId: it.id, inspector: it.inspector })
-        }
-      }
-    }
-
-    push('任务', 'action', useTaskStore.getState().items.map((t) => ({ id: t.id, title: t.title, sub: t.done ? '已完成' : '未完成', inspector: 'task' as const })))
-    push('笔记', 'action', useNoteStore.getState().items.map((n) => ({ id: n.id, title: n.title || '（无题）', sub: n.kind === 'inspiration' ? '灵感' : '笔记' })))
-    push('收藏', 'collection', useCollectionStore.getState().items.map((c) => ({ id: c.id, title: c.title, sub: c.category, inspector: 'collection' as const })))
-    push('项目', 'collection', useProjectStore.getState().items.map((p) => ({ id: p.id, title: p.name, sub: p.status, inspector: 'project' as const })))
-    push('情报', 'intelligence', useIntelligenceStore.getState().items.map((i) => ({ id: i.id, title: i.title, sub: i.source, inspector: 'intelligence' as const })))
-    push('课程', 'study', useCourseStore.getState().items.map((c) => ({ id: c.id, title: c.name, sub: c.teacher, inspector: 'course' as const })))
-    push('消费', 'finance', useFinanceStore.getState().items.map((f) => ({ id: f.id, title: f.merchant || f.note || '流水', sub: `${f.kind === 'income' ? '+' : '-'}${f.amount}`, inspector: 'finance' as const })))
-
-    return out.slice(0, 30)
-  }, [query])
+  const results = useMemo<SearchResult[]>(() => searchAll(query), [query])
 
   /** 搜索结果处理：有详情面板的直达条目，否则跳板块 */
   const openResult = useCallback((r: SearchResult) => {
@@ -385,7 +161,7 @@ export function CommandMenu() {
                   setCursor(0)
                 }}
                 className={cn(
-                  'rounded-control px-2 py-0.5 text-[11px] transition-colors',
+                  'rounded-control px-2 py-0.5 text-xs transition-colors',
                   tab === t.key ? 'bg-paper text-ink' : 'text-ink-muted',
                 )}
               >
@@ -400,9 +176,9 @@ export function CommandMenu() {
             <div className="space-y-2">
               {groupBy(commands).map(([group, items]) => (
                 <div key={group}>
-                  <div className="px-3 py-1 text-[10px] tracking-widest text-ink-faint">{group}</div>
+                  <div className="px-3 py-1 text-xs tracking-widest text-ink-faint">{group}</div>
                   {items.map((c) => (
-                    <CommandRow key={c.id} active={cursor === commands.indexOf(c)} icon={group === '新建' ? Plus : undefined} label={c.label} hint={c.hint} onClick={c.run} />
+                    <CommandRow key={c.id} active={cursor === commands.indexOf(c)} icon={group === '新建' ? NEW_ICON : undefined} label={c.label} hint={c.hint} onClick={c.run} />
                   ))}
                 </div>
               ))}
@@ -412,7 +188,7 @@ export function CommandMenu() {
               <div className="space-y-2">
                 {grouped.map(([group, items]) => (
                   <div key={group}>
-                    <div className="px-3 py-1 text-[10px] tracking-widest text-ink-faint">{group}</div>
+                    <div className="px-3 py-1 text-xs tracking-widest text-ink-faint">{group}</div>
                     {items.map((r) => (
                       <CommandRow key={r.id} active={cursor === results.indexOf(r)} icon={groupIcon(r.group)} label={r.title} hint={r.sub} onClick={() => openResult(r)} />
                     ))}
@@ -429,6 +205,8 @@ export function CommandMenu() {
           )}
         </div>
 
+        {/* 字号例外：四条快捷键图例必须锁在一行内（命令面板不做换行），
+            放大到 text-xs 后 375px 上会折行把面板撑高，故保持 10px。 */}
         <div className="flex items-center gap-3 border-t border-line px-4 py-2 text-[10px] text-ink-faint">
           <span>↑↓ 选择</span>
           <span>Enter 执行</span>
@@ -438,57 +216,5 @@ export function CommandMenu() {
       </div>
     </div>,
     document.body,
-  )
-}
-
-function groupBy(arr: Command[]): [string, Command[]][] {
-  const map = new Map<string, Command[]>()
-  for (const c of arr) {
-    const list = map.get(c.group) ?? []
-    list.push(c)
-    map.set(c.group, list)
-  }
-  return [...map.entries()]
-}
-
-function groupIcon(group: string) {
-  const map: Record<string, typeof Search> = {
-    任务: CheckSquare,
-    笔记: Archive,
-    收藏: Star,
-    项目: Star,
-    情报: Sparkles,
-    课程: GraduationCap,
-    消费: Coins,
-  }
-  return map[group]
-}
-
-function CommandRow({
-  active,
-  icon: Icon,
-  label,
-  hint,
-  onClick,
-}: {
-  active: boolean
-  icon?: typeof Plus
-  label: string
-  hint?: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      data-active={active || undefined}
-      onClick={onClick}
-      className={cn(
-        'flex w-full items-center gap-3 rounded-tile px-3 py-2 text-left transition-colors',
-        active ? 'bg-raised' : '',
-      )}
-    >
-      {Icon && <Icon size={14} className="shrink-0 text-ink-muted" />}
-      <span className="truncate text-sm text-ink">{label}</span>
-      {hint && <span className="ml-auto shrink-0 text-[11px] text-ink-faint">{hint}</span>}
-    </button>
   )
 }

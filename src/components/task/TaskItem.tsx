@@ -8,9 +8,10 @@ import { useCourseStore } from '../../stores/useStudyStore'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useInspectorStore } from '../inspector/Inspector'
 import { Seal } from '../ui/Seal'
+import { SealCheckbox } from '../ui/SealCheckbox'
 import { playSound } from '../../services/sound'
 import type { Task } from '../../types/entities'
-import { diffDays, friendlyDate } from '../../utils/id'
+import { diffDays, friendlyDate, weekdayCN } from '../../utils/id'
 import { cn } from '../../utils/cn'
 import { Badge } from '../ui/Badge'
 import { Tooltip } from '../ui/Tooltip'
@@ -49,21 +50,8 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
 
   return (
     <div className={cn('row group relative', highlight && 'bg-cinnabar/4 hover:bg-cinnabar/8')}>
-      {/* 异印完成勾选 */}
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={task.done}
-        onClick={() => onToggle(task)}
-        className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-control border transition-all duration-fast"
-        title={task.done ? '标记未完成' : '标记完成'}
-      >
-        {task.done ? (
-          <Seal size={18} char="异" tone="bronze" />
-        ) : (
-          <span className="h-full w-full rounded-control border border-line-strong bg-raised transition-colors hover:border-cinnabar/50" />
-        )}
-      </button>
+      {/* 异印完成勾选 —— 形制来自共用组件 SealCheckbox（与作业行同一处实现） */}
+      <SealCheckbox checked={task.done} onChange={() => onToggle(task)} char="异" />
 
       <div className="min-w-0 flex-1">
         <div
@@ -82,7 +70,7 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
           {task.dueDate && (
             <span
               className={cn(
-                'tabular text-[11px]',
+                'tabular text-xs',
                 overdue
                   ? 'text-cinnabar'
                   : dueToday
@@ -99,14 +87,19 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
               每月 {task.monthlyDay} 号
             </Badge>
           )}
+          {task.weeklyDay != null && (
+            <Badge tone="bronze" className="!px-1">
+              每周 {weekdayCN(task.weeklyDay)}
+            </Badge>
+          )}
           {project && (
-            <span className="text-[11px] text-teal">· {project.name}</span>
+            <span className="text-xs text-teal">· {project.name}</span>
           )}
           {course && (
-            <span className="text-[11px] text-bronze">· {course.name}</span>
+            <span className="text-xs text-bronze">· {course.name}</span>
           )}
           {task.tags.map((t) => (
-            <span key={t} className="text-[11px] text-ink-faint">
+            <span key={t} className="text-xs text-ink-faint">
               #{t}
             </span>
           ))}
@@ -117,7 +110,7 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
       <div className="hover-reveal flex items-center gap-1">
         <Tooltip label="详情">
           <button
-            className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-cinnabar/40 hover:text-cinnabar"
+            className="rounded-control border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-cinnabar/40 hover:text-cinnabar"
             onClick={() => useInspectorStore.getState().open('task', task.id)}
             aria-label="详情"
           >
@@ -126,7 +119,7 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
         </Tooltip>
         <Tooltip label="编辑">
           <button
-            className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-teal/40 hover:text-teal"
+            className="rounded-control border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-teal/40 hover:text-teal"
             onClick={() => onEdit(task)}
             aria-label="编辑"
           >
@@ -135,7 +128,7 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
         </Tooltip>
         <Tooltip label="删除">
           <button
-            className="rounded-[4px] border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-cinnabar/50 hover:text-cinnabar"
+            className="rounded-control border border-line bg-raised p-1.5 text-ink-muted transition-colors hover:border-cinnabar/50 hover:text-cinnabar"
             onClick={() => onDelete(task)}
             aria-label="删除"
           >

@@ -1,71 +1,40 @@
 /**
- * InstallPrompt —— PWA 安装引导（iOS 指引 / Android·桌面一键安装）
+ * InstallPrompt —— PWA 安装引导条（iOS 分步指引 / Android·桌面一键安装）
  *
- * iOS Safari 无法程序化触发安装，只给一条「添加到主屏幕」指引；
- * Android/桌面端 Chromium 捕捉 beforeinstallprompt，提供「立即安装」按钮。
- * 已以 standalone 运行、或本会话点过关闭后不再打扰 —— 商业级体验：给出口，不纠缠。
+ * iOS Safari 无法程序化触发安装，因此只给一条指引 —— 但必须点明入口在
+ * **Safari 底部中间的「分享」图标**里，否则用户根本找不到（此前文案只写
+ * "从浏览器菜单点"，等于没说）。Android / 桌面端 Chromium 的安装时机由
+ * `install.ts` 统一捕获，这里提供「立即安装」。
+ *
+ * 已以独立窗口运行、或本会话点过关闭后不再打扰 —— 给出口，不纠缠。
  */
-import { useEffect, useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { MonitorDown, X } from 'lucide-react'
 import { Button } from '../ui/Button'
-
-/** Chrome 系未标准化的事件类型（lib DOM 尚未收录） */
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
-}
+import {
+  hasInstallPrompt,
+  isIOS,
+  isStandalone,
+  noInstallPrompt,
+  promptInstall,
+  subscribeInstall,
+} from './install'
 
 const DISMISS_KEY = 'zbt:install-dismissed'
-
-function isStandalone(): boolean {
-  // jsdom 等无 matchMedia 环境直接判否，避免渲染即崩溃
-  if (typeof window.matchMedia !== 'function') return false
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    (navigator as Navigator & { standalone?: boolean }).standalone === true
-  )
-}
-
-function isIOS(): boolean {
-  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) return true
-  // iPadOS 13+ 伪装成 macOS 桌面 UA，靠触点数识别
-  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
-}
 
 type Kind = 'ios' | 'install'
 
 export function InstallPrompt() {
-  // 非 standalone 的 iOS 首屏即时判定为指引态；install 态只能由 beforeinstallprompt
-  // 事件触发（effect 里事件回调的 setState 合规，同步 setState 会触发级联重渲染）
-  const [kind, setKind] = useState<Kind | null>(() => {
-    if (isStandalone()) return null
-    return isIOS() ? 'ios' : null
-  })
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null)
+  const canInstall = useSyncExternalStore(subscribeInstall, hasInstallPrompt, noInstallPrompt)
   const [dismissed, setDismissed] = useState(
     () => typeof sessionStorage !== 'undefined' && sessionStorage.getItem(DISMISS_KEY) === '1',
   )
+  // 只在首次渲染判定一次：iOS 且未安装 → 给分步指引
+  const [iosGuide] = useState(() => !isStandalone() && isIOS())
 
-  useEffect(() => {
-    if (isStandalone()) return
-    const onBefore = (e: Event) => {
-      e.preventDefault()
-      setDeferred(e as BeforeInstallPromptEvent)
-      setKind('install')
-    }
-    const onInstalled = () => {
-      setKind(null)
-      setDeferred(null)
-    }
-    window.addEventListener('beforeinstallprompt', onBefore)
-    window.addEventListener('appinstalled', onInstalled)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBefore)
-      window.removeEventListener('appinstalled', onInstalled)
-    }
-  }, [])
-
-  if (dismissed || !kind) return null
+  if (dismissed) return null
+  const kind: Kind | null = canInstall ? 'install' : iosGuide ? 'ios' : null
+  if (!kind) return null
 
   const dismiss = () => {
     try {
@@ -77,20 +46,17 @@ export function InstallPrompt() {
   }
 
   const install = async () => {
-    if (!deferred) return
-    await deferred.prompt()
-    const { outcome } = await deferred.userChoice
+    const outcome = await promptInstall()
     if (outcome === 'accepted') dismiss()
-    else setDeferred(null)
   }
 
   return (
     <div className="fixed inset-x-3 bottom-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom,0px)+8px)] z-[var(--z-nav)] mx-auto max-w-md md:bottom-4">
       <div className="anim-enter flex items-center gap-3 rounded-paper border border-line bg-paper/95 px-3.5 py-3 shadow-float backdrop-blur">
         <MonitorDown size={18} className="shrink-0 text-skill-indigo" />
-        <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-ink-soft">
+        <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">
           {kind === 'ios'
-            ? '从浏览器菜单点「添加到主屏幕」，即可像 App 一样常驻使用'
+            ? '点 Safari 底部中间的「分享」，选「添加到主屏幕」，就能像 App 一样用'
             : '把知白台装到桌面，随时打开、离线可用'}
         </p>
         {kind === 'install' ? (

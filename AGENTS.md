@@ -10,7 +10,7 @@
 
 - React 19 + TypeScript（`verbatimModuleSyntax`，须用 `import type` 导类型）
 - Vite 8 + Tailwind CSS 4（CSS 变量设计令牌集中在 `src/styles/tokens.css`）
-- Zustand（状态）+ Dexie（IndexedDB）+ Zod（校验）+ Recharts（图表）
+- Zustand（状态）+ Dexie（IndexedDB）+ 自研 SVG 图表（见 `src/components/ui/Ring.tsx`，无重量级图表库）
 - 测试：Vitest（`node` 环境 + `fake-indexeddb`）；Lint：oxlint；PWA：vite-plugin-pwa
 
 ## 目录结构（数据流单向）
@@ -25,6 +25,9 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
 - `src/sync/` — 同步编排：解密远端 → LWW 合并 + 冲突检测 → 写回 → 重放墓碑 → 加密推送
 
 ## 硬性约定
+
+> **完整规范见 `../docs/编码规范.md`** —— 分层铁律 / 目录结构标准 / 命名 / 样式边界 / 文件规模 / 提交自检清单都在那里。
+> 本节只列**最容易踩的坑**；两者冲突时以 `../docs/编码规范.md` 为准，并回头同步本节。
 
 1. **业务实体必须有 `updatedAt`/`createdAt`**（缺时间戳将导致跨设备合并时修改丢失，曾有 P0 事故）。
 2. **删除走墓碑**（`tombstones` 表），不要直接物理清业务记录而不写墓碑。
@@ -59,21 +62,38 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
 
 ## 常用命令
 
+> ⚠️ `scripts/` 与 `docs/` **不入库**，放在本机 `work/` 区（约定见 `work/目录约定.md`）。
+> 下面命令里的 `../scripts/...` 均需在**项目根目录**下执行。
+
 ```bash
 npm run dev        # 本地开发
 npm run typecheck  # 类型检查
 npm run lint       # oxlint
 npm test           # vitest 全量测试
-npm run build      # 构建产物到 dist/
-python scripts/subset_fonts.py  # 书法字体子集化（改字符集后重跑；完整字体在 src/assets/fonts/full/）
-node scripts/probe_proxy.mjs    # 不部署即跑通代理转发链路（真实请求 api.bilibili.com，需外网，人工排查用）
+npm run build      # 生产构建（本地产物写 work/dist，CI 写仓库内 dist/；见 vite.config.ts 的分环境 outDir）
+npm run check:rules # 规范自检：单文件 ≤400 行 · @layer 外 CSS 规则 · 圆角/字号魔法值（不参与 CI）
+python ../scripts/subset_fonts.py  # 书法字体子集化（改字符集后重跑；完整字体在 src/assets/fonts/full/，来源与 OFL 许可声明见 src/assets/fonts/OFL-LICENSE.md）
+python ../scripts/subset_seal_font.py <源字体.ttf>  # 印章篆书子集化（改印文用字后重跑，源字体见 assets/fonts/seal-LICENSE.txt）
+python ../scripts/check_seal_glyphs.py  # 校验印文用字在篆书字体里都有字形（缺字会让印章静默显示空白）
+node ../scripts/probe_proxy.mjs    # 不部署即跑通代理转发链路（真实请求 api.bilibili.com，需外网，人工排查用）
+node ../scripts/probe_bili_e2e.mjs  # 验证 B 站链路（前端 WBI 签名 + api.bilibili.com 真实接口）端到端可用，需外网，人工排查用
+python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/icon-maskable.png、icon-180.png），改过 favicon 视觉后重跑
 ```
 
 ## 模块备忘
 
 - 导航与 URL hash 双向同步在 `stores/useAppStore.ts`（深链接 `#/finance` 等）
-- **移动端底栏可配置**：`app/navigation.ts` 的 `DEFAULT_MOBILE_TABS` + `normalizeMobileTabs`
-  （4 个槽位 + 固定「更多」），配置界面在「系统 · 外观 · 移动端底栏」
+- **字体许可是再分发前提，别删**：`src/assets/fonts/` 的书法字体（Ma Shan Zheng）是
+  SIL OFL 1.1，来源与条款见同目录 `OFL-LICENSE.md`；印章小篆是政府资料开放授权，
+  见 `seal-LICENSE.txt`。OFL 要求随字体一并保留该声明，两个文件都必须随仓库提交 /
+  随构建产物分发，改字体（含重新子集化）时一并更新说明
+  - 装饰字**只有马善政一款**：站酷小薇已于 2026-09-20 移除（字形集合与之完全相同、
+    且在字体栈里排在后面，结构性不可达，白占 929KB）。**别再把它加回来**。
+  - 页面字体子集**只裁到 GB2312 一级**，不要再往下裁 —— `--font-deco` 也作用在用户
+    自己写的笔记/收藏标题上。
+- **移动端底栏固定不可配置**：`app/navigation.ts` 的 `DEFAULT_MOBILE_TABS` 写死为「观 / 行 / 财 / 学」4 格
+  + 1 个固定「更多」（修 / 藏 / 情 / 奇 / 术 / 系统全收进「更多」抽屉）。代码注释明确「不再可配置」，
+  没有 `normalizeMobileTabs`，也没有「系统 · 外观 · 移动端底栏」配置入口
 - **分类是业务表**（`categories`，`scope: intel | collection`），不是设置项：
   在 `情` / `藏` 页页签行尾「+」就地增删，走 `stores/useCategoryStore` 的
   `addCategory/removeCategory/resetCategories`。**不要再往设置里加分类字段**，
@@ -96,7 +116,17 @@ node scripts/probe_proxy.mjs    # 不部署即跑通代理转发链路（真实�
 - **`intelligenceSources.lastFetchedAt / lastError` 是本机字段**：导出快照时剥离、
   写回时保留本机值（`SyncService.LOCAL_ONLY_FIELDS`），否则两台设备会互相覆盖
 - 课程表周次逻辑集中在 `services/study.ts`（当前周 / 单双周 / 时段冲突 / 上课提醒），
-  上课提醒由 `components/study/ClassReminder` 全局挂载
+  上课提醒由 `components/study/ClassReminder` 全局挂载。
+  **学期首周的设置入口必须常驻且可点**（`StudyPage` 操作行里的「首周」，靠日期 input 铺满 `label` 热区）——
+  它此前是 `w-0 opacity-0` 的零宽度输入框（**没有热区、点了没反应**），且只在"未设置"时出现
+  （设一次就永久消失，而承诺的"点周景改"并不存在）。后果是 `termStartDate` 恒空 →
+  `currentWeek()` 返回 `null` → **单双周与周次过滤整体失效**。这是"输入框隐形入口"这类写法的反面教材
+- **固定重复任务有两种，形制必须一致**：`monthlyDay`（每月 N 号）与 `weeklyDay`（每周几，
+  **0=周日…6=周六**，与 `weekdayCN()` 及课程表 `WeeklySlot.weekday` 同构，全链路无需 ±1 换算）。
+  两者在编辑器条件渲染、行内徽标、「每周/每月固定 N 项」折叠区、顶部提醒上都要同一形制，改一处跟另一处
+- **筛选药丸只有一种形制**：一律走 `components/ui/Chip`（`px-3 py-1.5 text-sm rounded-tile`，
+  **不带计数徽标**）—— 项目中心 / 藏品 / 情报 / 记账 / 购买 / 设置页分组全部对齐它。
+  另：`Section` 的 `title` **可省略**，嵌在折叠层里时外层已有标题，内层再写一遍就是同屏两行一样的字
 
 ## UI 约定（易踩的坑）
 

@@ -1,71 +1,24 @@
 /**
  * 自定义情报源 Provider —— Web(CSS 选择器) / JSON / REST
- * 原则：客户端 Fetch（受 CORS 限制）+ 代理尝试；不硬解 CORS；错误分类清晰
+ * 原则：客户端 Fetch（受 CORS 限制）+ 代理尝试；不硬解 CORS
  * 配置均为 JSON 字符串，字段名见下方注释
+ * 失败分类见 ../errors（`empty:` / `parse:` 前缀即由那边识别）
  */
 import { createId } from '../../../utils/id'
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
 import type { IntelligenceProvider } from './index'
 import { fetchViaProxy } from './rss'
 
-/* ---------------- 错误分类 ---------------- */
-
-export type FetchErrorKind =
-  | 'config'
-  | 'cors'
-  | 'auth'
-  | 'timeout'
-  | 'parse'
-  | 'empty'
-  | 'http'
-  | 'network'
-
-export interface FetchErrorInfo {
-  kind: FetchErrorKind
-  message: string
-}
-
-export function classifyFetchError(e: unknown): FetchErrorInfo {
-  const msg = e instanceof Error ? e.message : String(e)
-  const m = msg.toLowerCase()
-  // 「没配代理」不是网络故障，而是可操作的一步：单独成一类，界面上要给入口而不是报错
-  if (msg.includes('自建代理')) {
-    return { kind: 'config', message: msg }
-  }
-  if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('load failed') || m.includes('cors')) {
-    return { kind: 'cors', message: 'CORS 或网络受限：浏览器无法直接访问该源。建议改用 RSS/JSON 接口，或后续接入服务端代理。' }
-  }
-  if (m.includes('401') || m.includes('403') || m.includes('unauthorized') || m.includes('forbidden')) {
-    return { kind: 'auth', message: '认证失败：可能需要 API Key 或登录态。' }
-  }
-  if (m.includes('abort') || m.includes('timeout')) {
-    return { kind: 'timeout', message: '请求超时或被取消。' }
-  }
-  if (m.includes('parse') || m.includes('json') || m.includes('xml')) {
-    return { kind: 'parse', message: '解析失败：内容格式与所选 Provider 不符。' }
-  }
-  if (m.startsWith('http ')) {
-    return { kind: 'http', message: `HTTP 错误：${msg}` }
-  }
-  return { kind: 'network', message: msg }
-}
-
-/** 带超时与取消的拉取 */
-export async function fetchText(
-  url: string,
-  signal?: AbortSignal,
-  timeoutMs = 12000,
-): Promise<string> {
-  const ctrl = new AbortController()
-  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs)
-  const onAbort = () => ctrl.abort()
-  signal?.addEventListener('abort', onAbort)
-  try {
-    return await fetchViaProxy(url, ctrl.signal)
-  } finally {
-    window.clearTimeout(timer)
-    signal?.removeEventListener('abort', onAbort)
-  }
+/**
+ * 拉取文本。
+ *
+ * 这里**不再自己加一层超时**：超时是 ./proxy 的职责，它按候选通道分别计时
+ * （自建代理根路径 → /proxy，各 8 秒）。此前这里另套一个 12 秒的外层定时器，
+ * 结果是第一个候选超时后用掉 8 秒，第二个候选跑到 4 秒就被外层掐断 ——
+ * 「先试 /?url= 再试 /proxy?url=」的双通道退路形同虚设。
+ */
+export async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
+  return fetchViaProxy(url, signal)
 }
 
 /* ---------------- Web（CSS 选择器） ---------------- */

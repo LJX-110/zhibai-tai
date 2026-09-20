@@ -21,7 +21,7 @@ import { useResolvedLayout } from '../layouts/useResolvedLayout'
 import { DesktopWorkspace } from '../layouts/DesktopWorkspace'
 import { MobileWorkspace } from '../layouts/MobileWorkspace'
 
-export default function App() {
+export function App() {
   useAppStore()
   const layout = useResolvedLayout()
   const onboarded = useSettingsStore((s) => s.onboarded)
@@ -42,16 +42,14 @@ export default function App() {
         <ClassReminder />
         <AiChatPanel />
         {onboarded ? (
-          // 就绪门：数据载入前显示启动屏，避免"空数据"闪烁
-          bootReady ? (
-            layout === 'mobile' ? (
-              <MobileWorkspace />
-            ) : (
-              <DesktopWorkspace />
-            )
-          ) : (
+          // 就绪门：数据载入前只显示启动屏，避免"空数据"闪烁。
+          // 启动屏不随就绪立刻卸载 —— 它自己淡出后再移除，工作台此时
+          // 已在其下方就位，于是两者是叠化而非硬切
+          <>
+            {bootReady &&
+              (layout === 'mobile' ? <MobileWorkspace /> : <DesktopWorkspace />)}
             <BootScreen />
-          )
+          </>
         ) : (
           <Onboarding />
         )}

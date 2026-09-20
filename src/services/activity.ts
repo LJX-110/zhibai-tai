@@ -7,6 +7,7 @@ import { activityRepo } from '../repositories/activity-repo'
 import { markTombstones } from '../repositories/repo'
 import { createId } from '../utils/id'
 import type { ActivityType } from '../types/entities'
+import { useActivityStore } from '../stores/useLifeStores'
 
 const MAX_ITEMS = 600
 
@@ -51,4 +52,7 @@ export async function recordActivity(input: RecordActivityInput): Promise<void> 
       await db.activityItems.bulkDelete(ids)
     })
   }
+  // 直写 DB 后同步刷新内存：让「观」页今日轨迹即时可见。
+  // 不改用 store 工厂落库，避免每次活动都触发自动同步。
+  await useActivityStore.getState().load()
 }

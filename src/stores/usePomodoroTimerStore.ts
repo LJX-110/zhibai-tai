@@ -1,5 +1,5 @@
 /**
- * usePomodoroTimerStore —— 全局番茄钟计时状态（V1.1 全局化）
+ * usePomodoroTimerStore —— 全局番茄钟计时状态
  * 学页 / Focus Mode / 顶栏芯片共用同一计时；归零结算在此统一处理
  */
 import { create } from 'zustand'

@@ -63,6 +63,12 @@ export const rssProvider: IntelligenceProvider = {
     if (!source.url) return []
     const xml = await fetchViaProxy(source.url, signal)
     const entries = parseFeed(xml)
+    // 解析出 0 条不能算「成功但没有更新」：站点被 CDN 换成验证页、地址失效后
+    // 跳转到首页、返回空 body，都会走到这里。静默返回空数组会让源看起来「正常」，
+    // 而用户永远等不到新情报 —— 必须显式失败，才能在源卡片上说清是哪一步坏掉的
+    if (entries.length === 0) {
+      throw new Error('parse: 内容里没有 RSS/Atom 条目（地址可能已失效，或返回的是网页/错误页）')
+    }
     return rssEntriesToItems(entries.slice(0, 12), source)
   },
 }

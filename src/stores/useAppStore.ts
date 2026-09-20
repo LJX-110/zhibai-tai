@@ -15,7 +15,7 @@ interface AppState {
   /** 当前一级导航 */
   section: SectionId
   setSection: (s: SectionId) => void
-  /** v0.4 桌面专注模式（隐藏侧栏/顶栏，只留任务+番茄钟+时间） */
+  /** 桌面专注模式（隐藏侧栏/顶栏，只留任务+番茄钟+时间） */
   focusMode: boolean
   setFocusMode: (v: boolean) => void
 }

@@ -3,6 +3,14 @@
 /* ============================================================
    Fonts —— 本地书法字体（离线可用，fontsource 简体子集）
    衬线/无衬线走系统字体栈，保证轻量；仅书法装饰字本地打包
+
+   装饰字只有 Ma Shan Zheng 一款（2026-09-20 移除 ZCOOL XiaoWei）：
+   站酷小薇与马善政的字形集合**完全相同**（都是 3916 字形 / 3770 CJK，
+   同为 fontsource 简体子集），而它在字体栈里排在马善政之后 —— 命中同一
+   码位时前面那款永远先赢，它没有任何一个能轮到自己出手的字符。移除后
+   页面字体总量 2.7MB → 1.7MB，渲染逐字不变。
+   代价：马善政加载失败时改为退到栈里的 Noto Serif SC（本就是一种退化路径，
+   且长尾字本来就一直在走这条路）。详见 assets/fonts/OFL-LICENSE.md。
    ============================================================ */
 @font-face {
   font-family: "Ma Shan Zheng";
@@ -11,12 +19,16 @@
   font-display: swap;
   src: url("./assets/fonts/ma-shan-zheng-400.woff2") format("woff2");
 }
+/* 印章专用小篆 —— 子集化自《全字库说文解字》EBAS（《说文解字》小篆字形，仅含印章用字，
+   约 47KB，授权：政府资料开放授权条款第 1 版，来源见同目录 seal-LICENSE.txt）。
+   仅用于印章；页面其它文字继续用楷体 / 行楷 / 系统字体，不受此字体影响。
+   font-display 用 block 而非 swap：印章宁可短暂不显示，也不要先出别的字形再换篆书。 */
 @font-face {
-  font-family: "ZCOOL XiaoWei";
+  font-family: "ZBT Seal";
   font-style: normal;
   font-weight: 400;
-  font-display: swap;
-  src: url("./assets/fonts/zcool-xiaowei-400.woff2") format("woff2");
+  font-display: block;
+  src: url("./assets/fonts/seal-zhuanshu.woff2") format("woff2");
 }
 
 /* ============================================================
@@ -68,11 +80,32 @@
     cursor: pointer;
   }
 
+  /* 输入控件字号必须 ≥16px：iOS Safari 对 <16px 的输入框会在聚焦时
+     把整页放大且不还原（表现为"一点输入框整页就跳大"）。 */
   input,
   textarea,
   select {
     font-family: inherit;
-    font-size: 15px;
+    font-size: 16px;
+  }
+
+  /* 移动端再强制一次：组件里可能用 text-sm / !text-xs 覆盖字号，
+     逐处改容易漏，这里用媒体查询一次性兜住。
+     这是**功能性覆盖**（防 iOS 缩放），不是样式偏好，故用 !important。 */
+  @media (max-width: 767px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+
+  /* 「固定宽标签 + 输入框」行里，标签一律 80px（w-20）会把输入框压到极窄
+     —— 320px 机上只剩约 150px。窄屏统一收窄标签，一条规则覆盖设置页全部此类行。 */
+  @media (max-width: 420px) {
+    .row > .w-20 {
+      width: 3.5rem; /* 56px */
+    }
   }
 
   :focus-visible {
@@ -115,25 +148,12 @@
     font-family: var(--font-serif);
     letter-spacing: 0.02em;
   }
-  .display-lg {
-    font-family: var(--font-serif);
-    letter-spacing: 0.02em;
-    font-size: var(--text-2xl);
-    line-height: 1.2;
-  }
+
   .display-hero {
     font-family: var(--font-serif);
     letter-spacing: 0.02em;
     font-size: var(--text-4xl);
     line-height: 1.1;
-  }
-
-  /* 正文弱化 */
-  .text-muted {
-    color: var(--color-ink-muted);
-  }
-  .text-faint {
-    color: var(--color-ink-faint);
   }
 
   /* 区块标题：小号序号 + 标题 + 渐隐分隔线（避免卡片墙，以线分割） */
@@ -183,7 +203,9 @@
     align-items: center;
     gap: 4px;
     font-family: var(--font-serif);
-    font-size: 11px;
+    /* 走阶梯最小档（12px）。原先写死 11px 不在 12/14/16… 阶梯上，
+       属于绕过令牌的魔法值；且 11px 与正文 12px 只差 1px，视觉上分不出层级。 */
+    font-size: var(--text-xs);
     line-height: 1;
     padding: 3px 7px;
     border-radius: 3px;
@@ -198,27 +220,11 @@
     color: var(--color-bronze);
     border: 1px solid rgba(173, 138, 82, 0.6);
   }
-  .seal--plain {
-    color: var(--color-ink-muted);
-    border: 1px solid var(--color-line-strong);
-  }
-
-  /* 分隔线 */
-  .divider {
-    height: 1px;
-    background: var(--color-line);
-    border: 0;
-  }
 
   /* 数字/刻度字体 */
   .tabular {
     font-variant-numeric: tabular-nums;
     font-family: var(--font-mono);
-  }
-
-  /* 落印动画（用于完成瞬间） */
-  .stamp-in {
-    animation: stamp var(--duration-slow) var(--ease-standard) both;
   }
 
   /* 弱化下划线悬停 */
@@ -242,10 +248,6 @@
     background-repeat: repeat;
   }
 
-  /* 低对比纸面层级 */
-  .surface {
-    background: var(--color-surface);
-  }
   .raised {
     background: var(--color-raised);
   }
@@ -302,12 +304,6 @@
     scrollbar-width: none;
   }
 
-  /* 信息密度：紧凑列表 */
-  .list-compact {
-    display: flex;
-    flex-direction: column;
-  }
-
   /* ===== 统一动效标准（单一事实源） =====
    所有弹层/遮罩/卡片进入动画必须用下面四个命名类，
    禁止各组件写散落的 animate-[page-fade_XXXms_...]（时长各不相同会漂移）：
@@ -335,59 +331,9 @@
 
   /* ===== v0.4 异术化 Motion Utilities ===== */
 
-  /* 墨线划过（加载/切换/装饰） */
-  .ink-draw {
-    position: relative;
-    overflow: hidden;
-  }
-  .ink-draw::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 2px;
-    transform: scaleX(0);
-    transform-origin: left;
-    background: linear-gradient(90deg, var(--color-cinnabar), transparent);
-    animation: ink-draw var(--duration-slow) var(--ease-standard) forwards;
-  }
-
-  /* 炁流（石青→符箓金 淡雾，AI/道行/同步等关键状态） */
-  .qi {
-    position: relative;
-  }
-  .qi::before {
-    content: "";
-    position: absolute;
-    inset: -20% 30%;
-    pointer-events: none;
-    border-radius: 9999px;
-    background: radial-gradient(
-      closest-side,
-      color-mix(in srgb, var(--color-teal) 18%, transparent),
-      color-mix(in srgb, var(--color-bronze-bright) 10%, transparent),
-      transparent
-    );
-    filter: blur(8px);
-    animation: qi-breathe 4s var(--ease-standard) infinite;
-  }
-
   /* 异印落印（任务完成/确认） */
   .seal-stamp {
     animation: seal-fall 520ms var(--ease-standard) both;
-  }
-
-  /* 阵纹逐层构建（奇门/异术阵） */
-  .qimen-cell {
-    animation: cell-in 420ms var(--ease-standard) both;
-  }
-
-  /* 罗盘轻微旋转（克制；以自身包围盒中心为轴，跨浏览器稳定） */
-  .compass-slow {
-    animation: compass-spin 60s linear infinite;
-    transform-box: fill-box;
-    transform-origin: center;
   }
 
   /* 数字滚动 */
@@ -433,15 +379,7 @@
   .ink-btn:active {
     transform: scale(0.95) rotate(-1.5deg);
   }
-  /* 主按钮：朱砂印鉴（内双线刻痕） */
-  .ink-btn--cinnabar {
-    --btn-bg: var(--color-cinnabar);
-    --btn-edge: color-mix(in srgb, var(--color-cinnabar) 70%, #000 30%);
-    --btn-ink: rgba(0, 0, 0, 0.3);
-    --btn-inner: color-mix(in srgb, var(--color-on-cinnabar) 34%, transparent);
-    color: var(--color-on-cinnabar);
-  }
-  /* 青墨印鉴（信息/确认） */
+/* 青墨印鉴（信息/确认） */
   .ink-btn--teal {
     --btn-bg: var(--color-teal);
     --btn-edge: color-mix(in srgb, var(--color-teal) 68%, #000 32%);
@@ -497,21 +435,6 @@
   }
 }
 
-@keyframes stamp {
-  0% {
-    transform: scale(1.6);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(0.94);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
 /* 异印落印：下落 + 印章放大 → 归位 */
 @keyframes seal-fall {
   0% {
@@ -531,44 +454,6 @@
   }
 }
 
-/* 墨线从左划入 */
-@keyframes ink-draw {
-  to {
-    transform: scaleX(1);
-  }
-}
-
-/* 炁流呼吸（淡雾扩散回收） */
-@keyframes qi-breathe {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.12);
-  }
-}
-
-/* 阵纹逐格亮起 */
-@keyframes cell-in {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes ring-draw {
-  from {
-    stroke-dashoffset: var(--ring-circ, 260);
-  }
-}
-
 /* 罗盘轻微旋转（用于奇页装饰，克制） */
 @keyframes compass-spin {
   to {
@@ -578,11 +463,15 @@
 
 /* 启动屏太极旋转：仅动 transform 且提升合成层，
    主线程被数据加载占用时也不掉帧 */
-.spin-smooth {
-  animation: compass-spin 2.4s linear infinite;
-  will-change: transform;
-  transform-origin: 50% 50%;
+@layer utilities {
+  .spin-smooth {
+    animation: compass-spin 2.4s linear infinite;
+    will-change: transform;
+    transform-origin: 50% 50%;
+  }
 }
+/* reduced-motion 覆盖**故意留在 @layer 之外**：它是无障碍强制行为，
+   必须能压过层内的工具类与组件类（这条没有 !important，靠层序保证生效） */
 @media (prefers-reduced-motion: reduce) {
   .spin-smooth {
     animation: none;
@@ -615,6 +504,14 @@
    V1.3 异术设计系统 —— 自建「宣纸符箓」语言
    四角括号（上朱下金对角） + 顶线墨迹起笔 + 印鉴 + 墨迹晕染
    ============================================================ */
+
+/* 以下组件类统一收进 @layer components。
+   ⚠️ 此前它们写在 @layer 之外，而**未分层规则的优先级高于任何 @layer 内的规则**，
+   于是调用处写的 text-[11px] / rounded-[12px] 这类覆盖会被静默压掉 ——
+   已实际造成 3 个 bug（.talisman 让浮层圆角令牌失效、.mono-meta text-[9px] 成死类、
+   .seal 的字号覆盖被无视），并逼出过「用 !important 对抗自己」的写法。
+   收进层内后，工具类重新能正常覆盖组件类，优先级回归直觉。 */
+@layer components {
 
 /* ---- 符纸卡：宣纸贴 + 细线框 + 四角中性墨括号 + 顶线（无色，避免融进正文） ---- */
 .talisman {
@@ -651,24 +548,6 @@
 }
 .talisman--line::before {
   display: none;
-}
-/* 符箓虚线框（今日签 / 境界 / 仪式用） */
-.talisman--seal {
-  border-style: dashed;
-  border-color: var(--color-line-strong);
-  background-image: none;
-}
-.talisman--seal::before {
-  display: none;
-}
-.talisman--seal::after {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border: 1px solid var(--color-line-strong);
-  border-radius: 7px;
-  opacity: 0.6;
-  pointer-events: none;
 }
 .talisman > * {
   position: relative;
@@ -710,57 +589,35 @@
   }
 }
 
-/* ---- 墨迹晕染页进入（替代平淡淡入） ---- */
+/* ---- 墨迹晕染页进入（替代平淡淡入） ----
+   原实现用 clip-path: circle() 做圆形揭示，但 clip-path 不在 transform/opacity 之内，
+   每帧触发裁剪重算、且违背「动效只用 transform/opacity」的硬性要求。
+   改为 transform（轻位移 + 微缩放）+ opacity 的浮现，GPU 合成、不掉帧，
+   视觉仍是「由轻到重浮出」的墨韵。reduced-motion 由全局规则统一降级。 */
 .ink-reveal {
   animation: ink-reveal 460ms var(--ease-standard) both;
 }
 @keyframes ink-reveal {
   0% {
     opacity: 0;
-    clip-path: circle(6% at 50% 24%);
+    transform: translateY(10px) scale(0.985);
   }
   100% {
     opacity: 1;
-    clip-path: circle(142% at 50% 24%);
+    transform: none;
   }
 }
 
-/* ---- 等宽元数据（编号 / 时间 / 大写微标） ---- */
+/* ---- 等宽元数据（编号 / 时间 / 大写微标） ----
+   字号走阶梯最小档 12px：原先写死 11px，既不在 12/14/16… 阶梯上，
+   又因为本文件未分层而静默压过工具层 —— 调用处写的 text-[9px] / text-[10px]
+   从来没生效过（改了没反应的那种坑）。收口到令牌后，调用方不必再覆盖字号。 */
 .mono-meta {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-}
-
-/* ---- 墨线扫过（同步 / 状态 / 加载） ---- */
-.line-sweep {
-  position: relative;
-  overflow: hidden;
-}
-.line-sweep::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -30%;
-  width: 30%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--color-bronze) 16%, transparent),
-    transparent
-  );
-  animation: line-sweep 2.4s var(--ease-standard) infinite;
-}
-@keyframes line-sweep {
-  0% {
-    left: -30%;
-  }
-  100% {
-    left: 120%;
-  }
 }
 
 /* ---- 罗盘辅助 ---- */
@@ -769,9 +626,7 @@
   transform-box: fill-box;
   transform-origin: center;
 }
-.glow-cinnabar {
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-cinnabar) 45%, transparent));
-}
+
 .glow-bronze {
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-bronze) 45%, transparent));
 }
@@ -822,7 +677,10 @@
   background: transparent;
 }
 
+} /* ← 闭合 @layer components */
+
 /* ---- 页面背景：主体单色 + 极淡金光点缀（蓝白月亮 / 红黑太阳 · 随主题） ---- */
+@layer base {
 body {
   background-color: var(--color-paper);
   background-image:
@@ -837,6 +695,7 @@ body {
     radial-gradient(980px 520px at 104% 4%, color-mix(in oklch, var(--color-cinnabar) 4.5%, transparent), transparent 55%),
     var(--bg-grain);
 }
+} /* ← 闭合 @layer base */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -848,11 +707,14 @@ body {
   }
 }
 
-/* 侧栏色抽屉（移动端「更多空间」）：
-   .talisman 为无层级样式，会压过工具层 bg-*，这里用同类无层级样式 + !important 夺回控制权 */
+@layer components {
+/* 侧栏色抽屉（移动端「更多空间」）。
+   注：这里原本的 !important 是为了对抗 `.talisman` 那种无层级样式压过工具层
+   （见下方包内更早的注释）；.talisman 收进 @layer 后这种「自己人打自己人」不再必要，
+   保留 !important 只为零风险过渡，可后续单独清理。 */
 .sheet-sidebar {
-  background-color: var(--color-sidebar) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background-color: var(--color-sidebar);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 .sheet-sidebar::before {
   opacity: 0;
@@ -863,4 +725,5 @@ body {
   writing-mode: vertical-rl;
   text-orientation: upright;
   letter-spacing: 0.12em;
+}
 }

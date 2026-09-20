@@ -19,7 +19,7 @@ import {
 import { weekdayCN } from '../utils/id'
 import { playSound } from '../services/sound'
 import { Sheet, useToast } from '../components/ui'
-import { useAIChatStore } from '../components/ai/AiChatPanel'
+import { useAIChatStore } from '../components/ai/chat-store'
 import { runSync } from '../sync/SyncService'
 import { isConfigured, isSyncConfigured } from '../sync/auto'
 import { cn } from '../utils/cn'
@@ -69,10 +69,10 @@ export function MobileHeader() {
   return (
     <header className="sticky top-0 z-[var(--z-header)] flex items-center justify-between border-b border-white/10 bg-sidebar/97 px-4 pb-2 pt-3 backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
-        <span className="tabular text-[11px] tracking-[0.2em] text-on-sidebar-muted">{current.index}</span>
+        <span className="tabular text-xs tracking-[0.2em] text-on-sidebar-muted">{current.index}</span>
         <div>
           <div className="display text-lg font-semibold tracking-wide text-on-sidebar">{current.label}</div>
-          <div className="text-[10px] tracking-[0.2em] text-on-sidebar-muted">{current.sub}</div>
+          <div className="text-xs tracking-[0.2em] text-on-sidebar-muted">{current.sub}</div>
         </div>
       </div>
       <div className="flex items-center gap-0.5 text-on-sidebar-muted">
@@ -111,7 +111,7 @@ export function MobileNav() {
   const setAIChatOpen = useAIChatStore((s) => s.setOpen)
   const [moreOpen, setMoreOpen] = useState(false)
 
-  /** 底栏常驻板块：固定 4 格（观 · 行 · 财 · 情），第 5 格恒为「更多」。
+  /** 底栏常驻板块：固定 4 格（观 · 行 · 财 · 学），第 5 格恒为「更多」。
    *  刻意不再做可配置：底栏是高频入口，配置越多越乱，其余板块统一收进抽屉。 */
   const tabs: NavSection[] = useMemo(() => {
     return DEFAULT_MOBILE_TABS.map((id) => NAV_SECTIONS.find((s) => s.id === id)).filter(
@@ -149,14 +149,17 @@ export function MobileNav() {
                 }}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors',
+                  'relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
                   active ? 'text-on-sidebar' : 'text-on-sidebar-muted',
                 )}
               >
                 <span className={cn('leading-none', active ? 'display text-base' : 'text-sm')}>
                   {s.label}
                 </span>
-                {/* 英文副标仅激活态显示：五个标签并排时都带双语会堆叠发挤 */}
+                {/* 英文副标仅激活态显示：五个标签并排时都带双语会堆叠发挤。
+                    字号例外：底栏 5 格在 375px 上每格仅约 75px，而副标是
+                    字号例外：TODAY / FINANCE 这类大写英文 + 0.18em 字距，12px 会实测溢出
+                    格宽（FINANCE ≈ 85px），故保持 8px，不收敛到令牌阶梯。 */}
                 <span
                   className={cn(
                     'text-[8px] tracking-[0.18em]',
@@ -174,14 +177,19 @@ export function MobileNav() {
           <button
             onClick={() => setMoreOpen(true)}
             aria-current={moreSections.some((m) => m.id === section) ? 'page' : undefined}
+            /* 非激活态只露出「⋯」，SVG/字符本身没有可访问名 —— 不给 aria-label
+               时读屏会把这个按钮读成「省略号」，用户不知道它通向更多板块。
+               英文副标 MORE 仅在激活态可见（见下方 hidden），也不能当名字用。 */
+            aria-label="更多板块"
             className={cn(
-              'relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px]',
+              'relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 text-xs',
               moreOpen || moreSections.some((m) => m.id === section)
                 ? 'text-on-sidebar'
                 : 'text-on-sidebar-muted',
             )}
           >
             <span className="text-base leading-none">⋯</span>
+            {/* 字号例外（同上一格）：MORE 与副标同档，底栏格宽不足以承载 12px 大写英文 + 字距 */}
             <span className={cn('text-[8px] tracking-[0.18em]', moreOpen || moreSections.some((m) => m.id === section) ? 'text-on-sidebar/70' : 'hidden')}>
               MORE
             </span>
@@ -205,7 +213,7 @@ export function MobileNav() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="display block text-base font-semibold text-on-sidebar">天机</span>
-              <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">
+              <span className="block text-xs tracking-[0.18em] text-on-sidebar-muted">
                 AI 问答 · 一键简报
               </span>
             </span>
@@ -224,12 +232,12 @@ export function MobileNav() {
                       : 'border-white/10 hover:border-white/25 hover:bg-white/5',
                   )}
                 >
-                  <span className="tabular w-7 text-right text-[11px] text-on-sidebar-muted">{s.index}</span>
+                  <span className="tabular w-7 text-right text-xs text-on-sidebar-muted">{s.index}</span>
                   <span className="min-w-0 flex-1">
                     <span className="display block text-base font-semibold text-on-sidebar">
                       {s.label}
                     </span>
-                    <span className="block text-[10px] tracking-[0.18em] text-on-sidebar-muted">{s.sub}</span>
+                    <span className="block text-xs tracking-[0.18em] text-on-sidebar-muted">{s.sub}</span>
                   </span>
                 </button>
               )

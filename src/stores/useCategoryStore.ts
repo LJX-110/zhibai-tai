@@ -99,7 +99,8 @@ export async function seedAllCategories(): Promise<void> {
   await migrateCategoryIds()
   await seedCategories('intel')
   await seedCategories('collection')
-  await seedCategories('ai')
+  // 术的类型数据化：内置 7 类从这里播种；「ai」分类行已从界面移除，不再播种
+  await seedCategories('ai_type')
   await migrateCollectionCategoryNames()
 }
 

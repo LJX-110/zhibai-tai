@@ -59,7 +59,7 @@ export function DesktopWorkspace() {
                       : '尚未同步 · 点击配置'
                 }
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 py-1.5 transition-colors',
+                  'inline-flex items-center gap-1.5 rounded-chip border px-2.5 py-1.5 transition-colors',
                   syncStatus === 'error'
                     ? 'border-cinnabar/40 text-cinnabar hover:border-cinnabar/70'
                     : 'border-line text-ink-muted hover:border-line-strong hover:text-ink',
@@ -90,10 +90,10 @@ export function DesktopWorkspace() {
                   pomoPause()
                   playSound('ui-close')
                 }}
-                className="inline-flex items-center gap-1.5 rounded-[6px] border border-teal/40 bg-teal/10 px-2.5 py-1.5 text-ink-muted transition-colors hover:border-teal/70 hover:text-teal"
+                className="inline-flex items-center gap-1.5 rounded-chip border border-teal/40 bg-teal/10 px-2.5 py-1.5 text-ink-muted transition-colors hover:border-teal/70 hover:text-teal"
                 title="全局番茄钟 · 点击暂停"
               >
-                <span className="text-[11px]">{pomoMode === 'focus' ? '专注' : '休整'}</span>
+                <span className="text-xs">{pomoMode === 'focus' ? '专注' : '休整'}</span>
                 <span className="mono-meta text-xs text-teal">
                   {pmm}:{pss}
                 </span>
@@ -107,7 +107,7 @@ export function DesktopWorkspace() {
                 setFocusMode(true)
                 playSound('ui-open')
               }}
-              className="hidden items-center gap-1.5 rounded-[6px] border border-cinnabar/30 px-2.5 py-1.5 text-ink-muted transition-colors hover:border-cinnabar/60 hover:text-cinnabar md:inline-flex"
+              className="hidden items-center gap-1.5 rounded-chip border border-cinnabar/30 px-2.5 py-1.5 text-ink-muted transition-colors hover:border-cinnabar/60 hover:text-cinnabar md:inline-flex"
               title="进入专注模式"
             >
               <Focus size={13} /> 专注
@@ -116,10 +116,10 @@ export function DesktopWorkspace() {
               onClick={() => {
                 window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
               }}
-              className="hidden items-center gap-1.5 rounded-[6px] border border-line px-2.5 py-1.5 text-ink-faint transition-colors hover:border-line-strong hover:text-ink md:inline-flex"
+              className="hidden items-center gap-1.5 rounded-chip border border-line px-2.5 py-1.5 text-ink-faint transition-colors hover:border-line-strong hover:text-ink md:inline-flex"
             >
               <Command size={13} /> 命令
-              <kbd className="rounded-control bg-nested px-1.5 py-0.5 text-[10px]">Ctrl K</kbd>
+              <kbd className="rounded-control bg-nested px-1.5 py-0.5 text-xs">Ctrl K</kbd>
             </button>
           </div>
           </div>

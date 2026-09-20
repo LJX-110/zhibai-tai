@@ -1,13 +1,16 @@
 /**
  * Sheet —— 底部弹层（移动端友好，safe-area 感知）
+ *
+ * Esc / 遮罩点击 / Tab 锁 / 焦点进出与 Dialog 共用 useModalLayer；
+ * 本组件只保留「贴底」这一差异：定位、上滑入场、底部安全区内边距。
  */
 import { X } from 'lucide-react'
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../utils/cn'
-import { playSound } from '../../services/sound'
 import { Button } from './Button'
-import { overlayClosed, overlayOpened } from './overlay'
+import { OverlayScrim } from './OverlayScrim'
+import { useModalLayer } from './overlay'
 
 export interface SheetProps {
   open: boolean
@@ -21,47 +24,29 @@ export interface SheetProps {
 }
 
 export function Sheet({ open, onClose, title, children, footer, className, tone = 'paper' }: SheetProps) {
-  // 开合伴音（与 Dialog 同语言）；作为模态层登记到 overlay 栈
-  useEffect(() => {
-    if (open) playSound('ui-open')
-    if (open) overlayOpened()
-    return () => {
-      if (open) {
-        playSound('ui-close')
-        overlayClosed()
-      }
-    }
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  const titleId = useId()
+  const panelRef = useModalLayer({ open, onClose })
 
   if (!open) return null
 
   return createPortal(
     <div className="fixed inset-0 z-[var(--z-overlay)]">
+      <OverlayScrim onClose={onClose} />
       <div
-        className="absolute inset-0 bg-ink/40 anim-fade"
-        onClick={onClose}
-      />
-      <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title != null ? titleId : undefined}
+        tabIndex={-1}
         className={cn(
-          'talisman absolute inset-x-0 bottom-0 rounded-t-tile border-x-0 border-b-0 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet max-h-[88vh] overflow-y-auto',
+          'talisman overlay-panel overlay-panel--edge absolute inset-x-0 bottom-0 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet max-h-[88vh] overflow-y-auto focus:outline-none',
           tone === 'sidebar' && 'sheet-sidebar',
           className,
         )}
       >
         <div className={cn('mx-auto mb-3 h-1 w-10 rounded-full', tone === 'sidebar' ? 'bg-white/25' : 'bg-line-strong')} />
         <div className="mb-3 flex items-center justify-between">
-          <h3 className={cn('scribal-title text-xl', tone === 'sidebar' ? 'text-on-sidebar' : 'text-ink')}>{title}</h3>
+          <h3 id={titleId} className={cn('scribal-title text-xl', tone === 'sidebar' ? 'text-on-sidebar' : 'text-ink')}>{title}</h3>
           <Button variant="tertiary" size="sm" onClick={onClose} aria-label="关闭" className={cn('!px-1.5', tone === 'sidebar' && 'text-on-sidebar-muted hover:bg-white/10 hover:text-on-sidebar')}>
             <X size={16} />
           </Button>

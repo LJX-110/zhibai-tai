@@ -3,7 +3,7 @@
  */
 import { useState } from 'react'
 import type { Note } from '../../types/entities'
-import { createId } from '../../utils/id'
+import { createId, nowISO } from '../../utils/id'
 import { withDerivedTitle } from '../../utils/note'
 import { Button } from '../ui/Button'
 import { Input, Textarea } from '../ui/Field'
@@ -42,7 +42,7 @@ export function NoteEditor({ open, onClose, note, defaultKind = 'note', onSave }
   }
 
   const submit = () => {
-    const now = new Date().toISOString()
+    const now = nowISO()
     const tags = tagsText.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean)
     onSave(
       withDerivedTitle({

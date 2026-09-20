@@ -10,29 +10,199 @@
     <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#2e5a8c" />
+    <!-- iOS：只靠 manifest 的 display:standalone，旧版安装后会带地址栏打开、不像 App；
+         这三个 meta 是 iOS 的对应约定（全屏 / 主屏显示名 / 状态栏样式） -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="知白台" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="知白台 — 知其白，守其黑 · 个人效率系统" />
     <!-- manifest 由 vite-plugin-pwa 注入（感知 base，子路径部署可用）；
          此前手写 /manifest.webmanifest 在 GitHub Pages 子路径下 404，
          导致 PWA 安装后拿不到图标、显示浏览器生成的字母回退图 -->
     <title>知白台</title>
+    <script>
+      /* 启动页主题预判：底色必须在首屏绘制前定下来，否则「先按亮色画一遍、
+         再被应用设置改暗」会闪一下白。主题存在 localStorage（zustand persist
+         的 yishu-workbench:settings），此处同步读出即可；读不到（首次访问）
+         时取与应用默认值一致的 dark，保证与主界面不冲突。 */
+      ;(function () {
+        var dark = true
+        try {
+          var raw = localStorage.getItem('yishu-workbench:settings')
+          var theme = raw ? (JSON.parse(raw).state || {}).theme : 'dark'
+          dark =
+            theme === 'dark' ||
+            (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        } catch (e) {
+          dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        }
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+      })()
+      /* 记录「首帧绘制起点」：静态启动屏的进度条动画从这里开始计时（见 .boot-fill）。
+         React 接管后用这个时间点给进度条补一个负的 animation-delay，使进度从静态占位
+         当时的位置无缝续接，而不是新建一个元素又从 6% 重新跑一遍（慢网下会肉眼可见地回跳）。 */
+      ;(function () {
+        try {
+          window.__bootStart = window.performance && typeof window.performance.now === 'function'
+            ? window.performance.now()
+            : Date.now()
+        } catch (e) {
+          window.__bootStart = Date.now()
+        }
+      })()
+    </script>
+    <style>
+      /* 启动页样式只此一份：这段 <style> 常驻页面，React 挂载后的 BootScreen
+         用同一套 class 输出同样结构，因此从静态占位切到 React 时视觉零跳变
+         （不换色、不换字号、不位移），也就没有「白屏 → 内容」的闪断。 */
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: #21262d;
+        transition: opacity 420ms cubic-bezier(0.2, 0, 0, 1);
+      }
+      html[data-theme='dark'] .boot {
+        background: #000000;
+        color: #e6e8eb;
+      }
+      .boot[data-leaving='true'] {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* 太极统一为「蓝白」：浅色主题黛蓝 + 白，白半圆靠外圈细描边立住边界
+         （纯白画在白底上会消失）；深色主题改用亮阶黛蓝 + 近白，保证黑底上清晰。 */
+      .boot-mark {
+        width: clamp(64px, 17vw, 104px);
+        height: clamp(64px, 17vw, 104px);
+        --boot-a: #2e5a8c;
+        --boot-b: #ffffff;
+        --boot-ring: #2e5a8c;
+      }
+      html[data-theme='dark'] .boot-mark {
+        --boot-a: #4f83bd;
+        --boot-b: #f7f8fa;
+        --boot-ring: #f7f8fa;
+      }
+      .boot-mark svg {
+        width: 100%;
+        height: 100%;
+        /* 太极常驻旋转：提升为合成层，主线程被数据加载占用时也不掉帧 */
+        will-change: transform;
+        transform-origin: 50% 50%;
+        animation: boot-spin 3.6s linear infinite;
+      }
+      .bm-a { fill: var(--boot-a); }
+      .bm-b { fill: var(--boot-b); }
+      .bm-ring {
+        fill: none;
+        stroke: var(--boot-ring);
+        stroke-width: 1.4;
+        opacity: 0.85;
+      }
+      @keyframes boot-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .boot-name {
+        margin: 22px 0 0;
+        font-family: 'Ma Shan Zheng', serif;
+        font-size: clamp(20px, 5.4vw, 27px);
+        letter-spacing: 0.34em;
+        text-indent: 0.34em;
+      }
+      .boot-poem {
+        margin: 10px 0 0;
+        font-size: clamp(11px, 3vw, 12px);
+        letter-spacing: 0.22em;
+        text-indent: 0.22em;
+        opacity: 0.5;
+      }
+
+      .boot-track {
+        margin-top: clamp(26px, 6vh, 40px);
+        width: clamp(112px, 34vw, 176px);
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.14;
+        overflow: hidden;
+      }
+      /* 进度条由**时间**驱动：本地 IndexedDB 是毫秒级就绪，若纯按「步骤完成数」走，
+         用户根本看不到加载过程（反馈过的"一闪而过"）。900ms 推到 88%，最后 12%
+         留给「真正就绪」那一刻补满 —— 数据快时有完整动画，数据慢时也不会先满再干等。
+         推进用 transform: scaleX 而非 width：width 每帧触发布局重排（layout thrash），
+         在主线程被数据加载占用时掉帧；scaleX 只动合成层，与太极一样 GPU 友好。
+         占位宽度恒为轨道 100%，视觉宽度完全由 scaleX 表达。 */
+      .boot-fill {
+        display: block;
+        height: 100%;
+        width: 100%;
+        border-radius: 2px;
+        background: #8a6508;
+        transform: scaleX(0.06);
+        transform-origin: left center;
+        animation: boot-progress 900ms cubic-bezier(0.2, 0, 0, 1) both;
+      }
+      html[data-theme='dark'] .boot-fill {
+        background: #c9a227;
+      }
+      @keyframes boot-progress {
+        from { transform: scaleX(0.06); }
+        to { transform: scaleX(0.88); }
+      }
+      /* 就绪：立刻补满最后一段，并停掉时间动画（否则终态会盖住这个宽度） */
+      .boot-fill[data-done='true'] {
+        animation: none;
+        transform: scaleX(1);
+        transition: transform 240ms cubic-bezier(0.2, 0, 0, 1);
+      }
+
+      .boot-step {
+        margin: 14px 0 0;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        opacity: 0.55;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-mark svg,
+        .boot-fill {
+          animation: none;
+        }
+        .boot-fill {
+          transform: scaleX(0.88);
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root">
-      <!-- React 挂载前的加载占位：与 BootScreen 同一太极（黛蓝+鎏金，旋转），避免浏览器默认白屏/菊花 -->
-      <div style="display:flex;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#f7f5f0;color:#6b6b6b;font-size:13px">
-        <svg width="72" height="72" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" style="animation:zbt-spin 2.2s linear infinite">
-          <defs>
-            <clipPath id="zbt-half"><rect x="50" y="0" width="50" height="100"/></clipPath>
-            <clipPath id="zbt-quarter"><circle cx="50" cy="50" r="50"/><circle cx="75" cy="50" r="25" fill="white"/></clipPath>
-          </defs>
-          <circle cx="50" cy="50" r="46" fill="#2e5a8c"/>
-          <circle cx="50" cy="50" r="46" fill="#8a6508" clip-path="url(#zbt-half)"/>
-          <circle cx="50" cy="37" r="12" fill="#2e5a8c" clip-path="url(#zbt-quarter)"/>
-          <circle cx="50" cy="63" r="12" fill="#8a6508"/>
-        </svg>
-        <p style="margin:0;letter-spacing:0.15em">正在铺开文房 …</p>
+      <div class="boot">
+        <div class="boot-mark">
+          <!-- 阴阳鱼用一条 path 直接画：靠两个 clipPath 叠加「相减」在 SVG 里不成立
+               —— clipPath 内的多个子形状取并集，不会挖洞，结果是两块色斑加一个多余的圆 -->
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle class="bm-b" cx="50" cy="50" r="46" />
+            <path
+              class="bm-a"
+              d="M50 4 A46 46 0 0 1 50 96 A23 23 0 0 1 50 50 A23 23 0 0 0 50 4 Z"
+            />
+            <circle class="bm-a" cx="50" cy="27" r="8.3" />
+            <circle class="bm-b" cx="50" cy="73" r="8.3" />
+            <circle class="bm-ring" cx="50" cy="50" r="45.6" />
+          </svg>
+        </div>
+        <p class="boot-name">知白台</p>
+        <p class="boot-poem">知其白，守其黑</p>
+        <div class="boot-track"><i class="boot-fill"></i></div>
+        <p class="boot-step">正在铺开文房</p>
       </div>
-      <style>@keyframes zbt-spin{to{transform:rotate(360deg)}}</style>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

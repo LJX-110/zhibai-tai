@@ -7,6 +7,8 @@
  * - Token 用设备本地不可导出密钥加密（新设备需重输）
  * - 数据快照用 Sync Password 推导密钥加密（可跨设备恢复）
  */
+import { b64ToBuf, bufToB64 } from '../../utils/base64'
+
 /** 应用固定盐（非机密，用于跨设备推导同一密钥） */
 const SALT = new TextEncoder().encode('yishu-workbench-sync-salt-v1')
 const ITERATIONS = 200_000
@@ -27,22 +29,6 @@ export async function deriveSyncKey(password: string): Promise<CryptoKey> {
     false,
     ['encrypt', 'decrypt'],
   )
-}
-
-function bufToB64(buf: Uint8Array): string {
-  let s = ''
-  const chunk = 0x8000
-  for (let i = 0; i < buf.length; i += chunk) {
-    s += String.fromCharCode(...buf.subarray(i, i + chunk))
-  }
-  return btoa(s)
-}
-
-function b64ToBuf(b64: string): Uint8Array {
-  const bin = atob(b64)
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
 }
 
 /** 加密任意 JSON 数据 → base64 */

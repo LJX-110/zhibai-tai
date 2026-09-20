@@ -3,26 +3,11 @@
  * 密钥不可导出，存于 IndexedDB（cryptoKeys）；Token 加密后再落 localStorage。
  */
 import { db } from '../../db/db'
+import { b64ToBuf, bufToB64 } from '../../utils/base64'
 
 export interface Encryptor {
   encrypt(plain: string): Promise<string>
   decrypt(cipher: string): Promise<string>
-}
-
-function bufToB64(buf: Uint8Array): string {
-  let s = ''
-  const chunk = 0x8000
-  for (let i = 0; i < buf.length; i += chunk) {
-    s += String.fromCharCode(...buf.subarray(i, i + chunk))
-  }
-  return btoa(s)
-}
-
-function b64ToBuf(b64: string): Uint8Array {
-  const bin = atob(b64)
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
 }
 
 class WebCryptoEncryptor implements Encryptor {
@@ -71,10 +56,18 @@ export function isWebCryptoAvailable(): boolean {
   return typeof crypto !== 'undefined' && !!crypto.subtle
 }
 
-/** 统一入口（不可用时回退 base64，仅提示不保密） */
+/**
+ * 统一入口。Web Crypto 不可用时**明确失败并抛出可读错误**，
+ * 不静默降级为 base64（即明文）存储 Token —— 那等于把凭据以明文落盘。
+ * 是否可用的唯一事实源是 `isWebCryptoAvailable`。
+ */
 export const encryptor: Encryptor = isWebCryptoAvailable()
   ? new WebCryptoEncryptor()
   : {
-      encrypt: async (plain) => btoa(unescape(encodeURIComponent(plain))),
-      decrypt: async (cipher) => decodeURIComponent(escape(atob(cipher))),
+      encrypt: async () => {
+        throw new Error('当前浏览器环境不支持加密，无法安全保存同步凭据')
+      },
+      decrypt: async () => {
+        throw new Error('当前浏览器环境不支持加密，无法读取已保存的同步凭据')
+      },
     }

@@ -37,14 +37,14 @@ export function EmptyState({ icon: Icon, title, desc, step, action, className }:
         style={{ position: 'absolute', bottom: -16, left: -14, width: 100, height: 100 }}
       />
       {Icon && (
-        <div className="mb-2 hidden h-12 w-12 items-center justify-center rounded-[6px] border border-line-strong bg-paper/60 text-ink-faint md:flex">
+        <div className="mb-2 hidden h-12 w-12 items-center justify-center rounded-chip border border-line-strong bg-paper/60 text-ink-faint md:flex">
           <Icon size={20} strokeWidth={1.5} />
         </div>
       )}
       <p className="scribal-title text-lg font-normal text-ink-soft">{title}</p>
       {/* 解释说明属于新手期信息：桌面保留，手机收起——空态只剩标题+主按钮，
           避免手机上再堆一段小字 */}
-      {desc && <p className="hidden max-w-[320px] text-[13px] leading-relaxed text-ink-faint md:block">{desc}</p>}
+      {desc && <p className="hidden max-w-[320px] text-sm leading-relaxed text-ink-faint md:block">{desc}</p>}
       {/* 「下一步」属于新手期的说明性文字：桌面保留，手机收起，空态不再占半屏 */}
       {step && (
         <p className="mt-0.5 hidden items-center gap-1.5 text-xs text-ink-muted md:flex">

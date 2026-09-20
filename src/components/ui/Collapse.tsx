@@ -66,7 +66,7 @@ export function Collapse({
         />
         <span>{title}</span>
         {hint && <span className="hint">{hint}</span>}
-        <span className="ml-auto text-[11px] font-normal text-ink-faint">
+        <span className="ml-auto text-xs font-normal text-ink-faint">
           {expanded ? '收起' : '展开'}
         </span>
       </button>

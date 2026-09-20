@@ -12,7 +12,7 @@ import { recordActivity } from '../../services/activity'
 import { playSound } from '../../services/sound'
 import { Seal } from '../ui/Seal'
 import { Button } from '../ui/Button'
-import { todayISO } from '../../utils/id'
+import { todayISO, nowISO } from '../../utils/id'
 import { cn } from '../../utils/cn'
 
 export function FocusMode() {
@@ -47,7 +47,7 @@ export function FocusMode() {
     if (!current) return
     await useTaskStore.getState().update(current.id, {
       done: true,
-      completedAt: new Date().toISOString(),
+      completedAt: nowISO(),
     })
     playSound('seal')
     void recordActivity({ entityType: 'task', entityId: current.id, title: `完成任务：${current.title.slice(0, 24)}` })
@@ -65,7 +65,7 @@ export function FocusMode() {
       {/* 顶栏：退出 */}
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2 text-xs tracking-[0.3em] text-ink-faint">
-          <Seal size={20} char="异" /> FOCUS · 专注
+          <Seal size={22} char="异" /> FOCUS · 专注
         </div>
         <Button size="sm" variant="tertiary" onClick={() => setFocusMode(false)}>
           <X size={14} /> 退出专注
@@ -85,7 +85,9 @@ export function FocusMode() {
 
         {/* 当前任务 */}
         <div className="w-full max-w-md rounded-paper border border-line bg-panel px-6 py-5 text-center">
-          <div className="mb-2 text-[11px] tracking-[0.3em] text-ink-faint">当前任务 · NOW</div>
+          {/* 只留中文标签：原先的「当前任务 · NOW」里 NOW 是中文的同义标注，
+              既没带新信息，又在全屏专注界面里多占一行视觉噪音 */}
+          <div className="mb-2 text-xs tracking-[0.3em] text-ink-faint">当前任务</div>
           {current ? (
             <>
               <div className="display text-xl font-semibold text-ink">{current.title}</div>
@@ -103,7 +105,7 @@ export function FocusMode() {
           <div className={cn('num-tabular text-6xl font-semibold', running ? 'text-cinnabar' : 'text-ink')}>
             {pm}:{ps}
           </div>
-          <div className="mt-1 text-[11px] tracking-[0.3em] text-ink-faint">番茄钟 · {focusMin} 分钟</div>
+          <div className="mt-1 text-xs tracking-[0.3em] text-ink-faint">番茄钟 · {focusMin} 分钟</div>
           <div className="mt-4 flex justify-center gap-2">
             {running ? (
               <Button variant="secondary" onClick={() => { timer.pause(); playSound('ui-close') }}>
