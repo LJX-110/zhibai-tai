@@ -14,6 +14,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { getAiRemoteHealth, subscribeAiRemoteHealth } from '../../services/ai/health'
+import { withStreamSink } from '../../services/ai/stream-sink'
+import { createStreamAssembler } from '../../services/ai/stream-assembly'
+import { playSound } from '../../services/sound'
 import { useTodayStats } from '../../hooks/useTodayStats'
 import { createId } from '../../utils/id'
 import { cn } from '../../utils/cn'
@@ -44,7 +47,6 @@ export function AiChatPanel() {
   /** 已处理的动作：`done`=已确认落库，`skip`=已忽略（隐藏卡片，避免重复写入） */
   const [resolved, setResolved] = useState<Record<string, 'done' | 'skip'>>({})
   const abortRef = useRef<AbortController | null>(null)
-  const accRef = useRef('')
   const flushRef = useRef<number | undefined>(undefined)
   const listRef = useRef<HTMLDivElement>(null)
   /** 是否"贴着底部"：流式增量不断把气泡撑长，只有本来就在底部才跟随滚动，
@@ -101,21 +103,26 @@ export function AiChatPanel() {
     setMessages((m) => [...m, { id: createId(), role: 'user', content: q }])
     setBusy(true)
     setStreamText('')
-    accRef.current = ''
+    // 装配器：预览与最终结果共用同一个累加器，一致性是构造出来的（见 stream-assembly.ts）
+    const asm = createStreamAssembler()
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    let truncated = false
     try {
       const answer = await ask(q, messages, {
         signal: ctrl.signal,
         onToken: (delta) => {
-          accRef.current += delta
+          asm.push(delta)
           // 节流 60ms：长回答逐 token setState 会触发数百次渲染
           if (flushRef.current === undefined) {
             flushRef.current = window.setTimeout(() => {
               flushRef.current = undefined
-              setStreamText(accRef.current)
+              setStreamText(asm.text())
             }, 60)
           }
+        },
+        onFinish: (info) => {
+          truncated = info.reason === 'length'
         },
       })
       // 回答收齐后再解析动作：流式过程中的增量 JSON 不完整、不可校验，绝不中途解析
@@ -124,7 +131,12 @@ export function AiChatPanel() {
         const aiIndex = messages.length + 1
         setPendingActions((p) => ({ ...p, [aiIndex]: proposed }))
       }
-      setMessages((m) => [...m, { id: createId(), role: 'ai', content: answer }])
+      // 被截断必须说出来，否则用户会把"写到一半就停"当成回答自然结束
+      const content = truncated ? `${answer}\n\n（回答超出长度上限被截断，可让我"接着说"）` : answer
+      setMessages((m) => [...m, { id: createId(), role: 'ai', content }])
+      // 回答到货提示一声：长回答要等十几秒，人往往已经切去别的板块，
+      // 没有声音就只能一直盯着 —— 这是 tap 族"轻通知"的标准场景
+      playSound('notification')
     } catch {
       setMessages((m) => [
         ...m,
@@ -137,7 +149,6 @@ export function AiChatPanel() {
     } finally {
       window.clearTimeout(flushRef.current)
       flushRef.current = undefined
-      accRef.current = ''
       abortRef.current = null
       setStreamText('')
       setBusy(false)
@@ -168,19 +179,55 @@ export function AiChatPanel() {
     setResolved((r) => ({ ...r, [`${i}-${j}`]: 'skip' }))
   }
 
-  /** 快捷能力：以「能力名 + 结果」的对话形式入流 */
+  /**
+   * 快捷能力：以「能力名 + 结果」的对话形式入流。
+   *
+   * 与自由问答共用同一条流式通道（withStreamSink + 同一个装配器 + 同一个预览区），
+   * 所以能力卡片现在也是边生成边显示 —— 这是此前"点了等一次性出"的四张卡片。
+   * 增量与最终值同源（stream-assembly.ts），不存在"预览与定稿不一致"的可能。
+   */
   const runCap = async (key: TianjiCapabilityKey) => {
     if (busy) return
     const cap = TIANJI_CAPABILITIES.find((c) => c.key === key)
     if (!cap) return
     setMessages((m) => [...m, { id: createId(), role: 'user', content: `${cap.label}（天机一键运行）` }])
     setBusy(true)
+    setStreamText('')
+    const asm = createStreamAssembler()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    let flush: number | undefined
     try {
-      const { title, body } = await runTianjiCapability(key, stats)
+      const { title, body } = await withStreamSink(
+        {
+          onDelta: (delta) => {
+            asm.push(delta)
+            if (flush === undefined) {
+              flush = window.setTimeout(() => {
+                flush = undefined
+                setStreamText(asm.text())
+              }, 60)
+            }
+          },
+          signal: ctrl.signal,
+        },
+        () => runTianjiCapability(key, stats),
+      )
       setMessages((m) => [...m, { id: createId(), role: 'ai', content: `【${title}】\n\n${body}` }])
+      playSound('notification')
     } catch {
-      setMessages((m) => [...m, { id: createId(), role: 'ai', content: `${cap.label} 生成失败，请检查远程 AI 配置后重试。` }])
+      setMessages((m) => [
+        ...m,
+        {
+          id: createId(),
+          role: 'ai',
+          content: ctrl.signal.aborted ? '（已中止）' : `${cap.label} 生成失败，请检查远程 AI 配置后重试。`,
+        },
+      ])
     } finally {
+      window.clearTimeout(flush)
+      abortRef.current = null
+      setStreamText('')
       setBusy(false)
     }
   }

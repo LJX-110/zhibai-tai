@@ -20,7 +20,7 @@ import { DEFAULT_CATEGORIES, LEGACY_COLLECTION_CATEGORIES, legacyCategoryNames }
 export const useCategoryStore = createCrudStore<Category>(categoryRepo)
 
 /** 组合主键：同 scope + 同名称在任意设备是同一记录（幂等增删/合并/墓碑的前提） */
-export function categoryId(scope: CategoryScope, name: string): string {
+function categoryId(scope: CategoryScope, name: string): string {
   return `${scope}::${name}`
 }
 
@@ -101,6 +101,10 @@ export async function seedAllCategories(): Promise<void> {
   await seedCategories('collection')
   // 术的类型数据化：内置 7 类从这里播种；「ai」分类行已从界面移除，不再播种
   await seedCategories('ai_type')
+  /* 藏的介质同样已数据化（2026-09-21）。⚠️ 漏掉这一行会让介质下拉**空掉**
+     （新装、或用户点过「恢复默认」之后一个选项都没有）——
+     数据化之后，seedCategories 是内置项唯一的播种入口。 */
+  await seedCategories('collection_medium')
   await migrateCollectionCategoryNames()
 }
 
@@ -110,7 +114,7 @@ export async function seedAllCategories(): Promise<void> {
  * 自己增删过的一律不动 —— 迁移不该覆盖用户已经做出的选择。
  * 走 remove/saveMany，即经 repo 工厂写墓碑，删除会同步到其他设备。
  */
-export async function migrateCollectionCategoryNames(): Promise<boolean> {
+async function migrateCollectionCategoryNames(): Promise<boolean> {
   const st = useCategoryStore.getState()
   if (!st.loaded) await st.load()
   const current = categoryNames(useCategoryStore.getState().items, 'collection')
@@ -141,7 +145,7 @@ export async function migrateCollectionCategoryNames(): Promise<boolean> {
  * 否则旧的重复副本会继续制造"重复/删不掉"。同 scope 同名取 updatedAt 最新
  * 者为留存（写入组合主键），其余副本删除并写墓碑（删除跨设备传播，各端清一遍）。
  */
-export async function migrateCategoryIds(): Promise<number> {
+async function migrateCategoryIds(): Promise<number> {
   const rows = await db.categories.toArray()
   if (rows.length === 0) return 0
 

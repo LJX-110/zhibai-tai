@@ -37,6 +37,11 @@ export function CollectionPage() {
     () => categoryNames(collectionCategoryRows, 'collection'),
     [collectionCategoryRows],
   )
+  // 介质与用途是**两个独立维度**（共用一份数据会出现两个同名下拉，用户分不清区别）
+  const collectionMediums = useMemo(
+    () => categoryNames(collectionCategoryRows, 'collection_medium'),
+    [collectionCategoryRows],
+  )
   const toast = useToast().toast
   const [view, setView] = useState<'items' | 'projects'>('items')
   const [catFilter, setCatFilter] = useState<string>('all')
@@ -51,6 +56,7 @@ export function CollectionPage() {
   /** 分类管理弹层：与情页同交互（增/删/恢复默认），并显示各分类条目数 */
   const [catMgrOpen, setCatMgrOpen] = useState(false)
   const [catDraft, setCatDraft] = useState('')
+  const [mediumDraft, setMediumDraft] = useState('')
 
   /**
    * 筛选只有一维：分类（用途，可增删同步）——「拿它做什么」。
@@ -84,6 +90,17 @@ export function CollectionPage() {
     void addCategory('collection', t)
     setCatDraft('')
   }
+  const addMediumName = (name: string) => {
+    const t = name.trim()
+    if (!t) return
+    setMediumDraft('')
+    void addCategory('collection_medium', t)
+  }
+
+  const removeMediumName = (name: string) => {
+    void removeCategory('collection_medium', name)
+  }
+
   const removeCategoryName = (name: string) => {
     void removeCategory('collection', name)
     if (catFilter === name) setCatFilter('all')
@@ -91,7 +108,8 @@ export function CollectionPage() {
 
   const openNew = () => {
     setEditing(null)
-    setForm({ ...EMPTY_FORM, type: 'novel' })
+    // 默认取当前介质清单的第一项（介质已数据化，不能再写死枚举键 'novel'）
+    setForm({ ...EMPTY_FORM, type: collectionMediums[0] ?? '' })
     setFormOpen(true)
   }
   const openEdit = (it: CollectionItem) => {
@@ -277,6 +295,7 @@ export function CollectionPage() {
             editing={editing}
             form={form}
             onForm={setForm}
+            mediums={collectionMediums}
             categories={collectionCategories}
             onSave={() => void save()}
           />
@@ -297,7 +316,7 @@ export function CollectionPage() {
           {/* AI 整理预览 → 确认 */}
           <TidyDialog tidy={tidy} onClose={() => setTidy(null)} onApply={() => void applyTidy()} />
 
-          {/* 分类管理：与情页同交互（增/删/恢复默认），附各分类条目数 */}
+          {/* 分类管理（用途 + 介质两个维度，同一弹层分段切换，各附条目数） */}
           <CategoryManagerDialog
             open={catMgrOpen}
             onClose={() => setCatMgrOpen(false)}
@@ -311,6 +330,12 @@ export function CollectionPage() {
               void resetCategories('collection')
               setCatFilter('all')
             }}
+            mediums={collectionMediums}
+            mediumDraft={mediumDraft}
+            onMediumDraft={setMediumDraft}
+            onAddMedium={() => addMediumName(mediumDraft)}
+            onRemoveMedium={removeMediumName}
+            onResetMediums={() => void resetCategories('collection_medium')}
           />
         </>
       )}

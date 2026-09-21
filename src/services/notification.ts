@@ -1,40 +1,12 @@
 /**
- * 轻量通知 —— 到期待办 / 关注更新 / 情报更新（非强制弹窗）
- * 应用内 toast + 可选浏览器 Notification
+ * 通知基础设施 —— 权限 / 能力诊断 / 系统通知 / 免打扰 / 提醒历史
+ *
+ * 「现在该提醒什么」的判定已全部迁往 `services/reminders.ts`（纯函数，八源）；
+ * 本文件只提供**投递能力**，不再持有任何提醒规则。
+ * （原先的 `dueTaskNotices` / `claimDailyNotice` 是提醒规则的旧实现，
+ *   已分别由 `reminders.ts` 的 `taskReminders` 与 `reminder-claims.ts` 取代，故移除。）
  */
-import type { Task } from '../types/entities'
 import { createId } from '../utils/id'
-
-export interface Notice {
-  id: string
-  title: string
-  body: string
-  tone?: 'cinnabar' | 'bronze' | 'teal'
-}
-
-/** 计算到期/逾期待办通知（纯函数） */
-export function dueTaskNotices(tasks: Task[], today: string): Notice[] {
-  const due = tasks.filter((t) => !t.done && t.dueDate === today)
-  const overdue = tasks.filter((t) => !t.done && t.dueDate && t.dueDate < today)
-  const out: Notice[] = []
-  if (overdue.length > 0) {
-    out.push({
-      id: 'due-overdue',
-      title: `${overdue.length} 项待办已逾期`,
-      body: overdue.slice(0, 3).map((t) => t.title).join(' · '),
-      tone: 'cinnabar',
-    })
-  }
-  if (due.length > 0) {
-    out.push({
-      id: 'due-today',
-      title: `${due.length} 项待办今日到期`,
-      body: due.slice(0, 3).map((t) => t.title).join(' · '),
-      tone: 'bronze',
-    })
-  }
-  return out
-}
 
 /** 关注更新计数（纯函数） */
 export function followUpdateCount(
@@ -54,48 +26,10 @@ export function followUpdateCount(
   ).length
 }
 
-/**
- * 每日提醒去重记录。
- *
- * 此前用组件内 ref / 模块级 Set 记「今天提醒过」：应用一刷新就清空，
- * 于是每次冷启动都会把当天的待办与课程提醒重播一遍（用户反馈的
- * 「晚上打开还在报今早第一节课」有一半来自这里）。改为落 localStorage，
- * 且只保留「今天」的记录，跨日自动作废。
- */
-const DAILY_KEY = 'zbt:notice-daily:v1'
-
-function readDailyLog(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(DAILY_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
-    if (parsed && typeof parsed === 'object') return parsed as Record<string, string>
-  } catch {
-    /* 存档损坏按「无记录」处理，最坏结果是多提醒一次 */
-  }
-  return {}
-}
-
-/** 认领一次每日提醒：今天未提醒过则记录并返回 true，已提醒过返回 false */
-export function claimDailyNotice(key: string, today: string): boolean {
-  const log = readDailyLog()
-  if (log[key] === today) return false
-  log[key] = today
-  // 只留今天的记录，避免这张表随使用天数无限增长
-  for (const k of Object.keys(log)) {
-    if (log[k] !== today) delete log[k]
-  }
-  try {
-    localStorage.setItem(DAILY_KEY, JSON.stringify(log))
-  } catch {
-    /* 隐私模式写不进去：退化为仅本次会话内去重，不影响功能 */
-  }
-  return true
-}
-
 export type NotifyPermission = 'unsupported' | 'default' | 'granted' | 'denied'
 
-/** 当前系统通知权限（设置页据此给出可操作的提示，而不是让开关假装成功） */
-export function notifyPermission(): NotifyPermission {
+/** 当前系统通知权限（`getNotifyCapability` / `requestNotifyPermission` 的内部依赖） */
+function notifyPermission(): NotifyPermission {
   if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported'
   return Notification.permission as NotifyPermission
 }

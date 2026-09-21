@@ -33,6 +33,8 @@ import type {
   IntelligenceSource,
   Note,
   PomodoroSession,
+  CultivationState,
+  PetState,
   Project,
   Purchase,
   SyncMeta,
@@ -81,6 +83,12 @@ export class WorkbenchDB extends Dexie {
   // 新增：分类（原存于设置项，无法同步）+ 参与同步的偏好设置单行表
   categories!: Table<Category, string>
   appSettings!: Table<AppSettingsRow, string>
+
+  // 新增：桌宠状态（单行表，随快照跨设备同步）
+  petState!: Table<PetState, string>
+
+  // 新增：修行状态（单行表，随快照跨设备同步）
+  cultivation!: Table<CultivationState, string>
 
   constructor() {
     super('yishu-workbench')
@@ -162,6 +170,16 @@ export class WorkbenchDB extends Dexie {
      * 直接删 v3 的索引既不会触发删除，又会篡改历史版本 schema。 */
     this.version(9).stores({
       syncQueue: null,
+    })
+    /* 新增「桌宠状态」单行表（仅新增，不动既有结构）。注册进 BUSINESS_TABLES 后
+     * 才真正进入快照 / 墓碑 / 备份链路 —— 漏注册 = 不同步，这是最容易漏的一步。 */
+    this.version(10).stores({
+      petState: 'id',
+    })
+    /* 新增「修行状态」单行表（仅新增，不动既有结构）。境界从"每日快照"改为"持续累积"，
+     * 必须进业务表才能跨设备一致 —— 此前存在 localStorage，换设备即丢。 */
+    this.version(11).stores({
+      cultivation: 'id',
     })
   }
 }

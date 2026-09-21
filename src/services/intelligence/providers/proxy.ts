@@ -30,7 +30,7 @@ export interface ProxyCandidate {
  *  · `<base>/proxy?url=…` —— Netlify / Cloudflare Pages Functions 的显式路径
  * 先试根路径（覆盖多数情况），失败再试 /proxy，避免让用户去记该填哪种。
  */
-export function proxyCandidates(selfProxyUrl?: string): ProxyCandidate[] {
+function proxyCandidates(selfProxyUrl?: string): ProxyCandidate[] {
   const base = selfProxyUrl?.trim().replace(/\/+$/, '')
   if (!base) {
     return [{ label: '直连', build: (t) => t, timeoutMs: DIRECT_TIMEOUT_MS, self: false }]

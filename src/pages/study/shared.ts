@@ -11,7 +11,7 @@ export function courseLabel(c: Pick<Course, 'name' | 'room'>): string {
 /* ---------------- 课程表（Time Grid） ---------------- */
 
 /** 固定时段（08:00–20:40） */
-export const SLOTS = [
+const SLOTS = [
   { key: '0800', label: '第 1 节', start: '08:00', end: '09:40' },
   { key: '1000', label: '第 2 节', start: '10:00', end: '11:40' },
   { key: '1400', label: '第 3 节', start: '14:00', end: '15:40' },
@@ -28,7 +28,7 @@ export function sectionLabelOf(start: string): string | undefined {
 }
 
 /** 克制的课程识别色（浅底 + 强调字色 + 细边框） */
-export const COURSE_COLORS = [
+const COURSE_COLORS = [
   'bg-teal/10 text-teal border-teal/25',
   'bg-cinnabar/8 text-cinnabar border-cinnabar/20',
   'bg-bronze/14 text-bronze border-bronze/30',
@@ -37,7 +37,7 @@ export const COURSE_COLORS = [
 
 /** 课程左侧实色条（与 COURSE_COLORS 同哈希映射）。
  *  用高不透明度实色：半透明 60% 在米白底上几乎看不见（截图反馈色条太淡） */
-export const COURSE_BARS = [
+const COURSE_BARS = [
   'bg-teal/85',
   'bg-cinnabar/85',
   'bg-bronze/85',

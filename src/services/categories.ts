@@ -19,7 +19,28 @@ export const DEFAULT_CATEGORIES: Record<CategoryScope, string[]> = {
   ai: ['工具', '编码', '研究', '创作'], // 历史遗留：分类行已从界面移除，保留仅为兼容存量数据
   // 术的类型**完全数据化**：内置 7 类播种为普通类型行，与用户新建的同等可增删改
   ai_type: ['模型', 'Tool', 'Skill', 'Agent', 'Plugin', 'Prompt', 'Workflow'],
+  // 藏的介质同样数据化（2026-09-21）：内置 10 项播种为普通行，可增删、跨设备同步。
+  // ⚠️ 与 collection（用途/进度）是两个独立维度，**不要合并成一份** ——
+  // 两者共用数据会让界面出现两个都叫「小说」的下拉，用户无法理解区别。
+  collection_medium: ['小说', '动漫', '游戏', '影视', '书籍', 'GitHub', '项目', 'UI 参考', '灵感', '自定义'],
 }
+
+/**
+ * 藏 · 介质的旧枚举键 → 介质名映射。
+ * 只用于①存量数据一次性迁移（novel → 小说）②历史值兜底显示；新数据不再产生枚举键。
+ */
+export const COLLECTION_MEDIUM_LEGACY_LABEL = {
+  novel: '小说',
+  anime: '动漫',
+  game: '游戏',
+  film: '影视',
+  book: '书籍',
+  github: 'GitHub',
+  project: '项目',
+  ui_ref: 'UI 参考',
+  inspiration: '灵感',
+  custom: '自定义',
+} as const
 
 /**
  * 藏阁分类的旧默认清单（与「类型」重名的那一版）。
@@ -46,6 +67,7 @@ const LEGACY_FIELD: Record<CategoryScope, string> = {
   collection: 'collectionCategories',
   ai: 'aiCategories',
   ai_type: '', // 术的类型没有旧版设置项，迁移读取自然落空
+  collection_medium: '', // 介质同理：旧值是写死的枚举，不走设置项，由 Bootstrap 的一次性迁移改写
 }
 
 /**

@@ -88,7 +88,7 @@ export function MeihuaTab() {
             <div className="space-y-3">
               {/* 所问之事：先有问，才有占；传参给排盘与 AI 解卦 */}
               <Input
-                placeholder="所占之事（如：这次面试顺利吗）"
+                placeholder="所占之事"
                 value={mhQuestion}
                 onChange={(e) => setMhQuestion(e.target.value)}
                 maxLength={60}
@@ -115,7 +115,7 @@ export function MeihuaTab() {
               )}
               {mhMethod === 'words' && (
                 <Input
-                  placeholder="默念心中所想之事（按字数起卦）"
+                  placeholder="默念心中所想之事"
                   value={mhWords}
                   onChange={(e) => setMhWords(e.target.value)}
                 />

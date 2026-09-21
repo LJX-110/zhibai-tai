@@ -7,6 +7,7 @@ import { createPortal } from 'react-dom'
 import { CheckCircle2, Info, X } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { recordNotice } from '../../services/notification'
+import { playSound } from '../../services/sound'
 
 type ToastTone = 'info' | 'success' | 'danger'
 
@@ -30,6 +31,10 @@ export const useToastStore = create<ToastStore>((set) => ({
   push: (message, tone, hash) => {
     // 顺手记一笔历史：toast 一闪而过，错过的提醒要能回看
     recordNotice(message, hash)
+    // 危险提示伴一声 error —— 全站报错声音的唯一通路（见 services/sound.ts 的反馈逻辑）：
+    // 只要弹了红色提示就一定有声，而不用指望每个调用点都记得加。
+    // 成功/信息类不在这里出声：它们的专属音由动作本身在调用点发出，这里再响就是两声。
+    if (tone === 'danger') playSound('error')
     const id = ++seq
     set((s) => ({ toasts: [...s.toasts, { id, message, tone, hash }] }))
     setTimeout(() => {

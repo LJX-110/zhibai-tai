@@ -159,7 +159,7 @@ export function HabitTab() {
         <div className="space-y-3">
           <Input
             autoFocus
-            placeholder="要斩掉的习惯，如：刷短视频"
+            placeholder="要斩掉的习惯"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />

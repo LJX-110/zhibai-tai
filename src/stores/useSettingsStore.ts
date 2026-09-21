@@ -78,6 +78,13 @@ export interface SettingsState {
   /** 学期起始日（周一，yyyy-mm-dd）—— 课程表按它推算当前周次与单双周 */
   termStartDate?: string
 
+  /**
+   * 桌宠开关。**默认关**（不想看的人不该看见它），且是**设备级偏好**：
+   * 不进 `settings-sync.ts` 的同步白名单 —— "这台设备要不要看见宠物"与
+   * "宠物在哪、多亲"（那是业务表 petState，跨设备一致）是两件事。
+   */
+  petEnabled: boolean
+
   set: (patch: Partial<SettingsState>) => void
 }
 
@@ -105,8 +112,12 @@ export const useSettingsStore = create<SettingsState>()(
       lastSyncedAt: null,
       syncStatus: 'idle',
       syncError: undefined,
-      soundEnabled: false,
-      soundVolume: 0.5,
+      /** 音效默认开：这是用户明确要的反馈通道，而它此前默认关闭、又埋在「更多设置」里，
+       *  等于一个没人知道存在的功能（用户反馈"音效仍无法听见"的根因就是它）。
+       *  合成音音量本就压得很低（族基准 0.2 上下），不会变成打扰；不想听随时关。
+       *  音量给 0.7：合成音峰值 = 族基准 × 音量，0.5 时约 0.11，在手机外放上偏弱。 */
+      soundEnabled: true,
+      soundVolume: 0.7,
       ambientEnabled: false,
       notifyEnabled: true,
       browserNotify: false,
@@ -124,6 +135,7 @@ export const useSettingsStore = create<SettingsState>()(
       intelFetchMinutes: 60,
       intelKeepLimit: 500,
       termStartDate: undefined,
+      petEnabled: false,
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },

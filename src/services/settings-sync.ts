@@ -15,7 +15,7 @@ import { notifyDataChanged } from '../sync/auto'
 import type { AppSettingsRow, SyncedSettings } from '../types/entities'
 
 /** 参与同步的设置键（新增键请连同 SyncedSettings 一起补） */
-export const SYNCED_SETTING_KEYS = [
+const SYNCED_SETTING_KEYS = [
   'profileName',
   'waterGoalMl',
   'pomodoroFocusMin',

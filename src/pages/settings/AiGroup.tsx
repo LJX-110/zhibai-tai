@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Zap } from 'lucide-react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
-import { encryptor } from '../../sync/encryption/encryption'
+import { encryptor, isWebCryptoAvailable } from '../../sync/encryption/encryption'
 import { ProxyConfig, SourceManager } from '../../components/source/SourceManager'
 import { resolveAIProvider, testAIProvider } from '../../services/ai/ai-service'
 import { Button, Collapse, Input, Section, Select, useToast } from '../../components/ui'
@@ -28,17 +28,71 @@ export function AiGroup() {
   const [aiKeyDraft, setAiKeyDraft] = useState('')
   const [models, setModels] = useState<string[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
+  const [keySaving, setKeySaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  /** Key 用 AES-GCM 加密后才落盘；crypto.subtle 只在 https / localhost 下存在。
+   *  非安全上下文里 encryptor 会**明确抛错**（本项目拒绝退化为明文存储），
+   *  所以这里先摆出来，别让用户点完才知道存不进去。 */
+  const cryptoOk = isWebCryptoAvailable()
+
+  /**
+   * 保存 API Key。
+   * 之前这里直接 `await encryptor.encrypt(...)` 且**没有 try/catch** ——
+   * 加密一旦抛错（非 https 环境最常见），整个 handler 静默中断：没有提示、没有落盘，
+   * 表现就是用户说的「Key 无法保存」。异步事件处理器不归错误边界管，
+   * 所以这类写法必须自己兜住。
+   */
+  const saveKey = async () => {
+    const raw = aiKeyDraft.trim()
+    if (!raw || keySaving) return
+    setKeySaving(true)
+    try {
+      const enc = await encryptor.encrypt(raw)
+      settings.set({ aiKey: enc, aiKeyEnc: true })
+      setAiKeyDraft('')
+      void resolveAIProvider()
+      toast('API Key 已加密保存（AES-GCM）', 'success')
+    } catch (e) {
+      toast(`保存失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+    } finally {
+      setKeySaving(false)
+    }
+  }
+
+  /**
+   * 测试连接。
+   * 之前按钮挂着 `disabled={!settings.aiKey}` —— Key 没存进去时它就是个禁用按钮，
+   * 点下去毫无反应，看起来像"按钮坏了"。改为**始终可点**：缺 Key 就用提示告诉用户，
+   * 这比一个不会动的按钮有用得多。同时补上忙碌态（默认超时 30 秒，
+   * 期间没有任何反馈的话用户只会以为没点上）。
+   */
+  const runTest = async () => {
+    if (testing) return
+    if (!useSettingsStore.getState().aiKey) {
+      toast('尚未保存 API Key —— 先填 Key 点「加密保存」，再回来测试', 'info')
+      return
+    }
+    setTesting(true)
+    try {
+      const r = await testAIProvider()
+      toast(r.message, r.ok ? 'success' : 'danger')
+    } catch (e) {
+      toast(`测试失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+    } finally {
+      setTesting(false)
+    }
+  }
 
   /** 拉取当前 Provider 的模型列表（OpenAI 兼容 /v1/models；NVIDIA 等免费端点同样适用） */
   const fetchModels = async () => {
     const s = useSettingsStore.getState()
     if (!s.aiKey) {
-      toast('请先保存 API Key 再拉取模型列表', 'info')
+      toast('先保存 API Key 再拉取模型列表', 'info')
       return
     }
-    const key = s.aiKeyEnc ? await encryptor.decrypt(s.aiKey) : s.aiKey
     setModelsLoading(true)
     try {
+      const key = s.aiKeyEnc ? await encryptor.decrypt(s.aiKey) : s.aiKey
       const res = await fetch(`${s.aiBaseUrl.replace(/\/+$/, '')}/models`, {
         headers: { Authorization: `Bearer ${key}` },
       })
@@ -47,7 +101,7 @@ export function AiGroup() {
       const ids = (data.data ?? []).map((m) => m.id).filter((x): x is string => Boolean(x))
       if (ids.length === 0) throw new Error('接口返回空列表')
       setModels(ids)
-      toast(`拉到 ${ids.length} 个模型，请在下方下拉选择或直接填入`, 'success')
+      toast(`拉到 ${ids.length} 个模型，在下方下拉选择或直接填入`, 'success')
     } catch (e) {
       toast(`拉取模型失败：${e instanceof Error ? e.message : '未知错误'}（检查 Base URL 与 Key 权限）`, 'danger')
     } finally {
@@ -121,7 +175,7 @@ export function AiGroup() {
               value={settings.aiModel}
               onChange={(e) => settings.set({ aiModel: e.target.value })}
               className="flex-1 font-mono !text-xs"
-              placeholder="agnes-2.5-flash / deepseek-chat"
+              placeholder="如 deepseek-chat"
             />
             <Button size="sm" variant="tertiary" onClick={() => void fetchModels()} disabled={modelsLoading || !settings.aiKey}>
               {modelsLoading ? '拉取中…' : '获取模型列表'}
@@ -151,35 +205,36 @@ export function AiGroup() {
               value={aiKeyDraft}
               onChange={(e) => setAiKeyDraft(e.target.value)}
               className="flex-1"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void saveKey()
+              }}
             />
             <Button
               variant="secondary"
-              onClick={async () => {
-                if (!aiKeyDraft.trim()) return
-                const enc = await encryptor.encrypt(aiKeyDraft.trim())
-                settings.set({ aiKey: enc, aiKeyEnc: true })
-                setAiKeyDraft('')
-                void resolveAIProvider()
-                toast('API Key 已加密保存（AES-GCM）', 'success')
-              }}
-              disabled={!aiKeyDraft.trim()}
+              onClick={() => void saveKey()}
+              disabled={!aiKeyDraft.trim() || keySaving || !cryptoOk}
             >
-              加密保存
+              {keySaving ? '保存中…' : '加密保存'}
             </Button>
           </div>
+          {!cryptoOk && (
+            <p className="ml-[92px] text-xs leading-relaxed text-cinnabar">
+              当前环境不支持加密（需要 https 或 localhost），Key 无法安全保存。
+              请改用 https 访问，或把它装成应用后再配置。
+            </p>
+          )}
           <div className="flex items-center gap-3">
             <span className="w-20 shrink-0" />
-            <Button
-              variant="tertiary"
-              onClick={async () => {
-                const r = await testAIProvider()
-                toast(r.message, r.ok ? 'success' : 'danger')
-              }}
-              disabled={!settings.aiKey}
-            >
-              <Zap size={13} /> 测试连接
+            <Button variant="tertiary" onClick={() => void runTest()} disabled={testing}>
+              <Zap size={13} /> {testing ? '测试中…' : '测试连接'}
             </Button>
-            <span className="text-xs text-ink-faint">AI 写入先预览，确认后落库</span>
+            {settings.aiKey ? (
+              <span className="text-xs text-ink-faint">
+                {settings.aiKeyEnc ? 'Key 已加密保存' : 'Key 已保存（未加密）'}
+              </span>
+            ) : (
+              <span className="text-xs text-ink-faint">AI 写入先预览，确认后落库</span>
+            )}
           </div>
         </div>
       </Section>

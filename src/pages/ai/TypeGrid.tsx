@@ -1,6 +1,7 @@
 /**
  * 术 · 类型网格（数据化后唯一的一套类型体系：可增/删/改名）
  */
+import { createElement } from 'react'
 import { Plus } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { typeIcon } from './shared'
@@ -38,7 +39,6 @@ export function TypeGrid({
         <span className="tabular text-xs text-ink-faint">{total}</span>
       </button>
       {types.map((t) => {
-        const Icon = typeIcon(t)
         const isActive = active === t
         return (
           <button
@@ -52,7 +52,10 @@ export function TypeGrid({
             )}
           >
             <span className="flex w-full items-center gap-1.5">
-              <Icon size={13} className={cn('shrink-0', isActive ? 'text-cinnabar' : 'text-ink-faint')} />
+              {createElement(typeIcon(t), {
+                size: 13,
+                className: cn('shrink-0', isActive ? 'text-cinnabar' : 'text-ink-faint'),
+              })}
               <span className={cn('min-w-0 truncate text-sm font-medium', isActive ? 'text-cinnabar' : 'text-ink')}>
                 {t}
               </span>

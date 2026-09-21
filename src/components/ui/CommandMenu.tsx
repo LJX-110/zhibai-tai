@@ -145,7 +145,7 @@ export function CommandMenu() {
                 onEnter()
               }
             }}
-            placeholder={tab === 'search' ? '搜索：任务 / 笔记 / 收藏 / 项目 / 情报 / 课程 / 消费' : '执行命令…'}
+            placeholder={tab === 'search' ? '搜索任务、笔记、收藏…' : '执行命令…'}
             className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
           <div className="flex gap-1 rounded-control bg-nested/50 p-0.5">

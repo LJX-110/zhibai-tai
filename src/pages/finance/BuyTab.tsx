@@ -269,7 +269,7 @@ export function BuyTab() {
           <div className="grid grid-cols-2 gap-3">
             <Input type="number" step="0.01" placeholder="价格（可留空）" value={buyForm.price} onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })} />
             {buyForm.category === 'custom' ? (
-              <Input placeholder="自定义分类，如：家电" value={buyForm.customCategory} onChange={(e) => setBuyForm({ ...buyForm, customCategory: e.target.value })} />
+              <Input placeholder="自定义分类" value={buyForm.customCategory} onChange={(e) => setBuyForm({ ...buyForm, customCategory: e.target.value })} />
             ) : (
               <Select value={buyForm.category} onChange={(e) => setBuyForm({ ...buyForm, category: e.target.value as string | 'custom' })}>
                 {FINANCE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}

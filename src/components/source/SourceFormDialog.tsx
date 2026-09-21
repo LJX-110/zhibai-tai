@@ -51,7 +51,7 @@ export function SourceFormDialog({
         {/* 只有这几个 Provider 靠 url 工作。json/rest/web 此前没有地址输入框 ——
             建出来的源必然空跑（永远「成功但 0 条」），用户却以为是网络问题 */}
         {NEEDS_URL.includes(form.provider) && (
-          <Input placeholder="抓取地址 URL（该 Provider 必填）" value={form.url} onChange={(e) => onForm({ ...form, url: e.target.value })} />
+          <Input placeholder="抓取地址 URL" value={form.url} onChange={(e) => onForm({ ...form, url: e.target.value })} />
         )}
         {CONFIG_HINT[form.provider] && (
           <Input

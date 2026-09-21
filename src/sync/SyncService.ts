@@ -14,6 +14,7 @@
 import { db } from '../db/db'
 import { BUSINESS_TABLES, TOMBSTONES } from '../db/tables'
 import { GitHubSnapshotProvider } from './github/GithubSyncProvider'
+import { describeGitHubError } from './github/errors'
 import { syncMetaRepo } from '../repositories/sync-repo'
 import {
   decryptSyncData,
@@ -212,7 +213,12 @@ async function runSyncOnce(): Promise<SyncRunResult> {
       message,
     }
   } catch (e) {
-    settings.set({ syncStatus: 'error', syncError: e instanceof Error ? e.message : '同步失败' })
+    // 原始 GitHub 报文是给开发者看的（"Resource not accessible by personal access token"），
+    // 用户看到只知道失败了、不知道该点哪里 —— 落到界面前翻译成「该干什么」
+    settings.set({
+      syncStatus: 'error',
+      syncError: describeGitHubError(e instanceof Error ? e.message : ''),
+    })
     throw e
   }
 }

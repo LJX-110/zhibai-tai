@@ -172,6 +172,12 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
               <option value="5">周五</option>
               <option value="6">周六</option>
             </Select>
+          ) : form.repeat === 'daily' ? (
+            // 每日固定不需要锚点（"每天"本身没有几号/周几可言），
+            // 占住这一格说明清楚，免得用户以为漏了什么没填
+            <div className="flex items-center px-1 text-xs text-ink-faint" aria-hidden>
+              每天都提醒
+            </div>
           ) : (
             <Input
               type="date"

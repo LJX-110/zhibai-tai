@@ -10,6 +10,7 @@ import { Bell, CheckCircle2, Plus, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useCourseStore } from '../stores/useStudyStore'
+import { useSettingsStore } from '../stores/useSettingsStore'
 import { useActivityStore, useFollowStore } from '../stores/useLifeStores'
 import { useTodayStats } from '../hooks/useTodayStats'
 import { useCultivation } from '../hooks/useCultivation'
@@ -18,6 +19,7 @@ import { useInspectorStore } from '../components/inspector/Inspector'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
 import { Section, EmptyState, Button, PageHeader, Taiji } from '../components/ui'
+import { activeSlotsOfDay, currentWeek } from '../services/study'
 import { formatHM, todayISO } from '../utils/id'
 import type { Task } from '../types/entities'
 import { FourSymbolsCompass } from './overview/Compass'
@@ -27,11 +29,15 @@ import type { QiDim } from './overview/shared'
 
 export function OverviewPage() {
   const stats = useTodayStats()
-  const { grade } = useCultivation()
+  // 首页那行阶位是「我是谁」的身份牌 —— 用**累积境界**，不用今日道行阶：
+  // 两个口径同名（丹道五阶）但取值不同，今日道行每天起伏，放首页会天天变、还
+  // 与成长页的累积境界对不上。今日道行只在成长页与四维里体现。
+  const { realm } = useCultivation()
   const taskActions = useTaskActions()
   const setSection = useAppStore((s) => s.setSection)
   const intelItems = useIntelligenceStore((s) => s.items)
   const courses = useCourseStore((s) => s.items)
+  const termStartDate = useSettingsStore((s) => s.termStartDate)
   const activities = useActivityStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
   const [editing, setEditing] = useState<Task | null>(null)
@@ -43,27 +49,25 @@ export function OverviewPage() {
   // 当前时刻 HH:mm（每渲染实时计算；分钟级变化由使用处驱动重渲染）
   const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
-  // 今日待上课（按周几匹配课程表）：
+  // 今日待上课 —— 必须经 activeSlotsOfDay **按周次过滤**，不能只按周几取课。
+  // 此前这里直接 `schedule.filter(s => s.weekday === today)`，把 `weeks`（单双周 / 限定周次）
+  // 完全忽略了：这周本来不上的课照样进「今日课程」并计入「今日 N 节课」。
+  // 这是提醒链路修过的同一个 bug（见 services/study.ts 的 slotOnWeek），首页这处当时漏了 ——
+  // 凡"今天上哪些课"的取课点，一律走 activeSlotsOfDay，别再手写 filter。
   // 只保留「未开始或进行中」，已结束的课不再展示 —— 实测反馈早上上完的课刷新后仍在提示
   const todayWeekday = now.getDay()
-  // 今日待上课（按周几匹配课程表）：courses 来自 useCourseStore，其 items 全程不可变更新
-  // （stores/factory.ts 每次写都 set 新数组），courses 引用随数据变化而变；此处去掉手写 useMemo、
-  // 改为普通派生值，交 React Compiler 按真实依赖自动记忆化，消除 preserve-manual-memoization 告警，
-  // 行为与原 memo 等价
-  const todayClasses = courses
-    .flatMap((c) =>
-      (c.schedule ?? [])
-        .filter((s) => s.weekday === todayWeekday)
-        .map((s) => ({
-          name: c.name,
-          room: c.room,
-          teacher: c.teacher,
-          start: s.start,
-          end: s.end,
-          // 进行中：开始时刻 ≤ 现在 < 结束时刻
-          ongoing: s.start <= nowHMStr && nowHMStr < s.end,
-        })),
-    )
+  // ⚠️ 走订阅而不是 getState()：否则改了「学期首周」首页不会重新取课（getState 不建立订阅）
+  const week = currentWeek(termStartDate)
+  const todayClasses = activeSlotsOfDay(courses, todayWeekday, week)
+    .map(({ course: c, slot }) => ({
+      name: c.name,
+      room: c.room,
+      teacher: c.teacher,
+      start: slot.start,
+      end: slot.end,
+      // 进行中：开始时刻 ≤ 现在 < 结束时刻
+      ongoing: slot.start <= nowHMStr && nowHMStr < slot.end,
+    }))
     .filter((s) => s.end > nowHMStr)
     .sort((a, b) => a.start.localeCompare(b.start))
 
@@ -169,7 +173,7 @@ export function OverviewPage() {
             今日炁象 · QI COMPASS
           </div>
           <div className="flex items-center gap-2">
-            <span className="scribal text-base text-cinnabar">{grade.title}</span>
+            <span className="scribal text-base text-cinnabar">{realm.title}</span>
             <Taiji size={18} className="opacity-85" />
             {followNotice > 0 && (
               <button
@@ -181,7 +185,7 @@ export function OverviewPage() {
             )}
           </div>
         </div>
-        <FourSymbolsCompass qiDims={qiDims} gradeTitle={grade.title} />
+        <FourSymbolsCompass qiDims={qiDims} gradeTitle={realm.title} />
         {/* 方位口诀：桌面用一句话收束罗盘；窄屏四象牌已带方位名，重复说明藏掉 */}
         <p className="mt-2 hidden text-center text-xs text-ink-faint md:block">
           东·行 · 南·专 · 西·学 · 北·创 —— 五行流转，今日炁象

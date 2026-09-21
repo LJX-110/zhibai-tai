@@ -24,7 +24,7 @@ export interface Repository<T extends { id: string }> {
 }
 
 /** 墓碑主键：`表名:记录id`，同一记录重复删除只留一条 */
-export function tombstoneId(entity: string, entityId: string): string {
+function tombstoneId(entity: string, entityId: string): string {
   return `${entity}:${entityId}`
 }
 

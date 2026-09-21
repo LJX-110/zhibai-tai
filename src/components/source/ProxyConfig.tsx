@@ -14,7 +14,7 @@ export function ProxyConfig() {
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-tile border border-line bg-paper/50 px-3 py-2">
       <span className="text-sm text-ink">自建代理</span>
       <Input
-        placeholder="https://你的站点.netlify.app（或 Cloudflare Pages）"
+        placeholder="https://你的站点.netlify.app"
         value={corsProxyUrl ?? ''}
         onChange={(e) => useSettingsStore.getState().set({ corsProxyUrl: e.target.value.trim() || undefined })}
         className="min-w-[220px] flex-1 !py-1 font-mono !text-xs"

@@ -321,7 +321,7 @@ export function ProjectList() {
         <div className="space-y-3">
           <Input autoFocus placeholder="项目名" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">
-            <Input placeholder="仓库地址（owner/repo 或 URL）" value={form.repo} onChange={(e) => setForm({ ...form, repo: e.target.value })} />
+            <Input placeholder="仓库地址 owner/repo" value={form.repo} onChange={(e) => setForm({ ...form, repo: e.target.value })} />
             <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ProjectStatus })}>
               {STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>{STATUS_LABEL[s]}</option>

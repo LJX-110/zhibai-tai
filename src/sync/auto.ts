@@ -37,7 +37,7 @@ export function isConfigured(s: {
 }
 
 /** 老用户本地残留 gist 配置时，启动强制迁回仓库模式（仅剩 repo 一种同步方式，数据在仓库快照里） */
-export function migrateSyncModeToRepo(): void {
+function migrateSyncModeToRepo(): void {
   const s = useSettingsStore.getState()
   // 老版本持久化的 syncMode 可能是 'gist'（类型已收敛为 'repo'），故在此做一次类型收窄
   if ((s.syncMode as string | undefined) === 'gist') {

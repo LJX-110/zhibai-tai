@@ -19,7 +19,20 @@
  * 全部旧名保留（调用点遍布页面与布局，改名只制造无谓的同步成本）。
  * 新代码可直接用族名：tap / chime / deep，即三族的基准音。
  *
- * 音量默认低；设置中可开关与调节；环境音由 settings.ambientEnabled 控制（见 setAmbient）。
+ * ── 触发场景（全站矩阵；新场景先来这里对号入座，再挑族） ──
+ *  · tap 族（碰一下）   Button 点击 · 侧栏/底栏切换 · 弹层开合 · 轻通知
+ *  · chime 族（办成了） 待办完成 · 收藏/情报整理入库 · 同步完成 · 购买 · 升级 · 番茄钟结束
+ *  · deep 族（器物感）  落印/盖章（最强）· 翻纸 · 罗盘 · 起盘 · **出错（下行轮廓）**
+ *
+ * 反馈逻辑有两条收口规则，别在调用点各写各的：
+ *  1. **报错只有一条通路**：`ui/Toast.tsx` 在 tone === 'danger' 时播 `error`。
+ *     全站没有任何调用点直接播 error —— 报错最容易被人忽略，收敛在一处才能保证
+ *     「只要弹了红色提示就一定有声」，而不用逐个调用点记得加。
+ *  2. **成功的声音由动作本身发出，不由 toast 发**：完成/入库等动作在调用点播
+ *     chime 族，随后弹的成功 toast 不再出声 —— 否则一次操作响两下。
+ *
+ * 音量默认开（见 useSettingsStore.soundEnabled）；设置中可开关与调节；
+ * 环境音由 settings.ambientEnabled 控制（见 setAmbient）。
  */
 import { useSettingsStore } from '../stores/useSettingsStore'
 
@@ -213,7 +226,14 @@ export function playSound(ev: SoundEvent): void {
   // 未解锁且上下文未运行：此刻播放必然无声（浏览器策略），直接跳过，避免
   // 在 suspended 的上下文上调度节点（那种调度要么永不响、要么恢复后延迟怪响）。
   // 首个人手手势会经 unlock 把 armed 置真并 resume，此后才真正出声。
-  if (c.state !== 'running' && !armed) return
+  if (c.state !== 'running') {
+    if (!armed) return
+    // 已解锁但上下文仍被挂起（resume 曾被拒 / 页面刚回前台）：借这次调用再 resume 一次。
+    // playSound 几乎总在手势回调里触发，此时 resume 是浏览器允许的 ——
+    // 没有这一步的话，一次 resume 失败就会让 armed 恒为真而上下文恒为挂起，
+    // 表现是"开关开着却再也听不见任何声音"，且无任何线索。
+    void c.resume().catch(() => {})
+  }
   // 同事件节流：合并 50ms 内的重复触发（双击 / StrictMode 双调用 / 狂点）
   const now = performance.now()
   const last = lastPlayedAt[ev]

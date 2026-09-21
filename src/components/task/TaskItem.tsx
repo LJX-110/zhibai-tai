@@ -82,6 +82,11 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
               {overdue && '（逾期）'}
             </span>
           )}
+          {task.repeat === 'daily' && (
+            <Badge tone="bronze" className="!px-1">
+              每日
+            </Badge>
+          )}
           {task.monthlyDay != null && (
             <Badge tone="bronze" className="!px-1">
               每月 {task.monthlyDay} 号

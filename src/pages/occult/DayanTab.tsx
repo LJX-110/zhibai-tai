@@ -92,7 +92,7 @@ export function DayanTab() {
               </p>
               {/* 所占之事：建局前先问事（AI 解卦会结合此问） */}
               <Input
-                placeholder="所占之事（如：这学期该修哪门课）"
+                placeholder="所占之事"
                 value={dyQuestion}
                 onChange={(e) => setDyQuestion(e.target.value)}
                 maxLength={60}

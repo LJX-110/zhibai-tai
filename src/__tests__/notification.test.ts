@@ -1,24 +1,20 @@
 /**
- * 通知服务 —— 免打扰判定、每日去重、到期提醒、关注计数、提醒历史
+ * 通知基础设施 —— 免打扰判定、关注计数、提醒历史
  *
  * 这个模块此前**零覆盖**，而它错起来的代价很具体：半夜被提醒吵醒（跨零点免打扰算错）、
- * 同一条提醒一天弹十次（跨日去重失效）、要交的东西没提醒（到期判定漏项）。
- * 这些都是纯函数，正该用单测钉住。
+ * 同一条提醒一天弹十次（跨日去重失效）。这些都是纯函数，正该用单测钉住。
+ *
+ * 「该提醒什么」的判定已迁往 services/reminders.ts，覆盖在
+ * __tests__/reminders.test.ts 与 __tests__/task-repair.test.ts。
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  claimDailyNotice,
   clearNoticeHistory,
-  dueTaskNotices,
   followUpdateCount,
   isQuietNow,
   listNoticeHistory,
   recordNotice,
 } from '../services/notification'
-import type { Task } from '../types/entities'
-
-/** 与 services/notification.ts 里的私有常量同名 —— 校验"只留今天"这类内部行为必须摸到它 */
-const DAILY_KEY = 'zbt:notice-daily:v1'
 
 beforeEach(() => {
   localStorage.clear()
@@ -57,99 +53,10 @@ describe('免打扰时段 isQuietNow', () => {
   })
 })
 
-describe('每日去重 claimDailyNotice', () => {
-  it('同一键同一天只认领一次', () => {
-    expect(claimDailyNotice('class:c1:08:00', '2026-09-20')).toBe(true)
-    expect(claimDailyNotice('class:c1:08:00', '2026-09-20')).toBe(false)
-    expect(claimDailyNotice('class:c1:08:00', '2026-09-20')).toBe(false)
-  })
-
-  it('不同键互不影响', () => {
-    expect(claimDailyNotice('a', '2026-09-20')).toBe(true)
-    expect(claimDailyNotice('b', '2026-09-20')).toBe(true)
-    expect(claimDailyNotice('a', '2026-09-20')).toBe(false)
-  })
-
-  it('跨日自动失效（同一节课第二天照常提醒）', () => {
-    expect(claimDailyNotice('class:c1:08:00', '2026-09-20')).toBe(true)
-    expect(claimDailyNotice('class:c1:08:00', '2026-09-21')).toBe(true)
-  })
-
-  it('只保留今天的记录，表不随使用天数增长', () => {
-    claimDailyNotice('old-1', '2026-09-18')
-    claimDailyNotice('old-2', '2026-09-19')
-    claimDailyNotice('today', '2026-09-20')
-    const log = JSON.parse(localStorage.getItem(DAILY_KEY)!) as Record<string, string>
-    expect(Object.keys(log)).toEqual(['today'])
-  })
-
-  it('存档损坏时按"无记录"处理，且不抛错', () => {
-    localStorage.setItem(DAILY_KEY, '{不是 JSON')
-    // 解析失败被吞掉 → 当作"今天还没提醒过"，于是这一次照常认领成功
-    // （最坏结果是多提醒一次，好过整个提醒链路中断）
-    expect(() => claimDailyNotice('k', '2026-09-20')).not.toThrow()
-    expect(claimDailyNotice('k', '2026-09-20')).toBe(false)
-    // 且损坏的存档已被正常的新记录覆盖
-    expect(JSON.parse(localStorage.getItem(DAILY_KEY)!)).toEqual({ k: '2026-09-20' })
-  })
-})
-
-describe('到期提醒 dueTaskNotices', () => {
-  const task = (over: Partial<Task>): Task =>
-    ({
-      id: 't',
-      title: '待办',
-      description: '',
-      done: false,
-      priority: 'mid',
-      dueDate: null,
-      tags: [],
-      repeat: 'none',
-      projectId: null,
-      courseId: null,
-      createdAt: '',
-      updatedAt: '',
-      completedAt: null,
-      ...over,
-    }) as Task
-
-  it('逾期与今日到期分开成条，逾期在前', () => {
-    const out = dueTaskNotices(
-      [
-        task({ id: 'a', title: '昨天的', dueDate: '2026-09-19' }),
-        task({ id: 'b', title: '今天的', dueDate: '2026-09-20' }),
-      ],
-      '2026-09-20',
-    )
-    expect(out.map((n) => n.id)).toEqual(['due-overdue', 'due-today'])
-    expect(out[0].title).toBe('1 项待办已逾期')
-    expect(out[0].body).toBe('昨天的')
-    expect(out[1].body).toBe('今天的')
-  })
-
-  it('已完成、无到期日、未来到期都不计入', () => {
-    expect(
-      dueTaskNotices(
-        [
-          task({ id: 'a', done: true, dueDate: '2026-09-19', completedAt: '2026-09-19T00:00:00Z' }),
-          task({ id: 'b', dueDate: null }),
-          task({ id: 'c', dueDate: '2026-09-25' }),
-        ],
-        '2026-09-20',
-      ),
-    ).toEqual([])
-  })
-
-  it('同一条最多列出 3 个标题，避免把通知撑爆', () => {
-    const many = Array.from({ length: 5 }, (_, i) =>
-      task({ id: `t${i}`, title: `事${i}`, dueDate: '2026-09-20' }),
-    )
-    const out = dueTaskNotices(many, '2026-09-20')
-    expect(out).toHaveLength(1)
-    expect(out[0].title).toBe('5 项待办今日到期')
-    expect(out[0].body.split(' · ')).toHaveLength(3)
-  })
-})
+/* 旧的两组用例（每日去重 claimDailyNotice / 到期提醒 dueTaskNotices）随实现一并移除 ——
+ * 它们对应的函数已由 services/reminders.ts 的 taskReminders 与 reminder-claims.ts 的
+ * claimReminder 取代，覆盖已迁到 __tests__/reminders.test.ts 与 __tests__/task-repair.test.ts。
+ * 留在这里的话，测试会一直给死代码"续命"，让「无死代码」的自检失效。 */
 
 describe('关注更新计数 followUpdateCount', () => {
   const item = (over: Partial<{ title: string; tags: string[]; category?: string; source?: string; read: boolean }>) => ({

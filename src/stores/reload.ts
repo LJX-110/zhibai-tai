@@ -18,6 +18,8 @@ import { useCourseStore, useExamStore, useHomeworkStore } from './useStudyStore'
 import { useTaskStore } from './useTaskStore'
 import { useWaterStore } from './useWaterStore'
 import { useCategoryStore } from './useCategoryStore'
+import { useCultivationStore } from './useCultivationStore'
+import { usePetStore } from './usePetStore'
 import { hydrateSyncedSettings } from '../services/settings-sync'
 
 /** 重新从 IndexedDB 载入全部领域 store */
@@ -49,6 +51,9 @@ export async function reloadAllStores(): Promise<void> {
     // 冲突记录非业务表（不在 BUSINESS_TABLES），但同样是内存态：
     // 同步/导入后不重载的话，设置页要重启才能看到新产生的冲突
     useConflictStore.getState().load(),
+    // 修行状态与桌宠状态都是业务表：同步/导入后不重载，界面会停在旧值
+    useCultivationStore.getState().load(),
+    usePetStore.getState().load(),
   ])
   // 偏好设置存在业务表里，同步/导入后同样要回灌，否则界面还停在旧值
   await hydrateSyncedSettings()

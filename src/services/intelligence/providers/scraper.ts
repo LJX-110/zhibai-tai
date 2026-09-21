@@ -17,7 +17,7 @@ import { fetchViaProxy } from './rss'
  * 结果是第一个候选超时后用掉 8 秒，第二个候选跑到 4 秒就被外层掐断 ——
  * 「先试 /?url= 再试 /proxy?url=」的双通道退路形同虚设。
  */
-export async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
+async function fetchText(url: string, signal?: AbortSignal): Promise<string> {
   return fetchViaProxy(url, signal)
 }
 

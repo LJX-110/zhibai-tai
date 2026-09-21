@@ -93,7 +93,7 @@ export function NotesTab() {
         <div className="relative min-w-[160px] flex-1">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
           <Input
-            placeholder="搜索标题 / 正文 / 标签…"
+            placeholder="搜索标题、正文、标签"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="!pl-8"

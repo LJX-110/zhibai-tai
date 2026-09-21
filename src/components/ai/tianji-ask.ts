@@ -9,6 +9,7 @@
  */
 import { aiService } from '../../services/ai/ai-service'
 import { markAiRemoteDegraded, markAiRemoteReady, reasonOf } from '../../services/ai/health'
+import type { StreamFinishInfo } from '../../services/ai/provider'
 import { createId } from '../../utils/id'
 import { buildContext } from './context'
 import type { ChatMessage } from './chat-history'
@@ -24,7 +25,12 @@ const ACTION_PROTOCOL = `当你判断用户明确想"创建/新建/加/记"某�
 export async function ask(
   prompt: string,
   history: ChatMessage[],
-  stream?: { onToken: (delta: string) => void; signal?: AbortSignal },
+  stream?: {
+    onToken: (delta: string) => void
+    signal?: AbortSignal
+    /** 流结束时的信息（截断必须让用户知道，否则像自然结束） */
+    onFinish?: (info: StreamFinishInfo) => void
+  },
 ): Promise<string> {
   const ctx = buildContext(prompt)
   const provider = aiService.provider
@@ -49,7 +55,7 @@ export async function ask(
     try {
       const text =
         stream && provider.completeStream
-          ? await provider.completeStream(full, stream.onToken, stream.signal)
+          ? await provider.completeStream(full, stream.onToken, stream.signal, stream.onFinish)
           : await provider.complete(full)
       markAiRemoteReady()
       return text

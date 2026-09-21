@@ -5,7 +5,7 @@
  * 这里按「**状态跟着分组走**」的原则独立成组件 —— 它需要的数据与操作
  * 在本文件内自洽，父组件只负责渲染，不再做 prop 传递。
  */
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Download, Trash2, Upload } from 'lucide-react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
@@ -20,6 +20,8 @@ import {
   KEEP_LIMIT_OPTIONS,
 } from '../../services/intelligence/retention'
 import { APP_VERSION } from '../../app/version'
+import { useTaskStore } from '../../stores/useTaskStore'
+import { cleanupDuplicateFixedTasks, previewDuplicateFixedTasks } from '../../services/task-repair'
 import { toISODate, nowISO } from '../../utils/id'
 import { Button, Collapse, Dialog, Section, Select, useToast } from '../../components/ui'
 
@@ -27,8 +29,12 @@ export function DataGroup() {
   const settings = useSettingsStore()
   const toast = useToast().toast
   const intelTotal = useIntelligenceStore((s) => s.items.length)
+  const tasks = useTaskStore((s) => s.items)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearIntelOpen, setClearIntelOpen] = useState(false)
+  const [dupOpen, setDupOpen] = useState(false)
+  // 重复副本的预览：纯函数算出"如果清理会删掉什么"，不写库
+  const dup = useMemo(() => previewDuplicateFixedTasks(tasks), [tasks])
 
   const exportData = async () => {
     // 以 BUSINESS_TABLES 单一事实源为准，导出全部业务表并附带墓碑
@@ -263,6 +269,73 @@ export function DataGroup() {
             版本 / 浏览器 / 同步状态 / 数据量
           </span>
         </div>
+      </Section>
+
+      {/* 数据修复：不是破坏性操作（只删重复的历史副本），但会让「已完成」少几条旧记录，
+          所以仍走一层确认，并把将删的条目数与前因后果写清楚 */}
+      <Section title="数据修复">
+        <div className="row flex-wrap">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">重复任务</span>
+          <Button
+            size="sm"
+            variant="tertiary"
+            disabled={dup.removable === 0}
+            onClick={() => setDupOpen(true)}
+          >
+            <Trash2 size={13} /> 清理历史重复
+          </Button>
+          <span className="flex-1 text-xs text-ink-faint">
+            {dup.removable > 0
+              ? `${dup.groups} 个固定任务残留 ${dup.removable} 条旧副本`
+              : '没有需要清理的重复'}
+          </span>
+        </div>
+        {/* 说明性小字只在桌面显示（项目移动端约定第 4 条）；上面的"残留 N 条"是实时信息，移动端保留 */}
+        <p className="mt-1 hidden text-xs text-ink-faint md:block">
+          旧版完成「每日/每周/每月固定」任务时会多生成一条副本，导致同一件事在固定区反复出现。
+          生成逻辑已修，这里清理的是此前累积的存量副本。
+        </p>
+        <Dialog
+          open={dupOpen}
+          onClose={() => setDupOpen(false)}
+          title="清理历史重复"
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => setDupOpen(false)}>取消</Button>
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  const { removed, groups } = await cleanupDuplicateFixedTasks()
+                  await useTaskStore.getState().load()
+                  setDupOpen(false)
+                  toast(
+                    removed > 0 ? `已清理 ${groups} 个任务下的 ${removed} 条旧副本` : '没有需要清理的重复',
+                    removed > 0 ? 'success' : 'info',
+                  )
+                }}
+              >
+                确认清理
+              </Button>
+            </>
+          }
+        >
+          <p className="mb-3 text-sm text-ink-muted">
+            将删除 <strong className="text-cinnabar">{dup.removable}</strong> 条历史副本
+            （涉及 {dup.groups} 个固定任务）。每个任务保留最新的一条。
+          </p>
+          {/* 把代价说清楚：旧副本也是真实的完成历史，删了「已完成」里对应条目会一起消失 */}
+          <p className="mb-3 text-xs text-ink-faint">
+            这些副本也是当时的完成记录，清理后「已完成」列表里对应条目会一并消失。
+            每一期的「已完成」本身不会被删掉，删的只是同一件事多出来的副本。
+          </p>
+          {dup.titles.length > 0 && (
+            <div className="max-h-40 overflow-y-auto rounded-tile border border-line p-2">
+              {dup.titles.map((t) => (
+                <div key={t} className="truncate px-1 py-0.5 text-sm text-ink-soft">{t}</div>
+              ))}
+            </div>
+          )}
+        </Dialog>
       </Section>
 
       {/* 破坏性操作移出首屏：既让首屏变干净，也把「不可恢复」这件事藏在一层确认之后 */}

@@ -9,7 +9,7 @@ export const useDivinationStore =
   createCrudStore<DivinationRecord>(divinationRepo)
 
 /** 构建每日签记录（按日期确定性取签：同一天任何设备结果一致） */
-export function buildDailySignRecord(date: string): DivinationRecord {
+function buildDailySignRecord(date: string): DivinationRecord {
   const sign = signOf(date)
   return {
     id: createId(),

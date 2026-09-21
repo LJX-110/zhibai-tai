@@ -133,6 +133,157 @@ export function saveBestIfHigher(grade: CultivationGrade, total: number): boolea
   return true
 }
 
+/* ================================================================== *
+ * 修行境界（持续累积）—— 与「今日道行」是两回事
+ *
+ * ⚠️ 别把这两个混起来（这是本次改造的核心区分）：
+ *  · `cultivationGrade(今日总分)` —— **今日道行**。当天的心境快照，今天不记录就回落，
+ *    本就是"今天的功夫"，回落是对的（罗盘上「今日炁象」用它）。
+ *  · `realmOf(累计修为)` —— **修行境界**。由逐日累加的修为总量定阶，**只升不降**；
+ *    忙几天不记录不会把已修到的境界抹掉（那正是用户要的"持续累积"）。
+ * ================================================================== */
+
+/**
+ * 境界门槛（累计修为）。取 **×3 递进**：三百 → 九百 → 二千七 → 八千一。
+ * 「三三见九、九九归真」是旧说里的进境语；按每日 60-100 分计，
+ * 大致对应 4 天 / 12 天 / 35 天 / 100 天的持续用功。
+ * 门槛是要调就调一处的常量，不散在 UI 里。
+ */
+export const REALM_THRESHOLDS = [0, 300, 900, 2700, 8100] as const
+
+/** 修行境界（与今日道行同用丹道五阶名，但口径是累计修为） */
+export function realmOf(cumulative: number): CultivationGrade {
+  let rank = 0
+  for (let i = REALM_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (cumulative >= REALM_THRESHOLDS[i]) {
+      rank = i
+      break
+    }
+  }
+  const meta = REALM_META[rank]
+  return { rank, tone: meta.tone, title: meta.title, desc: meta.desc }
+}
+
+const REALM_META: { tone: CultivationGrade['tone']; title: string; desc: string }[] = [
+  { tone: 'plain', title: '抱朴守一', desc: '守其本真，未及化气，功夫尚在日用之间' },
+  { tone: 'qing', title: '炼精化气', desc: '精微初聚，气机始动，已是可持之修' },
+  { tone: 'teal', title: '炼气化神', desc: '气足神清，渐能自主，修行已成习惯' },
+  { tone: 'bronze', title: '炼神还虚', desc: '神返内守，虚静生慧，非一日之功所至' },
+  { tone: 'cinnabar', title: '炼虚合道', desc: '积久功深，与道合真，此境以年计' },
+]
+
+/** 距下一阶的进度（用于成长页进度条）；已至顶阶时 next 为 null */
+export function realmProgress(cumulative: number): {
+  realm: CultivationGrade
+  /** 下一阶修为门槛；null = 已至顶阶 */
+  next: number | null
+  nextTitle: string | null
+  /** 当前阶内进度 0-1（顶阶恒为 1） */
+  percent: number
+  /** 距下一阶还差多少修为 */
+  remaining: number
+} {
+  const realm = realmOf(cumulative)
+  const nextIdx = realm.rank + 1
+  if (nextIdx >= REALM_THRESHOLDS.length) {
+    return { realm, next: null, nextTitle: null, percent: 1, remaining: 0 }
+  }
+  const from = REALM_THRESHOLDS[realm.rank]
+  const next = REALM_THRESHOLDS[nextIdx]
+  return {
+    realm,
+    next,
+    nextTitle: REALM_META[nextIdx].title,
+    percent: Math.max(0, Math.min(1, (cumulative - from) / (next - from))),
+    remaining: Math.max(0, next - cumulative),
+  }
+}
+
+/**
+ * 修为总量 = 已落账的往日 + **今日已计** + 额外（闭关）。
+ *
+ * ⚠️ `todayCounted` 必须计入：它代表今天已经挣到、但尚未随跨天落进 `total` 的修为。
+ * 漏掉它会出现「今天做完一堆事、修为却纹丝不动，要等明天才涨」——数字与体感直接对不上。
+ */
+export function totalCultivation(s: {
+  total: number
+  bonus: number
+  todayCounted?: number
+}): number {
+  return s.total + s.bonus + (s.todayCounted ?? 0)
+}
+
+/** 空状态工厂（首次播种 / 迁移起点） */
+export function emptyCultivationState(): {
+  id: 'cultivation'
+  total: number
+  bonus: number
+  todayDate: string
+  todayCounted: number
+  seclusionCount: number
+  bestRank: number
+  bestTitle: string
+  bestAt: string | null
+} {
+  const r = realmOf(0)
+  return {
+    id: 'cultivation',
+    total: 0,
+    bonus: 0,
+    todayDate: '',
+    todayCounted: 0,
+    seclusionCount: 0,
+    bestRank: r.rank,
+    bestTitle: r.title,
+    bestAt: null,
+  }
+}
+
+/**
+ * 今日结算（纯函数）—— 把「今日总分」的增量并进累计修为。
+ *
+ * 两条不变式：
+ *  1. **同一天绝不重复累加**：只补 `今日总分 - 今日已计入` 的差额。
+ *     当天分数还会继续涨（上午 5 分、晚上 60 分），所以不是"一天记一笔固定的数"，
+ *     而是"当天随时补差额"；跨天再把当日计数落进 total 并归零。
+ *  2. **只升不降**：今日总分若因撤销操作而变低，差额为负 → 记 0，
+ *     已计入的修为不回收（与"境界只升不降"同一条原则）。
+ */
+export function settleDaily(
+  s: { total: number; todayDate: string; todayCounted: number },
+  todayTotal: number,
+  today: string,
+): { total: number; todayDate: string; todayCounted: number; gained: number } {
+  let total = s.total
+  let todayCounted = s.todayCounted
+  // 跨天：把上一日的计数落账（它代表那天最终的功夫），今日重新开始计
+  if (s.todayDate !== today) {
+    total += todayCounted
+    todayCounted = 0
+  }
+  const delta = Math.max(0, Math.round(todayTotal) - todayCounted)
+  return { total, todayDate: today, todayCounted: todayCounted + delta, gained: delta }
+}
+
+/**
+ * 闭关修为 —— 专门的境界提升方式。
+ *
+ * 「闭关」= 认领一件今日实事 + 专注一段时长（复用番茄钟，绑定待办的那次专注），
+ * 完成才结算。给分刻意高于零散日常：日常是"不修就退"，闭关是"主动精进"，
+ * 它才是把境界推上去的主路径。
+ *
+ * 计法：基础 20 点（肯坐下来本身就是门槛）+ 每 10 分钟 5 点。
+ * 25 分钟 ≈ 32 点、60 分钟 ≈ 50 点、90 分钟 ≈ 65 点 —— 一次完整的闭关
+ * 约等于半天的道行，与「专门提升方式」的定位相称。
+ */
+const SECLUSION_BASE = 20
+const SECLUSION_PER_10MIN = 5
+
+export function seclusionReward(minutes: number): number {
+  const m = Math.max(0, Math.round(minutes))
+  return SECLUSION_BASE + Math.floor(m / 10) * SECLUSION_PER_10MIN
+}
+
 /** 道行来源分解（行为 → 得分说明，非 RPG 数值，只是记录来源） */
 export function cultivationSources(input: CultivationInput): { label: string; value: number }[] {
   const out: { label: string; value: number }[] = []

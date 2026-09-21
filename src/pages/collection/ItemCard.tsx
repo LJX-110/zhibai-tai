@@ -7,7 +7,7 @@ import { Star } from 'lucide-react'
 import { Badge } from '../../components/ui'
 import type { CollectionItem } from '../../types/entities'
 import { cn } from '../../utils/cn'
-import { TYPE_LABEL, typeStripe } from './shared'
+import { typeLabel, typeStripe } from './shared'
 
 export function CollectionItemCard({
   it,
@@ -27,7 +27,7 @@ export function CollectionItemCard({
       <span className={cn('absolute inset-y-0 left-0 w-[3px]', typeStripe(it.type))} />
       <div className="flex flex-1 flex-col p-3 pl-4">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-ink-muted">{TYPE_LABEL[it.type]}</span>
+          <span className="text-xs text-ink-muted">{typeLabel(it.type)}</span>
           <button
             onClick={(e) => {
               e.stopPropagation()

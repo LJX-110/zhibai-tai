@@ -20,6 +20,17 @@ export interface Task {
   /** 截止日期 yyyy-mm-dd */
   dueDate?: string | null
   tags: string[]
+  /**
+   * 重复方式。**固定三式**（每日 / 每周 / 每月）构成一套统一的固定提醒体系：
+   * 每条固定任务只有**一条记录**，完成/撤销作用在「本期」上（今天 / 本周 / 本月），
+   * 由 `completedAt` 落在哪个周期自动判定是否再次出现 —— 绝不生成后继实例
+   * （见 useTaskActions 的说明，生成实例会让刚完成的事立刻重新出现）。
+   *  · daily   每日固定，无需锚点字段，复用本值（存量数据零迁移）
+   *  · weekly  每周固定，锚点 weeklyDay
+   *  · monthly 每月固定，锚点 monthlyDay
+   * 判定收口在 utils/id.ts 的 isFixedSchedule / fixedDoneThisPeriod。
+   * 搭配锚点字段使用；`repeat !== 'none'` 且无锚点时仍走旧的"完成后生成下一条"。
+   */
   repeat: Repeat
   /** 每月固定日提醒（1-31，如每月 27 号交话费） */
   monthlyDay?: number | null
@@ -177,7 +188,12 @@ export interface Exam {
   updatedAt?: string
 }
 
-/** 收藏类型 */
+/**
+ * 收藏介质的**旧枚举**。
+ * 介质已数据化（2026-09-21）：`CollectionItem.type` 现在存的是介质名（如「小说」），
+ * 介质本体的增删改在 categories 表的 `collection_medium` scope 里。
+ * 本枚举仅用于①存量数据迁移 ②历史值兜底显示，新数据不再产生这些键。
+ */
 export type CollectionType =
   | 'novel'
   | 'anime'
@@ -194,7 +210,8 @@ export type CollectionType =
 export interface CollectionItem {
   id: ID
   title: string
-  type: CollectionType
+  /** 介质名（在 categories 表 `collection_medium` scope 内管理，可增删、跨设备同步） */
+  type: string
   category?: string
   tags: string[]
   url?: string
@@ -507,7 +524,7 @@ export interface AIResource {
  * 此前分类存在设置项里（只落浏览器本地），永远不参与同步 ——
  * 手机上加的分类，电脑上必然看不到。
  */
-export type CategoryScope = 'intel' | 'collection' | 'ai' | 'ai_type'
+export type CategoryScope = 'intel' | 'collection' | 'ai' | 'ai_type' | 'collection_medium'
 
 export interface Category {
   id: ID
@@ -550,6 +567,62 @@ export interface SyncedSettings {
 export interface AppSettingsRow {
   id: 'settings'
   data: SyncedSettings
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 修行状态 —— 单行表（id 固定 'cultivation'），跨设备一致。
+ *
+ * 把「境界」从**每日快照**改成**持续累积**：
+ * 旧口径下境界由「今日总分」定阶（0-100），今天不记录就掉回最低阶，历史最高还只存本机
+ * localStorage —— 本质是每日快照，谈不上"累积"。
+ *
+ * 现在：境界由**累计修为**定阶，只升不降。
+ * 修为 = `total`（每日道行总分逐日累加）+ `bonus`（闭关等额外修为）。
+ *
+ * ⚠️ 每日累加必须**只补差额**：`todayDate` 记日期、`todayCounted` 记今天已计入多少分。
+ * 今天多次打开应用时只补 `今日总分 - 已计入` 的那部分，绝不重复累加；跨天则把
+ * `todayCounted` 落进 `total` 后归零。这是"一天只加一次"且"当天越用越高"能同时成立的关键。
+ */
+export interface CultivationState {
+  id: 'cultivation'
+  /** 已结算的每日道行累计（不含今天未结部分） */
+  total: number
+  /** 闭关等额外修为（单独计，不参与每日对账） */
+  bonus: number
+  /** 今日已计入的日期（yyyy-mm-dd） */
+  todayDate: string
+  /** 今日已计入的分数 */
+  todayCounted: number
+  /** 闭关次数 */
+  seclusionCount: number
+  /** 历史最高境界（只升不降的展示依据；境界本身由 total+bonus 定阶） */
+  bestRank: number
+  bestTitle: string
+  bestAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 桌宠状态 —— 单行表（id 固定 'pet'），跨设备一致。
+ *
+ * ⚠️ 为什么是业务表而不是设置项：位置与好感度是**业务状态**不是偏好，
+ * 且位置会高频变化，塞进偏好设置会让设置快照无谓抖动（偏好走整行 LWW + 去抖）。
+ * 「开关 petEnabled」反而留在本地设置不动 —— 开关是"这台设备要不要看见它"，状态是"它在哪、多亲"。
+ */
+export interface PetState {
+  id: 'pet'
+  /** 宠物包围盒左上角坐标（视口 px；桌面壳里是工作区 px） */
+  position: { x: number; y: number }
+  /** 好感度（加分规则在 P5 菜单/互动里，本轮只落初始值） */
+  affinity: number
+  /**
+   * 仅记录**跨会话保持**的状态（busy / 休眠 / 隐藏），普通动画切换不写 ——
+   * 逐帧同步"当前动画"既让快照风暴，又在另一台设备打开时早已过期。
+   */
+  lastAction?: string | null
   createdAt: string
   updatedAt: string
 }

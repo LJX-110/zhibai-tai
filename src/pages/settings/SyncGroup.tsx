@@ -145,7 +145,7 @@ export function SyncGroup() {
         <div className="row">
           <span className="w-20 shrink-0 text-sm text-ink-muted">仓库</span>
           <Input
-            placeholder="owner/repo（如 user/private-backup）"
+            placeholder="owner/repo"
             value={settings.githubRepo ?? ''}
             onChange={(e) => settings.set({ githubRepo: e.target.value })}
             className="max-w-[300px]"
@@ -163,7 +163,7 @@ export function SyncGroup() {
           <span className="w-20 shrink-0 text-sm text-ink-muted">Token</span>
           <Input
             type="password"
-            placeholder="GitHub Personal Access Token"
+            placeholder="GitHub Token"
             value={tokenDraft}
             onChange={(e) => setTokenDraft(e.target.value)}
             className="max-w-[300px]"
@@ -180,7 +180,7 @@ export function SyncGroup() {
           <span className="w-20 shrink-0 text-sm text-ink-muted">同步口令</span>
           <Input
             type="password"
-            placeholder="Sync Password（数据加密，跨设备恢复用）"
+            placeholder="同步密码"
             value={passwordDraft}
             onChange={(e) => setPasswordDraft(e.target.value)}
             className="max-w-[300px]"

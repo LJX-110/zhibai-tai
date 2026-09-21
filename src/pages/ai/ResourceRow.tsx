@@ -1,6 +1,7 @@
 /**
  * 术 · 单个 AI 能力的行
  */
+import { createElement } from 'react'
 import { Power, Trash2 } from 'lucide-react'
 import type { AIResource } from '../../types/entities'
 import { Badge, Button } from '../../components/ui'
@@ -33,10 +34,9 @@ export function ResourceRow({
             r.enabled ? 'border-teal/30 bg-teal/10 text-teal' : 'border-line bg-raised text-ink-faint',
           )}
         >
-          {(() => {
-            const Icon = typeIcon(r.type)
-            return <Icon size={15} />
-          })()}
+          {/* 用 createElement 而不是「渲染期 const Icon = …」：
+              后者会让 React Compiler 判定为「渲染中创建组件」并整块跳过优化 */}
+          {createElement(typeIcon(r.type), { size: 15 })}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

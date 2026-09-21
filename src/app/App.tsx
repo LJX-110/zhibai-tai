@@ -9,11 +9,11 @@ import { Hotkeys } from './Hotkeys'
 import { ThemeApplier } from './ThemeApplier'
 import { Onboarding } from './Onboarding'
 import { NotificationGate } from '../components/notification/NotificationGate'
+import { ReminderEngine } from '../components/notification/ReminderEngine'
 import { BackupReminder } from '../components/backup/BackupReminder'
 import { InstallPrompt } from '../components/pwa/InstallPrompt'
 import { AmbientSound } from '../components/sound/AmbientSound'
 import { PomodoroTicker } from '../components/pomodoro/PomodoroTicker'
-import { ClassReminder } from '../components/study/ClassReminder'
 import { AiChatPanel } from '../components/ai/AiChatPanel'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -39,7 +39,7 @@ export function App() {
         <InstallPrompt />
         <AmbientSound />
         <PomodoroTicker />
-        <ClassReminder />
+        <ReminderEngine />
         <AiChatPanel />
         {onboarded ? (
           // 就绪门：数据载入前只显示启动屏，避免"空数据"闪烁。

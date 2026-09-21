@@ -8,6 +8,7 @@ import { usePomodoroStore } from './usePomodoroStore'
 import { useTaskStore } from './useTaskStore'
 import { useCourseStore } from './useStudyStore'
 import { useProjectStore } from './useProjectStore'
+import { useCultivationStore } from './useCultivationStore'
 import { recordActivity } from '../services/activity'
 import { playSound } from '../services/sound'
 import { createId } from '../utils/id'
@@ -126,6 +127,13 @@ export const usePomodoroTimerStore = create<PomodoroTimerState>((set, get) => ({
         tags: [tag],
       }
       void usePomodoroStore.getState().add(session)
+      // 闭关结算：**绑定了一件实事的专注 = 一次闭关**，完成才给修为。
+      // 日常行为是"不修就退"，闭关才是主动精进、把境界推上去的主路径
+      // （计分见 services/cultivation.ts 的 seclusionReward）。
+      // 普通专注（未绑定待办）不给 —— 否则"坐着发呆 25 分钟"也能刷修为。
+      if (session.taskId) {
+        void useCultivationStore.getState().grantSeclusion(focusMin)
+      }
       const name = session.taskId
         ? useTaskStore.getState().items.find((t) => t.id === session.taskId)?.title
         : session.courseId

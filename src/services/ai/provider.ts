@@ -17,14 +17,25 @@ export interface AIProvider {
    * 流式补全（**可选**）。支持时面板边生成边显示；不支持则由调用方回退到 `complete`。
    * onToken 每收到一段增量文本调用一次（可能高频触发，调用方自行节流）；
    * signal 供用户主动中止。
+   * onFinish 在流结束时回调一次：`reason` 为 'length' 表示回答被 max_tokens 截断
+   * （此时必须告诉用户，否则看起来像自然结束），`usage` 是服务端的用量统计原样透传。
    */
   completeStream?(
     prompt: string,
     onToken: (delta: string) => void,
     signal?: AbortSignal,
+    onFinish?: (info: StreamFinishInfo) => void,
   ): Promise<string>
   /** 是否可用 */
   available(): boolean
+}
+
+/** 一次流式调用的结束信息 */
+export interface StreamFinishInfo {
+  /** 'stop' 正常结束；'length' 被截断；其余值原样透传 */
+  reason?: string
+  /** 服务端用量统计（各端点字段不一致，不做归一化） */
+  usage?: unknown
 }
 
 /** 本地轻量 Provider（离线可用，无网络） */
@@ -59,7 +70,7 @@ export function openAICompatibleProvider(opts: {
     complete: async (prompt: string) => {
       if (!opts.apiKey) throw new Error('未配置 API Key')
       const ctrl = new AbortController()
-      const timer = window.setTimeout(() => ctrl.abort(), timeoutMs)
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs)
       try {
         const res = await fetch(`${base}/chat/completions`, {
           method: 'POST',
@@ -85,10 +96,10 @@ export function openAICompatibleProvider(opts: {
         if (!content) throw new Error('AI 响应为空')
         return content
       } finally {
-        window.clearTimeout(timer)
+        clearTimeout(timer)
       }
     },
-    completeStream: async (prompt, onToken, signal) => {
+    completeStream: async (prompt, onToken, signal, onFinish) => {
       if (!opts.apiKey) throw new Error('未配置 API Key')
       const ctrl = new AbortController()
       const relayAbort = () => ctrl.abort()
@@ -96,12 +107,14 @@ export function openAICompatibleProvider(opts: {
 
       // 流式**不能**用一个总超时：长回答必然超过任何固定时长。
       // 改为两段看门狗 —— 首字节超时（连不上/被限流） + 空闲超时（中途卡死）。
-      let idleTimer: number | undefined
+      // ⚠️ 定时器用全局 setTimeout 而非 window.setTimeout：后者在非浏览器环境
+      // （node 单测）下直接 ReferenceError，会把整条流式链路挡在测试之外。
+      let idleTimer: ReturnType<typeof setTimeout> | undefined
       const armIdle = () => {
-        window.clearTimeout(idleTimer)
-        idleTimer = window.setTimeout(() => ctrl.abort(), 60_000)
+        clearTimeout(idleTimer)
+        idleTimer = setTimeout(() => ctrl.abort(), 60_000)
       }
-      const firstByteTimer = window.setTimeout(() => ctrl.abort(), timeoutMs)
+      const firstByteTimer = setTimeout(() => ctrl.abort(), timeoutMs)
 
       try {
         const res = await fetch(`${base}/chat/completions`, {
@@ -129,10 +142,12 @@ export function openAICompatibleProvider(opts: {
         const decoder = new TextDecoder()
         let buffer = ''
         let acc = ''
+        let finishReason: string | undefined
+        let usage: unknown
         for (;;) {
           const { done, value } = await reader.read()
           if (done) break
-          window.clearTimeout(firstByteTimer)
+          clearTimeout(firstByteTimer)
           armIdle()
           buffer += decoder.decode(value, { stream: true })
           // SSE 以空行分隔事件；按行扫描即可，残缺的最后一行留到下一轮
@@ -145,9 +160,13 @@ export function openAICompatibleProvider(opts: {
             if (!payload || payload === '[DONE]') continue
             try {
               const chunk = JSON.parse(payload) as {
-                choices?: { delta?: { content?: string } }[]
+                choices?: { delta?: { content?: string }; finish_reason?: string }[]
+                usage?: unknown
               }
-              const delta = chunk.choices?.[0]?.delta?.content
+              const choice = chunk.choices?.[0]
+              if (choice?.finish_reason) finishReason = choice.finish_reason
+              if (chunk.usage) usage = chunk.usage
+              const delta = choice?.delta?.content
               if (delta) {
                 acc += delta
                 onToken(delta)
@@ -157,11 +176,13 @@ export function openAICompatibleProvider(opts: {
             }
           }
         }
+        // 结束信息先于「空响应」校验：即使没吐一个字，调用方也该知道为什么结束
+        onFinish?.({ reason: finishReason, usage })
         if (!acc) throw new Error('AI 响应为空')
         return acc
       } finally {
-        window.clearTimeout(firstByteTimer)
-        window.clearTimeout(idleTimer)
+        clearTimeout(firstByteTimer)
+        clearTimeout(idleTimer)
         signal?.removeEventListener('abort', relayAbort)
       }
     },

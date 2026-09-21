@@ -5,7 +5,7 @@ import { ExternalLink, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { Badge, Button, Sheet } from '../../components/ui'
 import type { CollectionItem } from '../../types/entities'
 import { cn } from '../../utils/cn'
-import { TYPE_LABEL, typeStripe } from './shared'
+import { typeLabel, typeStripe } from './shared'
 
 export function ItemDetailSheet({
   detail,
@@ -29,7 +29,7 @@ export function ItemDetailSheet({
           {/* 详情头沿用列表卡那道「左侧类型签条」，打开时看得出是同一件东西 */}
           <div className="relative flex flex-wrap items-center gap-2 rounded-tile border border-line bg-raised px-3 py-2 pl-4">
             <span className={cn('absolute inset-y-0 left-0 w-[3px]', typeStripe(detail.type))} />
-            <Badge tone="cinnabar">类型 · {TYPE_LABEL[detail.type]}</Badge>
+            <Badge tone="cinnabar">介质 · {typeLabel(detail.type)}</Badge>
             {/* 分类与状态都是用户自填的自由文本：Badge 是 nowrap，长文案会撑破弹层 */}
             {detail.category && (
               <Badge tone="teal" className="max-w-full truncate">

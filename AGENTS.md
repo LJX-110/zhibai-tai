@@ -112,18 +112,61 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
   前端拼出带签名的完整 `api.bilibili.com` URL 交给代理。代理侧不需要 md5，
   也没有 `/bili/*` 路由。**不可改回 RSSHub 路线** —— rsshub.app 国内不可达，
   公共代理同样不可达，整条链路必然失败
+- ⚠️ **GitHub「空仓库」返回 409，不是 404**：对还没有任何提交的仓库读取 refs，
+  GitHub 返回 **409「Git Repository is empty」**。判定"分支不存在"必须**同时**识别
+  404 与「409 且消息含 empty」（`GithubSyncProvider.headRef()` 已处理）。
+  写入侧在空仓库时会自动建根提交 + `POST /git/refs` 创建分支，**首次同步无需手动建 README**。
+  ⚠️ 认 409 时**必须校验消息含 empty**，否则会把真正的 409 冲突误吞成"空仓库"。
+- **同步错误在落界面前要译成人话**：provider 抛的是 GitHub 原文（给开发者看的），
+  经 `sync/github/errors.ts` 的 `describeGitHubError()` 转成「该干什么」后再写进 `syncError`。
+  provider 内部仍用原文做 404/409/422 分支判断 —— **两处用途不同，别合并**。
 - GitHub 同步走 Git Data API（`sync/github/GithubSyncProvider.ts`），ref fast-forward 冲突自动重跑
 - **`intelligenceSources.lastFetchedAt / lastError` 是本机字段**：导出快照时剥离、
   写回时保留本机值（`SyncService.LOCAL_ONLY_FIELDS`），否则两台设备会互相覆盖
-- 课程表周次逻辑集中在 `services/study.ts`（当前周 / 单双周 / 时段冲突 / 上课提醒），
-  上课提醒由 `components/study/ClassReminder` 全局挂载。
+- **"今天上哪些课"只有一个正确取法**：`activeSlotsOfDay(courses, weekday, currentWeek(termStartDate))`
+  （`services/study.ts`）。它按 `slotOnWeek` 过滤 `weeks`（单双周 / 限定周次）。
+  **禁止手写 `schedule.filter(s => s.weekday === 今天)`** —— 那会漏掉周次，
+  首页「今日课程」曾因此长期显示这周本来不上的课（提醒链路早修了，首页漏了）。
+  `npm run check:rules` 规则 4 已把这条做成机器可查。
+- 课程表周次逻辑集中在 `services/study.ts`（当前周 / 单双周 / 时段冲突）。
+  **所有"到点提醒"由 `components/notification/ReminderEngine` 统一调度**（判定在 `services/reminders.ts`
+  的纯函数里，按「键 + 期间」认领见 `services/reminder-claims.ts`）；原 `components/study/ClassReminder`
+  已删除，其"提前 15 分钟逐节提醒"并入引擎的 `class-ahead` 源。**不要在别处另起一套提醒判定**。
+  `NotificationGate` 只留事件驱动三类（关注更新 / 同步失败 / 同步冲突）。
   **学期首周的设置入口必须常驻且可点**（`StudyPage` 操作行里的「首周」，靠日期 input 铺满 `label` 热区）——
   它此前是 `w-0 opacity-0` 的零宽度输入框（**没有热区、点了没反应**），且只在"未设置"时出现
   （设一次就永久消失，而承诺的"点周景改"并不存在）。后果是 `termStartDate` 恒空 →
   `currentWeek()` 返回 `null` → **单双周与周次过滤整体失效**。这是"输入框隐形入口"这类写法的反面教材
-- **固定重复任务有两种，形制必须一致**：`monthlyDay`（每月 N 号）与 `weeklyDay`（每周几，
-  **0=周日…6=周六**，与 `weekdayCN()` 及课程表 `WeeklySlot.weekday` 同构，全链路无需 ±1 换算）。
-  两者在编辑器条件渲染、行内徽标、「每周/每月固定 N 项」折叠区、顶部提醒上都要同一形制，改一处跟另一处
+- **固定任务有三式，形制必须一致**：**每日**（`repeat: 'daily'`，无锚点字段）· **每周**（`weeklyDay`，
+  **0=周日…6=周六**）· **每月**（`monthlyDay`，1-31）。统一判定收口在 `utils/id.ts` 的
+  `isFixedSchedule` / `fixedDoneThisPeriod`。三式在编辑器条件渲染、行内徽标、待办页「每日/每周/每月固定」
+  折叠区、顶部提醒上都要同一形制，改一处跟三处。
+  ⚠️ **提醒看"今天到不到期"，清单看"本期做没做"** —— 两回事，别混（每月 27 号的事在今天只该在清单里，不该响）
+- **单行表（偏好 / 桌宠 / 修行）走 `repositories/singleton.ts`**：统一持有两条语义 ——
+  **读不到返回 null，绝不伪造行**（否则读一次就凭空多一条待同步记录）、
+  **建行由调用方给工厂**（业务默认值不在仓储里猜）。别再各写一份 read/write。
+- ⚠️ **「修行境界」与「今日道行」是两回事，别混**：`realmOf(累计修为)` 由逐日累加定阶、
+  **只升不降**（`cultivation` 业务表，跨设备同步）；`cultivationGrade(今日总分)` 是当天快照、
+  不记录就回落（对的）。首页那行身份牌用**累积境界**；混成一个数会出现"今天没记录、境界白修"。
+  结算纯函数 `settleDaily` **同一天只补差额**（不是一天记一笔固定值），跨天才把当日计数落账。
+- ⚠️ **分类体系（categories 表）共 5 个 scope**：`intel` / `collection` / `ai` / `ai_type` / `collection_medium`。
+  **新增 scope 必须同时改三处**：`CategoryScope` 类型、`DEFAULT_CATEGORIES` 默认清单、
+  **`seedAllCategories` 里的 `seedCategories('<scope>')` 调用**（漏最后一步 = 下拉空掉）。
+  `collection_medium`（介质）与 `collection`（用途）**刻意不共用数据**：共用会出现两个同名下拉。
+- **`npm run check:rules` 现为 5 条**：单文件 ≤400 行 / `@layer` 内 CSS / 圆角字号魔法值 /
+  **取课点必须走 `activeSlotsOfDay`**（规则 4）/ **死导出**（规则 5，警示级）。
+  规则 4 起因：首页曾手写 `schedule.filter(weekday)`，漏了单双周——提醒链路早修过，首页漏了半年。
+  查死代码**必须排除 `__tests__`**：测试会给死代码"续命"，让它看起来仍被引用。
+- **天机的板块能力走插件注册表**（`components/ai/plugins/*.ts`，`index.ts` 是注册表）：
+  每个板块自带 `detail`（明细区）/ `capability`（一键能力）/ `actions`（AI 提议动作的落库）。
+  **注册顺序 = 明细区注入顺序**（`overview, action, study, finance, collection, cultivate, intelligence`），
+  改顺序 = 改上下文 = 可能改回答。三条红线：**插件之间不得互相 import**；
+  **插件不直接写库**（走 store 工厂）；奇 / 术暂无内容，**不注册空壳**。
+  `context.ts` 只留跨板块的基础概览 + 聚合，不含任何具体板块逻辑。
+- **天机输出已全部流式**：自由问答与能力卡片共用同一个装配器（`services/ai/stream-assembly.ts`）
+  与作用域 sink（`services/ai/stream-sink.ts`）。**预览与落库同源**，所以流式与非流式内容一致是构造出来的。
+  动作 JSON 只在收齐后解析，**流式过程中绝不中途解析**。
+  ⚠️ `withStreamSink` 是模块级状态，**不要在无 busy 守卫处并发两个带 sink 的调用**（增量会串流）
 - **筛选药丸只有一种形制**：一律走 `components/ui/Chip`（`px-3 py-1.5 text-sm rounded-tile`，
   **不带计数徽标**）—— 项目中心 / 藏品 / 情报 / 记账 / 购买 / 设置页分组全部对齐它。
   另：`Section` 的 `title` **可省略**，嵌在折叠层里时外层已有标题，内层再写一遍就是同屏两行一样的字

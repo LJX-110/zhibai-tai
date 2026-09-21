@@ -22,6 +22,8 @@ import { AI_TYPE_LEGACY_LABEL, type AIResourceType } from '../types/entities'
 import { initAutoSync } from '../sync/auto'
 import { initSyncedSettings } from '../services/settings-sync'
 import { seedAllCategories } from '../stores/useCategoryStore'
+import { useCollectionStore } from '../stores/useCollectionStore'
+import { COLLECTION_MEDIUM_LEGACY_LABEL } from '../services/categories'
 
 /** 种子标记：避免 dev StrictMode 双跑导致重复播种 */
 let sourcesSeeded = false
@@ -38,6 +40,25 @@ async function migrateAiResourceTypes(): Promise<void> {
     const label = AI_TYPE_LEGACY_LABEL[r.type as AIResourceType]
     if (label) {
       await useAIResourceStore.getState().update(r.id, { type: label })
+    }
+  }
+}
+
+/**
+ * 藏 · 介质数据化迁移：藏品的旧枚举键（novel/anime/...）改写为介质名（小说/动漫/...）。
+ * 介质本体已由 seedCategories('collection_medium') 播种为业务行；幂等 ——
+ * 数据化之后新建的藏品存的就是介质名，自然跳过。
+ *
+ * ⚠️ 不做这步的话：旧藏品会在下拉里显示成空白（枚举键不在介质清单里），
+ * 一旦保存还会把原值改成别的介质 —— 静默改坏用户数据，比报错严重得多。
+ */
+async function migrateCollectionMediums(): Promise<void> {
+  const st = useCollectionStore.getState()
+  if (!st.loaded) await st.load()
+  for (const it of useCollectionStore.getState().items) {
+    const label = COLLECTION_MEDIUM_LEGACY_LABEL[it.type as keyof typeof COLLECTION_MEDIUM_LEGACY_LABEL]
+    if (label) {
+      await useCollectionStore.getState().update(it.id, { type: label })
     }
   }
 }
@@ -110,6 +131,7 @@ export function Bootstrap() {
       ['整理情报源', seedSources],
       ['整理分类', () => seedAllCategories()],
       ['迁移术类型', migrateAiResourceTypes],
+      ['迁移藏品介质', migrateCollectionMediums],
     ]
     const boot = Promise.allSettled(
       steps.map(async ([label, run]) => {

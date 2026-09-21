@@ -114,7 +114,7 @@ export function useTodayStats(): TodayStats {
 
 /** 当前本地日期（yyyy-mm-dd） —— 每分钟滚动一次，跨午夜后自动翻新；
  *  此前 useMemo(()=>…,[]) 固定首次渲染值，应用挂机过午夜统计与"今日"不再更新 */
-export function useTodayISO(): string {
+function useTodayISO(): string {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 60_000)

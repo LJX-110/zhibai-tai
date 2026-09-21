@@ -73,7 +73,15 @@ export class GitHubSnapshotProvider implements SyncProvider {
       const treeSha = (commit as { tree: { sha: string } }).tree.sha
       return { commitSha, treeSha }
     } catch (e) {
-      if (e instanceof Error && e.message.includes('404')) return null
+      if (!(e instanceof Error)) throw e
+      // 分支还不存在 —— 交给写入侧建初始提交
+      if (e.message.includes('404')) return null
+      /* ⚠️ 空仓库不是 404：GitHub 对「还没有任何提交」的仓库读取 refs 时返回
+       * **409 「Git Repository is empty」**。此前只识别 404，于是首次同步到
+       * 刚建好的空私有仓库必然失败（报 409 原文，看不出该干什么）。
+       * 空仓库 = 还没有头，与 404 同样处理即可 —— 写入侧会建根提交并创建分支。
+       * 只认带 empty 字样的 409，避免把真正的 409 冲突误当成"空仓库"吞掉。 */
+      if (e.message.includes('409') && /empty/i.test(e.message)) return null
       throw e
     }
   }

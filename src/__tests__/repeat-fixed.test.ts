@@ -1,14 +1,22 @@
 /**
- * 固定周期提醒判定（每月固定 / 每周固定）单测
+ * 固定周期提醒判定（每日固定 / 每月固定 / 每周固定）单测
  *
- * 每月固定与每周固定采用同一套"今天是否到期 + 本周/本月是否已做"判定，
- * 这里用镜像的 describe 结构证明二者行为完全对应：
+ * 三式采用同一套「今天/本周/本月是否到期 + 是否已做」判定，这里用镜像的
+ * describe 结构证明三者行为对应：
+ *   dailyDoneToday
  *   monthlyDay / monthlyDueToday / monthlyDoneThisMonth
- *   weeklyDay  / weeklyDueToday  / weeklyDoneThisWeek
- * 重点覆盖边界：未设置、跨周期（跨月 / 跨周）、周日（weeklyDay=0 起点）。
+ *   weeklyDay / weeklyDueToday  / weeklyDoneThisWeek
+ * 重点覆盖边界：未设置、跨周期（跨日 / 跨周 / 跨月）、周日（weeklyDay=0 起点）、
+ * 以及 completedAt 是 UTC 串导致的「本地日期 ≠ ISO 串日期」陷阱。
+ *
+ * 另有 isFixedSchedule / fixedDoneThisPeriod：把三式收成一个判定，
+ * 供完成/撤销固定任务时使用（见 useTaskActions）。
  */
 import { describe, expect, it } from 'vitest'
 import {
+  dailyDoneToday,
+  fixedDoneThisPeriod,
+  isFixedSchedule,
   monthlyDoneThisMonth,
   monthlyDueToday,
   weeklyDoneThisWeek,
@@ -24,6 +32,74 @@ function mondayOf(d: Date): Date {
   return x
 }
 const iso = (d: Date) => d.toISOString()
+
+describe('每日固定 dailyDoneToday', () => {
+  // 本地 2026-09-20 12:00（用时区无关的方式构造）
+  const now = new Date(2026, 8, 20, 12, 0)
+  const iso = (d: Date) => d.toISOString()
+
+  it('未完成 / 无完成时间一律不算已做', () => {
+    expect(dailyDoneToday({ done: false, completedAt: iso(now) }, now)).toBe(false)
+    expect(dailyDoneToday({ done: true }, now)).toBe(false)
+    expect(dailyDoneToday({ done: true, completedAt: null }, now)).toBe(false)
+  })
+
+  it('今天完成算已做，昨天完成不算（跨日即重新出现）', () => {
+    expect(dailyDoneToday({ done: true, completedAt: iso(new Date(2026, 8, 20, 8, 0)) }, now)).toBe(true)
+    expect(dailyDoneToday({ done: true, completedAt: iso(new Date(2026, 8, 19, 12, 0)) }, now)).toBe(false)
+  })
+
+  it('本地凌晨完成算今天，而不是 ISO 串里的昨天', () => {
+    // 本地 2026-09-20 00:30（东八区）→ ISO 串是 2026-09-19T16:30Z。
+    // 若实现偷懒用 completedAt.slice(0, 10) 与今天比，这条会判成「没做」，
+    // 于是每天凌晨 0-8 点之间做完的事会一直挂在清单上 —— 用 toISODate 转本地日期才对。
+    const earlyMorning = new Date(2026, 8, 20, 0, 30).toISOString()
+    expect(dailyDoneToday({ done: true, completedAt: earlyMorning }, now)).toBe(true)
+  })
+
+  it('完成时间非法时按「没做」处理', () => {
+    expect(dailyDoneToday({ done: true, completedAt: '不是时间' }, now)).toBe(false)
+  })
+})
+
+describe('固定任务统一判定 isFixedSchedule / fixedDoneThisPeriod', () => {
+  const base = { done: true, completedAt: new Date(2026, 8, 20, 12, 0).toISOString() }
+  const now = new Date(2026, 8, 20, 12, 0) // 2026-09-20 周日
+
+  it('三式都算固定，普通任务不算', () => {
+    expect(isFixedSchedule({ repeat: 'daily' })).toBe(true)
+    expect(isFixedSchedule({ repeat: 'weekly', weeklyDay: 3 })).toBe(true)
+    expect(isFixedSchedule({ repeat: 'monthly', monthlyDay: 20 })).toBe(true)
+    expect(isFixedSchedule({ repeat: 'none' })).toBe(false)
+    // repeat 是 weekly 但没填锚点：不是固定任务，走旧的"完成后生成下一条"
+    expect(isFixedSchedule({ repeat: 'weekly' })).toBe(false)
+  })
+
+  it('本期已做按 每月 > 每周 > 每日 取优先级', () => {
+    // 每月锚点命中今天 → 本月已做
+    expect(fixedDoneThisPeriod({ ...base, repeat: 'monthly', monthlyDay: 20 }, now)).toBe(true)
+    // 上月完成 → 本月未做（"本期"看月，不看锚点是否正好是今天）
+    expect(
+      fixedDoneThisPeriod(
+        { done: true, completedAt: new Date(2026, 7, 20, 12, 0).toISOString(), repeat: 'monthly', monthlyDay: 21 },
+        now,
+      ),
+    ).toBe(false)
+    // 每周锚点 0=周日，今天是周日 → 本周已做
+    expect(fixedDoneThisPeriod({ ...base, repeat: 'weekly', weeklyDay: 0 }, now)).toBe(true)
+    // 每日：今天已完成 → 已做
+    expect(fixedDoneThisPeriod({ ...base, repeat: 'daily' }, now)).toBe(true)
+  })
+
+  it('本期未做时返回 false（固定任务的完成/撤销都依赖这个判定）', () => {
+    expect(
+      fixedDoneThisPeriod(
+        { done: false, completedAt: null, repeat: 'daily' },
+        now,
+      ),
+    ).toBe(false)
+  })
+})
 
 describe('每月固定 monthlyDueToday / monthlyDoneThisMonth', () => {
   const now = new Date(2026, 8, 19) // 2026-09-19，getDate()=19

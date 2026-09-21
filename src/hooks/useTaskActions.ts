@@ -9,7 +9,7 @@ import type { Task } from '../types/entities'
 import { useTaskStore } from '../stores/useTaskStore'
 import { recordActivity } from '../services/activity'
 import { playSound } from '../services/sound'
-import { createId } from '../utils/id'
+import { createId, fixedDoneThisPeriod, isFixedSchedule } from '../utils/id'
 import { useToast } from '../components/ui/Toast'
 
 /** 按重复周期推算下一次到期日（以原到期日为基准，逾期完成则顺延追赶） */
@@ -26,11 +26,34 @@ function nextDueDate(task: Task): string | null {
 /**
  * 勾选/完成核心：更新状态；完成 recurring 任务时生成下一条
  * （同内容、新 id、未完成）。返回本次是否完成、是否生成了下一次。
+ *
+ * 固定任务（每日 / 每周 / 每月，见 isFixedSchedule）走另一条路 —— **只有一条记录，
+ * 完成/撤销都作用在「本期」上，绝不生成后继实例**：
+ *  · 生成后继的话，刚点完的当下就会立刻冒出一条同款（本期已做只认 completedAt，
+ *    而新实例 done=false，必然再次出现在本期清单里）—— 修复前的每月/每周固定
+ *    正是这个表现，用户点完还看到它挂在清单上；
+ *  · 一条记录自转，下一期由「completedAt 落在哪个周期」自动判定，无需任何迁移。
  */
 export async function toggleTaskCore(
   task: Task,
 ): Promise<{ done: boolean; createdNext: boolean }> {
   const now = new Date().toISOString()
+
+  if (isFixedSchedule(task)) {
+    const wasDone = fixedDoneThisPeriod(task)
+    await useTaskStore.getState().update(task.id, {
+      done: !wasDone,
+      // 撤销本期就把 completedAt 清掉：它是「本期已做」的唯一依据，
+      // 留着旧值会让"撤销"看起来像没生效（下一帧又被判定为已做）
+      completedAt: !wasDone ? now : null,
+      updatedAt: now,
+    })
+    if (!wasDone) {
+      void recordActivity({ entityType: 'task', entityId: task.id, title: `完成待办：${task.title.slice(0, 30)}` })
+    }
+    return { done: !wasDone, createdNext: false }
+  }
+
   await useTaskStore.getState().update(task.id, {
     done: !task.done,
     completedAt: !task.done ? now : task.completedAt,

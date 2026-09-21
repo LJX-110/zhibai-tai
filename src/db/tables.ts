@@ -11,7 +11,7 @@ export interface TableMeta {
   label: string
 }
 
-/** 参与同步、备份导出与清空操作的业务表（共 24 张） */
+/** 参与同步、备份导出与清空操作的业务表（共 26 张） */
 export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'tasks', label: '待办' },
   { key: 'notes', label: '笔记/灵感' },
@@ -37,6 +37,8 @@ export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'projects', label: '项目' },
   { key: 'activityItems', label: '活动轨迹' },
   { key: 'follows', label: '关注' },
+  { key: 'petState', label: '桌宠状态' },
+  { key: 'cultivation', label: '修行境界' },
 ]
 
 /** 业务表名数组（同步遍历用） */

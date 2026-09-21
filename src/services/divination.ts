@@ -16,7 +16,7 @@ export interface DailySign {
 }
 
 /** 每日签库（克制、正面、可复用；按日期哈希确定性取签） */
-export const DAILY_SIGNS: DailySign[] = [
+const DAILY_SIGNS: DailySign[] = [
   { title: '静水', text: '今日宜静不宜动，先安顿内心，再处理外务。', tag: '守', do: '静坐复盘', dont: '仓促决断', advice: '先安顿内心，外务自然有序。' },
   { title: '潜行', text: '时机未至，不必急于显露，沉下心积蓄。', tag: '蓄', do: '积蓄准备', dont: '急于表现', advice: '沉住气，时机自会等你。' },
   { title: '破晓', text: '晦暗将散，主动踏出一步，局面自会开朗。', tag: '进', do: '主动开局', dont: '犹豫观望', advice: '迈出第一步，路就亮了。' },

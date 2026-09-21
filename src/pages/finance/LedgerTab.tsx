@@ -289,7 +289,7 @@ export function LedgerTab() {
           <div className="grid grid-cols-2 gap-3">
             <Input autoFocus type="number" step="0.01" placeholder="金额" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             {form.category === 'custom' ? (
-              <Input placeholder="自定义分类，如：宠物" value={form.customCategory} onChange={(e) => setForm({ ...form, customCategory: e.target.value })} />
+              <Input placeholder="自定义分类" value={form.customCategory} onChange={(e) => setForm({ ...form, customCategory: e.target.value })} />
             ) : (
               <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as FinanceCategory | 'custom' })}>
                 {FINANCE_CATEGORIES.map((c) => (

@@ -149,7 +149,7 @@ export function BodyTab() {
 
       <Dialog open={open} onClose={() => setOpen(false)} title="新建身体指标">
         <div className="space-y-3">
-          <Input autoFocus placeholder="名称，如：体重" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input autoFocus placeholder="名称" value={name} onChange={(e) => setName(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
             <Input placeholder="单位，如：kg" value={unit} onChange={(e) => setUnit(e.target.value)} />
             <Input placeholder="目标（可选）" type="number" value={target} onChange={(e) => setTarget(e.target.value)} />

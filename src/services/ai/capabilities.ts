@@ -14,6 +14,7 @@ import { createId, toISODate } from '../../utils/id'
 import { markAiRemoteDegraded, markAiRemoteReady, reasonOf } from './health'
 import type { AIProvider } from './provider'
 import { localProvider } from './provider'
+import { currentStreamSink } from './stream-sink'
 
 export interface AIService {
   provider: AIProvider
@@ -75,22 +76,44 @@ export interface AIService {
  * `degraded` 是可订阅状态，天机面板据此显示「远程异常」，用户才知道自己看到的是
  * 本地兜底结果而不是模型输出。此前这里只是一个 `.catch(() => local())`，
  * 远程挂了界面上毫无痕迹。
+ *
+ * 流式：作用域内声明了 sink（见 stream-sink.ts）且 Provider 支持流式时改走
+ * `completeStream`，增量转给 sink —— 但**最终返回值仍是完整字符串**，与一次性调用
+ * 逐字相同（两者都来自同一个累加器，见 stream-assembly.ts）。
  */
 function remoteOr(prompt: string, local: () => string): Promise<string> {
   const p = aiService.provider
+  const sink = currentStreamSink()
   if (p.id === 'remote' && p.available()) {
-    return p.complete(prompt).then(
+    const run =
+      sink && p.completeStream
+        ? p.completeStream(prompt, sink.onDelta, sink.signal)
+        : p.complete(prompt)
+    return run.then(
       (text) => {
         markAiRemoteReady()
         return text
       },
       (err: unknown) => {
+        // 用户主动中止不是失败：不标 degraded、**也不降级** ——
+        // 中止之后突然冒出一段本地生成的"回答"，比没有回答更糟（tianji-ask 同一条规则）
+        if (isAbortError(err)) throw err
         markAiRemoteDegraded(reasonOf(err))
-        return local()
+        const text = local()
+        // 兜底文本也走一次 sink：本地路径通常瞬间完成，若不喂增量，
+        // 预览区会一直停在"推演中"直到结果突然整个出现
+        sink?.onDelta(text)
+        return text
       },
     )
   }
-  return Promise.resolve(local())
+  const text = local()
+  sink?.onDelta(text)
+  return Promise.resolve(text)
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError'
 }
 
 export const aiService: AIService = {
