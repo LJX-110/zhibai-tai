@@ -145,9 +145,11 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
 - **单行表（偏好 / 桌宠 / 修行）走 `repositories/singleton.ts`**：统一持有两条语义 ——
   **读不到返回 null，绝不伪造行**（否则读一次就凭空多一条待同步记录）、
   **建行由调用方给工厂**（业务默认值不在仓储里猜）。别再各写一份 read/write。
-- ⚠️ **「修行境界」与「今日道行」是两回事，别混**：`realmOf(累计修为)` 由逐日累加定阶、
-  **只升不降**（`cultivation` 业务表，跨设备同步）；`cultivationGrade(今日总分)` 是当天快照、
-  不记录就回落（对的）。首页那行身份牌用**累积境界**；混成一个数会出现"今天没记录、境界白修"。
+- ⚠️ **「修行境界」与「今日炁象」是两回事，别混**：
+  · **境界** = `realmOf(累计功行)`（`services/merit.ts`）：功行逐日累加、**只升不降**，是"等级"；
+  · **今日炁象** = `cultivationGrade(今日五维总分)`（`services/cultivation.ts`）：当天快照、明天重计，
+    **只喂首页罗盘**，绝不参与境界判定。
+  混成一个数就会出现"今天没记录、境界白修"。
   结算纯函数 `settleDaily` **同一天只补差额**（不是一天记一笔固定值），跨天才把当日计数落账。
 - ⚠️ **分类体系（categories 表）共 5 个 scope**：`intel` / `collection` / `ai` / `ai_type` / `collection_medium`。
   **新增 scope 必须同时改三处**：`CategoryScope` 类型、`DEFAULT_CATEGORIES` 默认清单、

@@ -156,12 +156,18 @@
     line-height: 1.1;
   }
 
-  /* 区块标题：小号序号 + 标题 + 渐隐分隔线（避免卡片墙，以线分割） */
+  /* 区块标题：小号序号 + 标题 + 注解（避免卡片墙，以线分割）
+     ⚠️ 间距分两级，不要合成一个 gap：
+      · 序号条 ↔ 标题 是「标记 + 内容」的关系，留 6px；
+      · 标题 ↔ 注解（`.hint`／「第 N 周」这类小字）是**同一句话的延续**，
+        不属于并列项 —— 用 4px 贴紧。此前统一 10px，注解被推得离标题很远，
+        看着像两个独立元素中间漏了一段空白（用户反馈的「细小间隙」）。
+     `action` 靠 `ml-auto` 右推，不受这里的 gap 影响。 */
   .section-title {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 10px;
+    gap: 4px;
     font-size: var(--text-base);
     font-weight: 600;
     color: var(--color-ink);
@@ -172,6 +178,7 @@
     align-self: center;
     width: 3px;
     height: 14px;
+    margin-right: 6px;
     background: var(--color-cinnabar);
     border-radius: 2px;
   }
@@ -612,6 +619,16 @@
    字号走阶梯最小档 12px：原先写死 11px，既不在 12/14/16… 阶梯上，
    又因为本文件未分层而静默压过工具层 —— 调用处写的 text-[9px] / text-[10px]
    从来没生效过（改了没反应的那种坑）。收口到令牌后，调用方不必再覆盖字号。 */
+/* 小节标签（eyebrow）：12px 小字 + **统一**字间距。
+   ⚠️ 中文不吃宽字间距 —— 此前这类标签散着 0.18/0.2/0.25/0.3/0.4em 五个值，
+   同一类标签在不同页面疏密不一，中文被拉得松散、窄屏更容易折行。
+   统一到 0.08em：只给一点分组感，不把字拆散。
+   **颜色刻意不进这个类** —— 侧栏等处用的是 on-sidebar-muted，由调用方的工具类决定。 */
+.eyebrow {
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+}
+
 .mono-meta {
   font-family: var(--font-mono);
   font-size: var(--text-xs);

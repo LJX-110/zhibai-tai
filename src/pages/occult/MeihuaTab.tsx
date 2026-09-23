@@ -147,7 +147,7 @@ export function MeihuaTab() {
                     ['变卦', mh.bianGua, 'border-gold-btn/40'],
                   ] as const).map(([label, g, border]) => (
                     <div key={label} className={cn('rounded-tile border bg-paper/50 p-3 text-center', border)}>
-                      <div className="text-xs tracking-[0.2em] text-ink-faint">{label}</div>
+                      <div className="eyebrow text-ink-faint">{label}</div>
                       <div className="scribal-title mt-1 text-xl text-ink">{g.name}</div>
                       <div className="mt-0.5 text-xs text-ink-faint">{g.xiang}</div>
                       <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-muted">{g.guoci}</p>

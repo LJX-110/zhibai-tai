@@ -10,7 +10,7 @@
 import { beforeAll, afterAll, describe, expect, it } from 'vitest'
 import {
   TIANJI_PLUGINS,
-  actionHandlerFor,
+  actionDefFor,
   buildDetailContext,
   capabilitiesOf,
   capabilityOf,
@@ -70,14 +70,14 @@ describe('注册表结构', () => {
 
 describe('动作归属', () => {
   it('三种动作分别落在行 / 行 / 财 三个板块', () => {
-    expect(actionHandlerFor('create_task')).toBeTruthy()
-    expect(actionHandlerFor('create_note')).toBeTruthy()
-    expect(actionHandlerFor('create_finance')).toBeTruthy()
+    expect(actionDefFor('create_task')).toBeTruthy()
+    expect(actionDefFor('create_note')).toBeTruthy()
+    expect(actionDefFor('create_finance')).toBeTruthy()
   })
 
   it('未注册的动作返回 undefined（落库前就该拒掉，不能猜一个库写进去）', () => {
-    // @ts-expect-error 故意传一个协议里没有的动作，验证兜底
-    expect(actionHandlerFor('delete_everything')).toBeUndefined()
+    // 动作名现在是开放字符串，不需要 @ts-expect-error —— 这正是 P2 开放化的结果
+    expect(actionDefFor('delete_everything')).toBeUndefined()
   })
 })
 

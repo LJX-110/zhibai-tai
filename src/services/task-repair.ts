@@ -19,7 +19,79 @@
  */
 import type { Task } from '../types/entities'
 import { useTaskStore } from '../stores/useTaskStore'
-import { findDuplicateFixedTasks } from '../utils/id'
+import { findDuplicateFixedTasks, fixedTaskIdentity, isFixedSchedule } from '../utils/id'
+
+/**
+ * 认定为「同一条副本链」所需的最小相邻创建间隔 —— 18 小时。
+ *
+ * 取值理由：旧版生成的后继副本**每个周期一条**，每日固定相隔 24 小时、每周相隔 7 天，
+ * 必然远超这个值；而用户手动重复建两条同名任务，几乎总在同一分钟内完成。
+ * 于是这一条判据就能把「副本链」与「真的建了两条」分开 —— 前者要合并，
+ * 后者**绝不能合并**（合并会让其中一条在界面上静默消失）。
+ */
+const CHAIN_GAP_MS = 18 * 60 * 60 * 1000
+
+/** 按 createdAt 升序后，相邻两条是否都隔了至少一个"周期量级" */
+function looksLikeChain(sorted: Task[]): boolean {
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1].createdAt).getTime()
+    const cur = new Date(sorted[i].createdAt).getTime()
+    // 时间戳不可解析时**不合并**：宁可漏合并（保持现状），不可误合并
+    if (Number.isNaN(prev) || Number.isNaN(cur)) return false
+    if (cur - prev < CHAIN_GAP_MS) return false
+  }
+  return true
+}
+
+/**
+ * 幂等迁移：给**存量**固定任务补上 `seriesId`（系列标识）。
+ *
+ * ## 为什么需要
+ * 展示层靠 `seriesId` 把各期认成一件事，而存量数据没有这个字段 ——
+ * 只能退回「锚点 + 标题」，于是两个方向都错：
+ *  · **改标题 / 改锚点日** → 旧记录被当成另一件事复活，重复条目又回来了；
+ *  · **同名任务** → 被认成同一件事，只显示最新那条，另一条静默消失。
+ * 补上 `seriesId` 后两条一起消失（新数据在建/改时就已带上，见 `TaskEditor`）。
+ *
+ * ## 判定规则（保守优先）
+ *  · 只有一条 → `seriesId = 自己`；
+ *  · 多条且相邻创建间隔都 ≥18 小时 → 是旧版留下的**副本链**，整组共用一个 `seriesId`
+ *    （= 最新那条的 id），与原先按标题成组的结果**逐位一致**，清理逻辑照常生效；
+ *  · 多条但间隔很近 → 是用户**真的建了两条**同名任务，各自独立成系列 ——
+ *    **不合并、不清理**（合并等于让其中一条消失，比"显示两条"严重得多）。
+ *
+ * 幂等：已经有 `seriesId` 的记录直接跳过；返回本次补了几条。
+ */
+export async function migrateFixedTaskSeries(): Promise<number> {
+  const st = useTaskStore.getState()
+  if (!st.loaded) await st.load()
+
+  const groups = new Map<string, Task[]>()
+  for (const t of useTaskStore.getState().items) {
+    if (!isFixedSchedule(t) || t.seriesId) continue
+    const key = fixedTaskIdentity(t)
+    const list = groups.get(key)
+    if (list) list.push(t)
+    else groups.set(key, [t])
+  }
+
+  let migrated = 0
+  for (const list of groups.values()) {
+    if (list.length === 1) {
+      await useTaskStore.getState().update(list[0].id, { seriesId: list[0].id })
+      migrated += 1
+      continue
+    }
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const seriesId = looksLikeChain(sorted) ? sorted[sorted.length - 1].id : null
+    for (const t of sorted) {
+      // seriesId 为 null 时按「各自独立」补：不给它们共用键，就不会被误合并
+      await useTaskStore.getState().update(t.id, { seriesId: seriesId ?? t.id })
+      migrated += 1
+    }
+  }
+  return migrated
+}
 
 export interface DuplicatePreview {
   /** 将被删除的记录数 */

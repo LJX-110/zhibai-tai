@@ -41,6 +41,19 @@ export interface Task {
    * ±1 换算，避免「0/1 错位」类 bug；存量任务无此字段时视为「非每周固定」。
    */
   weeklyDay?: number | null
+  /**
+   * 固定任务的**系列标识** —— 同一件"每期都要做"的事，各期共用这一个值。
+   *
+   * 为什么需要它：展示层要把「历史副本」与「当前这条」认成同一件事，早先靠
+   * 「锚点 + 标题」当身份，于是两条标题相同的固定任务会**互相吞掉**（只显示最新那条），
+   * 而改标题 / 改锚点日又会让旧记录**复活成重复条目** —— 两个方向都错。
+   *
+   * 现在：**新建的固定任务 seriesId = 自身 id**（永不变，与标题解耦），
+   * 于是「同名不再相吞、改名不再复活」。存量数据没有此字段，展示层退回按
+   * 「锚点 + 标题」推断（历史副本正是这样成组的），并由启动时的幂等迁移
+   * （`services/task-repair.ts` 的 `migrateFixedTaskSeries`）逐条补上。
+   */
+  seriesId?: string | null
   /** 关联项目 / 关联课程 */
   projectId?: ID | null
   courseId?: ID | null
@@ -160,6 +173,67 @@ export interface Course {
   note?: string
   createdAt: string
   /** 改名 / 调排课需要时间戳参与跨设备 LWW 判定 */
+  updatedAt?: string
+}
+
+/**
+ * 单次停课 —— 「这周的这节课不上」，不动课程本身的排课。
+ *
+ * ## 为什么需要它（这是一个真实的功能缺口）
+ * 此前要停一次课，只能**删掉整个时段**或**改周次**。于是遇到「下周那节课老师停一次」时，
+ * 只能做破坏性操作，而且**改完提醒照样响**（用户报过「课次取消当周仍触发通知」）。
+ * 根因不是提醒算错，而是**根本没有「取消某一次课」这个概念** —— 提醒无从知道这件事被取消了。
+ *
+ * ## 为什么按「课程 + 日期 + 开始时间」定位，而不是「第 N 周周几」
+ * 停课按**具体哪一天**发生（调课、放假、老师临时有事），而「第 N 周周几」是排课的抽象。
+ * 用日期定位才能表达「这周三停、下周三照常」，也不必担心学期起始周被改。
+ */
+export interface CourseCancellation {
+  id: ID
+  courseId: ID
+  /** 停课的那一天（yyyy-mm-dd） */
+  date: string
+  /** 停的是哪一节（同一天同课程可能有多节，故必须带开始时间） */
+  start: string
+  note?: string
+  createdAt: string
+  updatedAt?: string
+}
+
+/**
+ * 单次调课 —— 「这节课挪到别的时间上」，不动课程本身的排课。
+ *
+ * ## 与 CourseCancellation 为什么分两张表
+ * 两者是**不同的事**，不是同一件事的不同参数：
+ *  · 停课 = 这一次不上了 —— 原时间空掉，别处不多出东西；
+ *  · 调课 = 这一次换时间上 —— 原时间空掉 **且** 新时间多出一节。
+ * 合成一张表就得用"可选的目标字段"表达两种语义，每个读取方都要先判空才知道
+ * 自己面对的是哪一种；分表之后，取课点只需各问一句，判据不混。
+ *
+ * ## 定位方式刻意与停课一致
+ * `courseId + date + start` 定位**一次课**（`date` 存原定上课那天）。
+ * 同一次课不该既停又调，故界面上两个动作互斥（已调的那次只给「恢复」）。
+ *
+ * ## 为什么把 toEnd 也存下来
+ * 用户只挑"挪到几点开始"，时长理应沿用原来那节。存 toEnd 而不是读时去推算，
+ * 是为了让**读取方零计算**：取课点直接拿 toStart/toEnd 造时段，不必再去原课程里
+ * 反查那一节的时长（原时段可能已被编辑甚至删除，那时候就推不出来了）。
+ */
+export interface CourseReschedule {
+  id: ID
+  courseId: ID
+  /** 原定上课的那一天（yyyy-mm-dd） */
+  date: string
+  /** 原定的开始时间（HH:mm） */
+  start: string
+  /** 挪到哪一天（yyyy-mm-dd） */
+  toDate: string
+  /** 挪到几点开始（HH:mm） */
+  toStart: string
+  /** 挪过去之后的结束时间（HH:mm）—— 写库时按原时长算好 */
+  toEnd: string
+  note?: string
+  createdAt: string
   updatedAt?: string
 }
 
@@ -456,6 +530,8 @@ export type ActivityType =
   | 'project'
   | 'habit'
   | 'divination'
+  /** 术（AI 资源新增 / 天机提议采纳）—— 九板块里此前唯一没记流水的一个 */
+  | 'ai'
 
 export interface ActivityItem {
   id: ID
@@ -578,8 +654,10 @@ export interface AppSettingsRow {
  * 旧口径下境界由「今日总分」定阶（0-100），今天不记录就掉回最低阶，历史最高还只存本机
  * localStorage —— 本质是每日快照，谈不上"累积"。
  *
- * 现在：境界由**累计修为**定阶，只升不降。
- * 修为 = `total`（每日道行总分逐日累加）+ `bonus`（闭关等额外修为）。
+ * 现在：境界由**累计「功行」**定阶，只升不降（2026-09-22 重做，见 `services/merit.ts`）。
+ * 功行 = `total`（每日净行逐日累加）+ `bonus`（闭关等额外功行）。
+ * ⚠️ 字段名沿用 `total`/`bonus`（**语义已变，但结构未变，故存量数据零迁移**）：
+ * 旧值（改名前的修行总量）量级与新口径相当，直接沿用即可 —— 迁移时无需折算。
  *
  * ⚠️ 每日累加必须**只补差额**：`todayDate` 记日期、`todayCounted` 记今天已计入多少分。
  * 今天多次打开应用时只补 `今日总分 - 已计入` 的那部分，绝不重复累加；跨天则把
@@ -587,9 +665,9 @@ export interface AppSettingsRow {
  */
 export interface CultivationState {
   id: 'cultivation'
-  /** 已结算的每日道行累计（不含今天未结部分） */
+  /** 已结算的每日功行累计（不含今天未结部分）—— 即「功行」总量 */
   total: number
-  /** 闭关等额外修为（单独计，不参与每日对账） */
+  /** 闭关等额外功行（单独计，不参与每日对账） */
   bonus: number
   /** 今日已计入的日期（yyyy-mm-dd） */
   todayDate: string
@@ -597,10 +675,6 @@ export interface CultivationState {
   todayCounted: number
   /** 闭关次数 */
   seclusionCount: number
-  /** 历史最高境界（只升不降的展示依据；境界本身由 total+bonus 定阶） */
-  bestRank: number
-  bestTitle: string
-  bestAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -616,8 +690,18 @@ export interface PetState {
   id: 'pet'
   /** 宠物包围盒左上角坐标（视口 px；桌面壳里是工作区 px） */
   position: { x: number; y: number }
-  /** 好感度（加分规则在 P5 菜单/互动里，本轮只落初始值） */
+  /** 好感度（加分规则见 `services/pet/affinity.ts`：只升不降、不设门槛） */
   affinity: number
+  /**
+   * 好感度账本的**日期戳** —— 跨天时把下面的当日额度清零。
+   * 单独存一个日期而不是"上次加分时刻"：换设备/时区时日期比时刻可靠，
+   * 也不会因为"今天还没加分"而误判成隔了很久。
+   */
+  affinityDay?: string
+  /** 当日各事件已用额度（事件 → 次数）；跨天由 `affinityDay` 判定后清零 */
+  affinityUsed?: Record<string, number>
+  /** 已发过的一次性里程碑天数（7 / 30 …）—— 避免换设备后重复发 */
+  milestones?: number[]
   /**
    * 仅记录**跨会话保持**的状态（busy / 休眠 / 隐藏），普通动画切换不写 ——
    * 逐帧同步"当前动画"既让快照风暴，又在另一台设备打开时早已过期。

@@ -7,7 +7,8 @@
  * 由 `InspectorBody` 按 type 分发；每个详情**自己按 id 取实体**，取不到就显示空态
  * （与原实现的分支判断等价，且省掉了每次渲染都算的 8 次无用查找）。
  *
- * `useInspectorStore` 仍从本文件导出 —— 多处页面按这个路径引用，避免本轮扩大改动面。
+ * `useInspectorStore` 已迁到 `./inspector-store`（2026-09-23）：本文件此前把它再导出一遍，
+ * 既有组件又有 store 的导出会让 Fast Refresh 失去完整性；全仓引用已一并改到新路径。
  */
 import { useResolvedLayout } from '../../layouts/useResolvedLayout'
 import { OverlayScrim } from '../ui/OverlayScrim'
@@ -22,9 +23,6 @@ import { FinanceDetail } from './FinanceDetail'
 import { AiDetail } from './AiDetail'
 import { DivinationDetail } from './DivinationDetail'
 import { EmptyInspector } from './shared'
-
-export { useInspectorStore }
-export type { InspectorType } from './inspector-store'
 
 export function Inspector() {
   const { type, id, close } = useInspectorStore()

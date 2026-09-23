@@ -9,6 +9,7 @@ import { useNoteStore } from '../../stores/useNoteStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { Badge, Button } from '../ui'
 import { useInspectorStore } from './inspector-store'
+import { effectiveDone, liveFixedTasks } from '../../utils/id'
 import { ActionSection, EmptyInspector, InspectorShell } from './shared'
 
 export function ProjectDetail({ id, onClose }: { id: string; onClose: () => void }) {
@@ -23,7 +24,8 @@ export function ProjectDetail({ id, onClose }: { id: string; onClose: () => void
 
   if (!proj) return <EmptyInspector onClose={onClose} />
 
-  const projTasks = allTasks.filter((t) => t.projectId === id)
+  // 在世记录优先：隐藏的固定任务旧副本不该算进项目档案（计数与列表都会虚高）
+  const projTasks = liveFixedTasks(allTasks).filter((t) => t.projectId === id)
   const projNotes = allNotes.filter((n) => n.projectId === id)
   const projIntel = allIntel.filter((x) => x.projectId === id)
 
@@ -61,14 +63,14 @@ export function ProjectDetail({ id, onClose }: { id: string; onClose: () => void
       {/* 项目档案聚合：任务 / 笔记 / 情报 */}
       {(projTasks.length > 0 || projNotes.length > 0 || projIntel.length > 0) && (
         <div className="mt-5 border-t border-line pt-4">
-          <div className="mb-2 text-xs tracking-[0.2em] text-ink-faint">项目档案 · ARCHIVE</div>
+          <div className="mb-2 eyebrow text-ink-faint">项目档案 · ARCHIVE</div>
           {projTasks.length > 0 && (
             <div className="mb-2">
               <div className="mb-1 text-xs text-ink-muted">任务 {projTasks.length}</div>
               <div className="space-y-0.5">
                 {projTasks.slice(0, 4).map((t) => (
                   <button key={t.id} onClick={() => useInspectorStore.getState().open('task', t.id)} className="block w-full truncate text-left text-xs text-ink hover:text-cinnabar">
-                    {t.done ? '✓ ' : '· '}{t.title}
+                    {effectiveDone(t) ? '✓ ' : '· '}{t.title}
                   </button>
                 ))}
               </div>

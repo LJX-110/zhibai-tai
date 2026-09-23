@@ -11,7 +11,7 @@ import { useAIResourceStore } from '../../stores/useAIStore'
 import { useFollowStore } from '../../stores/useLifeStores'
 import { localAIService } from '../../services/ai/ai-service'
 import { recordActivity } from '../../services/activity'
-import { useToast } from '../ui/Toast'
+import { useToast } from '../ui/toast-store'
 import { Badge, Button } from '../ui'
 import { createId, friendlyDate, nowISO } from '../../utils/id'
 import { EmptyInspector, InspectorShell, MetaSection } from './shared'
@@ -152,7 +152,7 @@ export function IntelligenceDetail({ id, onClose }: { id: string; onClose: () =>
         </a>
       )}
       <div className="mt-5 border-t border-line pt-4">
-        <div className="mb-2 text-xs tracking-[0.2em] text-ink-faint">闭环 · CLOSED LOOP</div>
+        <div className="mb-2 eyebrow text-ink-faint">闭环 · CLOSED LOOP</div>
         <div className="grid grid-cols-2 gap-2">
           <Button size="sm" variant="secondary" onClick={summarize}>
             <Sparkles size={13} /> {intel.aiSummary ? '已有摘要' : 'AI 摘要'}

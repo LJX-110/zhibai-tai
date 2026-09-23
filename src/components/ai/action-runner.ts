@@ -9,10 +9,10 @@
  * 返回是否写入成功，供面板决定后续提示。
  */
 import type { TianjiActionPayload } from './action-protocol'
-import { actionHandlerFor } from './plugins'
+import { actionDefFor } from './plugins'
 
 export async function applyTianjiAction(a: TianjiActionPayload): Promise<boolean> {
-  const handler = actionHandlerFor(a.action)
-  if (!handler) return false
-  return handler(a)
+  const def = actionDefFor(a.action)
+  if (!def) return false
+  return def.run(a.fields)
 }

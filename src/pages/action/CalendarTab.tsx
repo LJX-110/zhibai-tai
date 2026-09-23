@@ -9,7 +9,7 @@ import { TaskItem } from '../../components/task/TaskItem'
 import { TaskEditor } from '../../components/task/TaskEditor'
 import { Calendar } from '../../components/ui/Calendar'
 import { Button, EmptyState, Section } from '../../components/ui'
-import { friendlyDate, todayISO } from '../../utils/id'
+import { effectiveDone, friendlyDate, liveFixedTasks, todayISO } from '../../utils/id'
 import { useTaskEditor } from './useTaskEditor'
 
 export function CalendarTab() {
@@ -21,15 +21,16 @@ export function CalendarTab() {
 
   const marks = useMemo(() => {
     const map: Record<string, number> = {}
-    for (const t of tasks) {
-      if (t.dueDate && !t.done) map[t.dueDate] = (map[t.dueDate] ?? 0) + 1
+    // 先取在世记录（已隐藏的历史副本还在库里，会照样在日历上打点）
+    for (const t of liveFixedTasks(tasks)) {
+      if (t.dueDate && !effectiveDone(t)) map[t.dueDate] = (map[t.dueDate] ?? 0) + 1
     }
     return map
   }, [tasks])
 
-  const dayTasks = tasks
+  const dayTasks = liveFixedTasks(tasks)
     .filter((t) => t.dueDate === selected)
-    .sort((a, b) => Number(a.done) - Number(b.done))
+    .sort((a, b) => Number(effectiveDone(a)) - Number(effectiveDone(b)))
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

@@ -13,7 +13,7 @@ import {
   fixedTaskIdentity,
   liveFixedTasks,
 } from '../utils/id'
-import { previewDuplicateFixedTasks, cleanupDuplicateFixedTasks } from '../services/task-repair'
+import { previewDuplicateFixedTasks, cleanupDuplicateFixedTasks, migrateFixedTaskSeries } from '../services/task-repair'
 import { useTaskStore } from '../stores/useTaskStore'
 import type { Task } from '../types/entities'
 
@@ -38,8 +38,8 @@ const task = (over: Partial<Task>): Task =>
   }) as Task
 
 /** 最新那条（旧副本的 id 用 a/b/c，按 createdAt 递增） */
-const weekly = (id: string, createdAt: string, done: boolean) =>
-  task({ id, title: '周日复盘', repeat: 'weekly', weeklyDay: 0, createdAt, done, completedAt: done ? createdAt : null })
+const weekly = (id: string, createdAt: string, done: boolean, over: Partial<Task> = {}) =>
+  task({ id, title: '周日复盘', repeat: 'weekly', weeklyDay: 0, createdAt, done, completedAt: done ? createdAt : null, ...over })
 
 describe('固定任务身份 fixedTaskIdentity', () => {
   it('同一锚点 + 同一标题 = 同一件事；锚点或标题不同就是两件事', () => {
@@ -102,6 +102,84 @@ describe('重复识别 findDuplicateFixedTasks', () => {
 
   it('没有重复时返回空（幂等：清理过再跑不会有动作）', () => {
     expect(findDuplicateFixedTasks([weekly('a', '2026-09-01T00:00:00.000Z', true)])).toEqual([])
+  })
+})
+
+describe('系列标识 seriesId：同名不再互吞、改名不再复活', () => {
+  it('同名但各有 seriesId 的两条固定任务**互不吞并**（两条都在）', () => {
+    // 旧实现按「锚点 + 标题」成组，这两条会被认成同一件事 → 只显示最新那条，另一条静默消失
+    const a = task({ id: 'same-a', title: '喝水', repeat: 'daily', seriesId: 'same-a', createdAt: '2026-09-01T00:00:00.000Z' })
+    const b = task({ id: 'same-b', title: '喝水', repeat: 'daily', seriesId: 'same-b', createdAt: '2026-09-02T00:00:00.000Z' })
+    expect(liveFixedTasks([a, b]).map((t) => t.id)).toEqual(['same-a', 'same-b'])
+  })
+
+  it('同系列的记录即使标题不同也只算一件事（改名不会让旧记录复活）', () => {
+    // 旧实现把"改了标题的旧副本"当成另一件事 → 重复条目又冒出来
+    const oldCopy = weekly('x-old', '2026-09-01T00:00:00.000Z', true, { seriesId: 'x-live' })
+    const live = weekly('x-live', '2026-09-08T00:00:00.000Z', false, { seriesId: 'x-live', title: '周日复盘（改过标题）' })
+    expect(liveFixedTasks([oldCopy, live]).map((t) => t.id)).toEqual(['x-live'])
+  })
+
+  it('存量数据（无 seriesId）仍按「锚点 + 标题」合并 —— 历史副本不会因此复活', () => {
+    const a = weekly('legacy-a', '2026-09-01T00:00:00.000Z', true)
+    const b = weekly('legacy-b', '2026-09-08T00:00:00.000Z', false)
+    expect(a.seriesId).toBeUndefined()
+    expect(liveFixedTasks([a, b]).map((t) => t.id)).toEqual(['legacy-b'])
+  })
+
+  it('清理分组也按系列键 —— 两条互不相干的同名任务不会被当成彼此的副本', () => {
+    const a = weekly('ind-a', '2026-09-01T00:00:00.000Z', true, { seriesId: 'ind-a' })
+    const b = weekly('ind-b', '2026-09-02T00:00:00.000Z', true, { seriesId: 'ind-b' })
+    expect(findDuplicateFixedTasks([a, b])).toEqual([])
+  })
+})
+
+describe('migrateFixedTaskSeries：给存量补系列标识', () => {
+  const seriesOf = (id: string) => useTaskStore.getState().items.find((t) => t.id === id)?.seriesId
+  const drop = async (...ids: string[]) => {
+    for (const id of ids) await useTaskStore.getState().remove(id)
+  }
+
+  it('单条存量 → seriesId = 自身 id', async () => {
+    await useTaskStore.getState().add(task({ id: 'mg-1', title: '晨间记录', repeat: 'daily' }))
+    await migrateFixedTaskSeries()
+    expect(seriesOf('mg-1')).toBe('mg-1')
+    await drop('mg-1')
+  })
+
+  it('副本链（相邻间隔 ≥18 小时）→ 整组共用一个 seriesId（= 最新那条）', async () => {
+    for (const t of [
+      weekly('ch-a', '2026-09-01T00:00:00.000Z', true),
+      weekly('ch-b', '2026-09-08T00:00:00.000Z', true),
+      weekly('ch-c', '2026-09-15T00:00:00.000Z', false),
+    ]) {
+      await useTaskStore.getState().add(t)
+    }
+    await migrateFixedTaskSeries()
+    expect([seriesOf('ch-a'), seriesOf('ch-b'), seriesOf('ch-c')]).toEqual(['ch-c', 'ch-c', 'ch-c'])
+    // 迁移后清理仍能认出前两条是副本（这正是「先迁移、再清理」的收益）
+    expect(findDuplicateFixedTasks(useTaskStore.getState().items).flatMap((g) => g.removable.map((t) => t.id)).sort())
+      .toEqual(['ch-a', 'ch-b'])
+    await drop('ch-a', 'ch-b', 'ch-c')
+  })
+
+  it('同一分钟内建的两条同名任务**不合并**（合并等于让其中一条消失）', async () => {
+    await useTaskStore.getState().add(weekly('near-x', '2026-09-01T00:00:00.000Z', false))
+    await useTaskStore.getState().add(weekly('near-y', '2026-09-01T00:00:30.000Z', false))
+    await migrateFixedTaskSeries()
+    expect(seriesOf('near-x')).toBe('near-x')
+    expect(seriesOf('near-y')).toBe('near-y')
+    // 两条都在世，且不会被清理当成彼此的副本
+    expect(liveFixedTasks(useTaskStore.getState().items).map((t) => t.id).sort()).toEqual(['near-x', 'near-y'])
+    expect(findDuplicateFixedTasks(useTaskStore.getState().items)).toEqual([])
+    await drop('near-x', 'near-y')
+  })
+
+  it('幂等：已有 seriesId 的记录不被改写', async () => {
+    await useTaskStore.getState().add(task({ id: 'idem-1', title: '定量', repeat: 'daily', seriesId: 'fixed-series' }))
+    await migrateFixedTaskSeries()
+    expect(seriesOf('idem-1')).toBe('fixed-series')
+    await drop('idem-1')
   })
 })
 

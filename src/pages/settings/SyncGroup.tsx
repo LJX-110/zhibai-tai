@@ -4,13 +4,15 @@
  * 从 SettingsPage 拆出。状态自洽：草稿、同步动作、冲突列表都在本文件内。
  * 说明小字按「只留核心信息」精简（用户反馈该板块小字冗长）。
  */
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import type { SyncInterval } from '../../stores/useSettingsStore'
 import { useConflictStore } from '../../stores/useConflictStore'
 import { runSync } from '../../sync/SyncService'
 import { encryptor } from '../../sync/encryption/encryption'
+import { isDirty, subscribeDirty } from '../../sync/auto'
+import { SYNC_TONE_CLASS, syncSummary } from '../../sync/status'
 import { Badge, Button, Collapse, Input, Section, useToast } from '../../components/ui'
 import { cn } from '../../utils/cn'
 
@@ -22,6 +24,16 @@ export function SyncGroup() {
   const [passwordDraft, setPasswordDraft] = useState('')
   const conflicts = useConflictStore((s) => s.items)
   const pendingConflicts = conflicts.filter((c) => !c.resolved)
+  const connected = Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
+  // 「有改动待同步」这个标记在 sync/auto 的模块作用域里，不是 store ——
+  // 只能用订阅方式取值（与 services/ai/health.ts 同一套路）
+  const dirty = useSyncExternalStore(subscribeDirty, isDirty, () => false)
+  const summary = syncSummary({
+    connected,
+    status: settings.syncStatus,
+    dirty,
+    error: settings.syncError,
+  })
 
   const doSync = async () => {
     setSyncing(true)
@@ -54,7 +66,6 @@ export function SyncGroup() {
   }
 
   // 同步只用「仓库完整」模式：仓库 + contents 权限 Token + Sync Password（数据加密密钥）
-  const connected = Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
 
   return (
     <Section
@@ -67,41 +78,20 @@ export function SyncGroup() {
         </Button>
       }
     >
-      {/* 状态行 */}
+      {/* 状态行：判据是「**是否已是最新**」，不是"上次尝试的结果" ——
+          上次同步成功但之后又改过数据，现在并不最新，显示「已同步」会误导用户。 */}
       <div className="mb-2 flex flex-wrap items-center gap-3 rounded-paper bg-raised px-3 py-2 text-sm">
-        <span
-          className={cn(
-            'inline-flex items-center gap-1.5',
-            settings.syncStatus === 'error'
-              ? 'text-cinnabar'
-              : settings.syncStatus === 'syncing'
-                ? 'text-bronze'
-                : settings.syncStatus === 'success'
-                  ? 'text-teal'
-                  : 'text-ink-muted',
-          )}
-        >
-          <span
-            className={cn(
-              'h-2 w-2 rounded-full',
-              !connected
-                ? 'bg-ink-faint'
-                : settings.syncStatus === 'syncing'
-                  ? 'bg-bronze animate-pulse'
-                  : settings.syncStatus === 'success'
-                    ? 'bg-teal'
-                    : settings.syncStatus === 'error'
-                      ? 'bg-cinnabar'
-                      : 'bg-ink-muted',
-            )}
-          />
-          {!connected ? '未连接' : settings.syncStatus === 'syncing' ? '同步中' : settings.syncStatus === 'success' ? '已同步' : settings.syncStatus === 'error' ? '同步失败' : '已连接'}
+        <span className={cn('inline-flex items-center gap-1.5', SYNC_TONE_CLASS[summary.tone].text)}>
+          <span className={cn('h-2 w-2 rounded-full', SYNC_TONE_CLASS[summary.tone].dot)} />
+          {summary.label}
         </span>
-        {settings.lastSyncedAt && (
-          <span className="tabular text-xs text-ink-faint">{settings.lastSyncedAt}</span>
+        {summary.detail && (
+          <span className={cn('text-xs', summary.tone === 'error' ? 'text-cinnabar' : 'text-ink-faint')}>
+            {summary.tone === 'error' ? `错误：${summary.detail}` : summary.detail}
+          </span>
         )}
-        {settings.syncError && (
-          <span className="text-xs text-cinnabar">错误：{settings.syncError}</span>
+        {settings.lastSyncedAt && (
+          <span className="tabular ml-auto text-xs text-ink-faint">上次 {settings.lastSyncedAt}</span>
         )}
       </div>
 

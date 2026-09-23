@@ -14,7 +14,7 @@ import { usePomodoroStore } from './usePomodoroStore'
 import { useProjectStore } from './useProjectStore'
 import { useSourceStore } from './useSourceStore'
 import { useActivityStore, useFollowStore } from './useLifeStores'
-import { useCourseStore, useExamStore, useHomeworkStore } from './useStudyStore'
+import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore, useExamStore, useHomeworkStore } from './useStudyStore'
 import { useTaskStore } from './useTaskStore'
 import { useWaterStore } from './useWaterStore'
 import { useCategoryStore } from './useCategoryStore'
@@ -35,6 +35,8 @@ export async function reloadAllStores(): Promise<void> {
     useWaterStore.getState().load(),
     usePomodoroStore.getState().load(),
     useCourseStore.getState().load(),
+    useCourseCancellationStore.getState().load(),
+    useCourseRescheduleStore.getState().load(),
     useHomeworkStore.getState().load(),
     useExamStore.getState().load(),
     useCollectionStore.getState().load(),

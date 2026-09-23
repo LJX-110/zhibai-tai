@@ -6,7 +6,35 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import type { SyncInterval } from '../stores/useSettingsStore'
 import { runSync } from './SyncService'
 
+/**
+ * 是否有本地改动尚未推送到远端。
+ *
+ * ⚠️ 这个标记此前是模块私有的，**界面看不到** —— 于是刚改完数据、还没同步时，
+ * 设置页照样显示「已同步」，用户以为已经是最新的（实际还差一次推送）。
+ * 现在对外暴露 + 可订阅，状态展示才有正确判据。
+ */
 let dirty = false
+const dirtyListeners = new Set<() => void>()
+
+function setDirty(v: boolean): void {
+  if (dirty === v) return
+  dirty = v
+  for (const fn of dirtyListeners) fn()
+}
+
+/** 是否有本地改动待同步（配合 subscribeDirty + useSyncExternalStore 使用） */
+export function isDirty(): boolean {
+  return dirty
+}
+
+/** 订阅「待同步」标记变化；返回取消订阅函数 */
+export function subscribeDirty(fn: () => void): () => void {
+  dirtyListeners.add(fn)
+  return () => {
+    dirtyListeners.delete(fn)
+  }
+}
+
 let timer: number | null = null
 let inFlight = false
 let failCount = 0
@@ -71,7 +99,7 @@ async function doSync() {
   inFlight = true
   try {
     await runSync()
-    dirty = false
+    setDirty(false)
     failCount = 0
   } catch {
     failCount++
@@ -86,7 +114,7 @@ async function doSync() {
 
 /** 数据变更时调用（store 工厂统一埋点） */
 export function notifyDataChanged(): void {
-  dirty = true
+  setDirty(true)
   const s = useSettingsStore.getState()
   if (!s.autoSync || s.syncInterval === 'manual') return
   schedule()

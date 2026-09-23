@@ -84,8 +84,14 @@ export function monthlyDoneThisMonth(
   now = new Date(),
 ): boolean {
   if (!t.done || !t.completedAt) return false
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  return t.completedAt.slice(0, 7) === ym
+  const completed = new Date(t.completedAt)
+  if (Number.isNaN(completed.getTime())) return false
+  /* ⚠️ 不能拿 `completedAt.slice(0, 7)` 直接比 —— 它是 **UTC** 串，
+   * 而 `now` 是本地时间。东八区每月 1 号 00:00-08:00 完成的任务，
+   * UTC 还停在上个月 → 会被判成「本月未完成」而**重新冒出**（静默复发，
+   * 与 dailyDoneToday 注释里警告的是同一个坑）。
+   * 与 weeklyDoneThisWeek / dailyDoneToday 统一：先转 Date，再取**本地**年月。 */
+  return completed.getFullYear() === now.getFullYear() && completed.getMonth() === now.getMonth()
 }
 
 /** 每月固定任务：今天是否到期（今天 = 每月 N 号） */
@@ -167,6 +173,30 @@ export function fixedDoneThisPeriod(
 }
 
 /**
+ * 「这条现在到底算不算已完成」—— 界面渲染唯一的判据。
+ *
+ * 为什么不能直接用 `task.done`：固定任务**只有一个 done 字段**，而它跨期不重置。
+ * 上周完成的「每日固定」，`done` 至今仍是 true，可本周明明还没做。
+ * 若界面直接读 `done`，就会出现「勾是勾上的、却仍然挂在今天要做的清单里」这种自相矛盾。
+ *
+ * 故：固定任务一律问「**本期**做没做」，普通任务才读 `done`。
+ * 完成/撤销也走同一判据（见 `useTaskActions` 的 `fixedDoneThisPeriod`），
+ * 显示与交互同源，不会各说各话。
+ */
+export function effectiveDone(
+  t: {
+    repeat: 'none' | 'daily' | 'weekly' | 'monthly'
+    monthlyDay?: number | null
+    weeklyDay?: number | null
+    done: boolean
+    completedAt?: string | null
+  },
+  now = new Date(),
+): boolean {
+  return isFixedSchedule(t) ? fixedDoneThisPeriod(t, now) : t.done
+}
+
+/**
  * 每日固定任务：今天是否已做（completedAt 落在**本地**今天）。
  *
  * ⚠️ `completedAt` 是 UTC ISO 串，别用 `slice(0, 10)` 直接当天数比 ——
@@ -183,10 +213,10 @@ export function dailyDoneToday(
 }
 
 /* ------------------------------------------------------------------ *
- * 固定任务的「历史重复」—— 旧版生成后继副本留下的后遗症
+ * 固定任务的「系列身份」—— 一期一条，跨期同一件事
  * ------------------------------------------------------------------ */
 
-/** 固定任务的逻辑身份：同一周期锚点 + 同一标题 = 同一件事 */
+/** 固定任务的逻辑身份：同一周期锚点 + 同一标题 = 同一件事（**仅存量数据用**，见下） */
 export function fixedTaskIdentity(t: {
   repeat: Repeat
   monthlyDay?: number | null
@@ -197,7 +227,33 @@ export function fixedTaskIdentity(t: {
 }
 
 /**
- * 只保留固定任务里的「在世」记录：同一逻辑身份取 `createdAt` 最新的一条。
+ * 固定任务的**系列键** —— 「这几条记录是不是同一件事」的唯一判据。
+ *
+ * 取值优先级：
+ *  1. `seriesId`（新建数据，= 创建时那条自己的 id）—— **与标题解耦**，永远稳定；
+ *  2. 退回「锚点 + 标题」推断（**存量数据**，旧版生成的后继副本正是这样成组的）。
+ *
+ * ⚠️ 为什么要分两层：早先只有第 2 层，于是两个方向都错 ——
+ *  · 两条标题相同的固定任务被认成同一件事，只显示最新那条，另一条**静默消失**；
+ *  · 改标题 / 改「每月 N 号」会把它认成新的一件事，旧记录**复活成重复条目**。
+ * 第 1 层把新数据与标题彻底解耦，两个问题一起消失；存量由启动时的幂等迁移
+ * （`services/task-repair.ts` 的 `migrateFixedTaskSeries`）逐条补上 seriesId，
+ * 补完即自动走第 1 层 —— 迁移没跑到之前，第 2 层保证历史副本仍被正确合并。
+ *
+ * 前缀 `legacy:` 保证退路产生的键**永远不会撞上真实 id**（id 是 uuid）。
+ */
+function seriesKeyOf(t: {
+  repeat: Repeat
+  monthlyDay?: number | null
+  weeklyDay?: number | null
+  title: string
+  seriesId?: string | null
+}): string {
+  return t.seriesId ?? `legacy:${fixedTaskIdentity(t)}`
+}
+
+/**
+ * 只保留固定任务里的「在世」记录：同一系列取 `createdAt` 最新的一条。
  *
  * **为什么必须这样取**
  * 旧版完成固定任务时会**额外生成一条后继副本**（同内容、新 id、未完成），而"本期已做"
@@ -209,6 +265,8 @@ export function fixedTaskIdentity(t: {
  *
  * 顺序依据：后继副本一定是"更晚创建"的，所以 createdAt 最大者即当前这一条。
  * 非固定任务原样返回（它们本来就是一条记录对应一次完成）。
+ *
+ * **系列键见 `seriesKeyOf`**：新数据按 seriesId（与标题无关），存量按「锚点 + 标题」。
  */
 export function liveFixedTasks<T extends {
   repeat: Repeat
@@ -216,6 +274,7 @@ export function liveFixedTasks<T extends {
   weeklyDay?: number | null
   title: string
   createdAt: string
+  seriesId?: string | null
 }>(tasks: T[]): T[] {
   const newest = new Map<string, T>()
   const out: T[] = []
@@ -224,7 +283,7 @@ export function liveFixedTasks<T extends {
       out.push(t)
       continue
     }
-    const key = fixedTaskIdentity(t)
+    const key = seriesKeyOf(t)
     const prev = newest.get(key)
     if (!prev) {
       newest.set(key, t)
@@ -241,11 +300,12 @@ export function liveFixedTasks<T extends {
   return out
 }
 
-/** 一组同身份的历史重复 */
+/** 一组同系列的历史重复 */
 export interface DuplicateFixedGroup<T> {
+  /** 系列键（见 `seriesKeyOf`） */
   identity: string
   title: string
-  /** 该身份下的全部记录（按 createdAt 升序） */
+  /** 该系列下的全部记录（按 createdAt 升序） */
   records: T[]
   /** 建议删除的历史副本：**仅限已完成的旧副本** */
   removable: T[]
@@ -256,6 +316,9 @@ export interface DuplicateFixedGroup<T> {
  *
  * ⚠️ **只把 `done` 的旧副本列为可删**：未完成的记录可能是用户真正还没做的事，
  * 删掉等于凭空抹掉一条待办。宁可少清，不可误删。
+ *
+ * 分组按**系列键**（`seriesKeyOf`）而非裸的「锚点 + 标题」—— 有了 seriesId 之后，
+ * 两条**互不相干**的同名固定任务不会被凑成一组，清理也就不会误判其中一条为"副本"。
  */
 export function findDuplicateFixedTasks<T extends {
   id: string
@@ -265,11 +328,12 @@ export function findDuplicateFixedTasks<T extends {
   title: string
   createdAt: string
   done: boolean
+  seriesId?: string | null
 }>(tasks: T[]): DuplicateFixedGroup<T>[] {
   const groups = new Map<string, T[]>()
   for (const t of tasks) {
     if (!isFixedSchedule(t)) continue
-    const key = fixedTaskIdentity(t)
+    const key = seriesKeyOf(t)
     const list = groups.get(key)
     if (list) list.push(t)
     else groups.set(key, [t])

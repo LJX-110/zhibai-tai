@@ -127,20 +127,20 @@ export function DayanTab() {
                 )}
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-tile border border-cinnabar/40 bg-paper/50 p-3 text-center">
-                    <div className="text-xs tracking-[0.2em] text-ink-faint">本卦</div>
+                    <div className="eyebrow text-ink-faint">本卦</div>
                     <div className="scribal-title mt-1 text-xl text-ink">{dyDone.benGua.name}</div>
                     <div className="mt-0.5 text-xs text-ink-faint">{dyDone.benGua.xiang}</div>
                     <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-muted">{dyDone.benGua.guoci}</p>
                   </div>
                   <div className="rounded-tile border border-line bg-paper/50 p-3 text-center flex flex-col items-center justify-center">
-                    <div className="text-xs tracking-[0.2em] text-ink-faint">动爻</div>
+                    <div className="eyebrow text-ink-faint">动爻</div>
                     <div className="scribal-title mt-1 text-xl text-ink">
                       {dyDone.dongYao ? yaoTitle(dyDone.dongYao, dyDone.lines[dyDone.dongYao - 1].value) : '静'}
                     </div>
                     <div className="mt-0.5 text-xs text-ink-faint">{dyDone.dongYao ? '老阴/老阳' : '六爻安静'}</div>
                   </div>
                   <div className="rounded-tile border border-gold-btn/40 bg-paper/50 p-3 text-center">
-                    <div className="text-xs tracking-[0.2em] text-ink-faint">变卦</div>
+                    <div className="eyebrow text-ink-faint">变卦</div>
                     <div className="scribal-title mt-1 text-xl text-ink">{dyDone.bianGua?.name ?? '—'}</div>
                     <div className="mt-0.5 text-xs text-ink-faint">{dyDone.bianGua?.xiang ?? '六爻不变'}</div>
                   </div>

@@ -22,7 +22,8 @@ import { Ring } from '../../components/ui/Ring'
 
 import { parsePositiveAmount } from '../../utils/validate'
 
-import { SummaryCell, useMonthSummary } from './shared'
+import { SummaryCell } from './shared'
+import { money, useMonthSummary } from './summary'
 
 import {
   Button,
@@ -32,8 +33,6 @@ import {
   useToast,
 } from '../../components/ui'
 
-const money = (n: number) =>
-  n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function StatsTab() {
   const records = useFinanceStore((s) => s.items)

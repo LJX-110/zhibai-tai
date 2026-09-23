@@ -9,12 +9,18 @@
          180x180 为 iOS 规范尺寸，专用图由 scripts/generate_maskable_icon.py 生成 -->
     <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#2e5a8c" />
+    <!-- 状态栏 / 标题栏配色。**必须与侧栏同色**，否则深色主题下会出现"顶部没铺满"的色带。
+         这里写深色值（应用默认主题）只是占位：下面的预判脚本会**在首次绘制前**按真实主题改写它，
+         React 接管后由 ThemeApplier 持续同步（单一事实源见 src/app/theme.ts）。 -->
+    <meta name="theme-color" content="#5c1f1a" />
     <!-- iOS：只靠 manifest 的 display:standalone，旧版安装后会带地址栏打开、不像 App；
          这三个 meta 是 iOS 的对应约定（全屏 / 主屏显示名 / 状态栏样式） -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="知白台" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- black-translucent（**不是 default**）：default 会让 iOS 保留状态栏、内容从状态栏下方开始，
+         于是 `viewport-fit=cover` 白开了，顶栏上方永远留一条空白；
+         black-translucent 把内容顶到屏幕边缘，再由顶栏自己用 env(safe-area-inset-top) 让开文字。 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="description" content="知白台 — 知其白，守其黑 · 个人效率系统" />
     <!-- manifest 由 vite-plugin-pwa 注入（感知 base，子路径部署可用）；
          此前手写 /manifest.webmanifest 在 GitHub Pages 子路径下 404，
@@ -37,6 +43,11 @@
           dark = window.matchMedia('(prefers-color-scheme: dark)').matches
         }
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+        /* 状态栏配色必须与 data-theme 同步改写：meta 里写死的那个值只适用于单一主题，
+           深色主题（应用默认）下状态栏会是错色，表现为顶部一条不属于应用的色带。
+           取值与 src/app/theme.ts 的 THEME_COLOR 一致（这里没法 import，故各写一份）。 */
+        var meta = document.querySelector('meta[name="theme-color"]')
+        if (meta) meta.setAttribute('content', dark ? '#5c1f1a' : '#2e5a8c')
       })()
       /* 记录「首帧绘制起点」：静态启动屏的进度条动画从这里开始计时（见 .boot-fill）。
          React 接管后用这个时间点给进度条补一个负的 animation-delay，使进度从静态占位

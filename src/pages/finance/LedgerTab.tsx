@@ -18,7 +18,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useFinanceStore, usePurchaseStore } from '../../stores/useFinanceStore'
-import { useInspectorStore } from '../../components/inspector/Inspector'
+import { useInspectorStore } from '../../components/inspector/inspector-store'
 import { useResolvedLayout } from '../../layouts/useResolvedLayout'
 import { FINANCE_CATEGORIES, categoryLabel } from '../../services/finance'
 import { recordActivity } from '../../services/activity'
@@ -28,13 +28,8 @@ import { createId, todayISO, nowISO } from '../../utils/id'
 
 import { parsePositiveAmount } from '../../utils/validate'
 import { cn } from '../../utils/cn'
-import {
-  FinanceRow,
-  SummaryCell,
-  useMonthSummary,
-  type LedgerFilter,
-  LEDGER_FILTERS,
-} from './shared'
+import { FinanceRow, SummaryCell } from './shared'
+import { LEDGER_FILTERS, money, useMonthSummary, type LedgerFilter } from './summary'
 
 import {
   Button,
@@ -50,8 +45,6 @@ import {
   useToast,
 } from '../../components/ui'
 
-const money = (n: number) =>
-  n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function LedgerTab() {
   const records = useFinanceStore((s) => s.items)

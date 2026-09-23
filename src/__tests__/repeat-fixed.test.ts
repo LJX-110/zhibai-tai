@@ -127,6 +127,19 @@ describe('每月固定 monthlyDueToday / monthlyDoneThisMonth', () => {
     expect(monthlyDoneThisMonth({ done: true, completedAt: '2026-08-31T10:00:00Z' }, now)).toBe(false)
     expect(monthlyDoneThisMonth({ done: true, completedAt: '2026-10-01T10:00:00Z' }, now)).toBe(false)
   })
+
+  it('每月 1 号凌晨完成也算本月 —— completedAt 是 UTC 串，不能直接切年月', () => {
+    /* 本地 9/1 00:30（东八区）存库是 2026-08-31T16:30Z，`slice(0,7)` 会得到 "2026-08"，
+     * 于是任务被判成「本月未完成」而**重新冒出** —— 与 dailyDoneToday 注释里
+     * 警告的是同一个坑，此前月度这一处漏了。 */
+    const at = new Date(2026, 8, 1, 0, 30) // 本地 2026-09-01 00:30
+    expect(monthlyDoneThisMonth({ done: true, completedAt: at.toISOString() }, at)).toBe(true)
+  })
+
+  it('每月最后一天深夜完成也算本月（同一边界的另一侧）', () => {
+    const at = new Date(2026, 8, 30, 23, 30) // 本地 2026-09-30 23:30
+    expect(monthlyDoneThisMonth({ done: true, completedAt: at.toISOString() }, at)).toBe(true)
+  })
 })
 
 describe('每周固定 weeklyDueToday / weeklyDoneThisWeek', () => {

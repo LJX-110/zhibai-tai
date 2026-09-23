@@ -4,7 +4,7 @@
  */
 import { useEffect } from 'react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
-import { setAmbient } from '../../services/sound'
+import { setAmbient } from '../../services/ambient'
 
 export function AmbientSound() {
   const ambientEnabled = useSettingsStore((s) => s.ambientEnabled)

@@ -190,7 +190,7 @@ export function Onboarding() {
               </p>
               {/* 快捷键卡：命令面板是效率核心，不做引导几乎无人发现 */}
               <div className="mx-auto mt-6 max-w-[300px] rounded-paper border border-line bg-raised p-3 text-left">
-                <div className="mb-2 text-xs tracking-[0.2em] text-ink-faint">键盘快捷方式</div>
+                <div className="mb-2 eyebrow text-ink-faint">键盘快捷方式</div>
                 {([
                   ['Ctrl + K', '呼出命令面板：新建 / 跳转 / 抓取'],
                   ['/', '任意页面快速全局搜索'],

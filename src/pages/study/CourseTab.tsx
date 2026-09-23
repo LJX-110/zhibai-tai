@@ -14,7 +14,7 @@ import {
 import { useCourseStore } from '../../stores/useStudyStore'
 import { usePomodoroStore } from '../../stores/usePomodoroStore'
 
-import { useInspectorStore } from '../../components/inspector/Inspector'
+import { useInspectorStore } from '../../components/inspector/inspector-store'
 
 import {
   Badge,

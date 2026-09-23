@@ -18,7 +18,7 @@ import {
   Section,
 } from '../../components/ui'
 
-import { todayISO } from '../../utils/id'
+import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
 
 import type { PomodoroSession } from '../../types/entities'
 import { cn } from '../../utils/cn'
@@ -64,7 +64,7 @@ export function PomodoroTab() {
           <div className={cn('tabular display text-5xl font-semibold tabular-nums', mode === 'focus' ? 'text-ink' : 'text-ink-muted')}>
             {mm}:{ss}
           </div>
-          <div className="mt-1 text-xs tracking-[0.3em] text-ink-faint">
+          <div className="mt-1 eyebrow text-ink-faint">
             {mode === 'focus' ? '专注' : '休整'} · {mode === 'focus' ? focusMin : breakMin} 分钟
           </div>
           {/* 关联选择（仅专注开始前，紧凑双层选择替代 pill+下拉） */}
@@ -90,7 +90,9 @@ export function PomodoroTab() {
                 >
                   <option value="">选择{assocLabel}</option>
                   {assoc === 'task' &&
-                    tasks.filter((t) => !t.done).map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+                    liveFixedTasks(tasks)
+                      .filter((t) => !effectiveDone(t))
+                      .map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
                   {assoc === 'course' &&
                     courses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   {assoc === 'project' &&

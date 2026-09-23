@@ -1,15 +1,17 @@
 /**
- * 行 · 待办页签 —— 今日快捷添加 + 未完成清单 + 每月/每周固定提醒
+ * 行 · 待办页签 —— 今日快捷添加 + 未完成清单（按急/中/缓）+ 每日/每周/每月固定
  * （合并原「今日」页签）
  */
 import { useState } from 'react'
-import { CalendarDays, CheckCircle2, Plus, Search } from 'lucide-react'
+import { CheckCircle2, Plus, Search } from 'lucide-react'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { useTaskActions } from '../../hooks/useTaskActions'
 import { TaskItem } from '../../components/task/TaskItem'
+import { byPriorityThenDue } from '../../components/task/shared'
+import { FixedGroup } from './FixedGroup'
 import { TaskEditor } from '../../components/task/TaskEditor'
 import { Button, Input, Section } from '../../components/ui'
-import { createId, dailyDoneToday, diffDays, isFixedSchedule, liveFixedTasks, monthlyDoneThisMonth, monthlyDueToday, weeklyDoneThisWeek, weeklyDueToday, todayISO, nowISO } from '../../utils/id'
+import { createId, diffDays, effectiveDone, isFixedSchedule, liveFixedTasks, monthlyDueToday, weeklyDueToday, todayISO, nowISO } from '../../utils/id'
 import type { Task } from '../../types/entities'
 import { useTaskEditor } from './useTaskEditor'
 
@@ -19,9 +21,6 @@ export function TodoTab() {
   const editor = useTaskEditor()
   const [query, setQuery] = useState('')
   const [showDone, setShowDone] = useState(false)
-  const [showDaily, setShowDaily] = useState(false)
-  const [showMonthly, setShowMonthly] = useState(false)
-  const [showWeekly, setShowWeekly] = useState(false)
   const [quick, setQuick] = useState('')
   const today = todayISO()
 
@@ -55,41 +54,55 @@ export function TodoTab() {
     t.tags.some((tg) => tg.toLowerCase().includes(q)) ||
     (t.dueDate ?? '').includes(q)
 
-  // 未完成：普通任务（非固定三式）按日期排序。
+  // 未完成：普通任务（非固定三式）按「急 → 中 → 缓」排，同档再看到期日。
   // 固定任务（每日/每周/每月）有自己的分组，混进主清单会出现同一件事两处显示。
   const open = tasks
     .filter((t) => !t.done && !isFixedSchedule(t) && match(t))
-    .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'))
+    .sort(byPriorityThenDue)
 
   // ⚠️ 固定任务必须先在「在世记录」上取，再判本期做没做。
   // 旧版完成固定任务会生成后继副本，历史副本每周都会被判成"本期未做"而重新冒出，
-  // 一周多一条 —— 生成已堵住，但存量副本还在，展示层只认 createdAt 最新的那条。
+  // 一周多一条 —— 生成已堵住，但存量副本还在，展示层只认同系列里 createdAt 最新的那条
+  // （系列键 = seriesId，存量退回「锚点 + 标题」，见 utils/id.ts 的 seriesKeyOf）。
   const liveFixed = liveFixedTasks(tasks)
 
-  // 每日固定：今天还没做（completedAt 是昨天或更早就算没做），按创建时间排序
+  /* 本期已做的固定任务：**留在本组里打勾**，不搬去「已完成」。两个理由：
+     ① 搬走就得在两处之间来回找同一件事；搬走的当下又没地方撤销（勾选在「已完成」里）；
+     ② 下期它回到本组时会与「已完成」里那条长期并列 —— 同一件事两处显示。
+     故这里的判据用 effectiveDone（固定任务问「本期」，普通任务读 done）。 */
+  const fixedDone = new Set(liveFixed.filter((t) => effectiveDone(t)).map((t) => t.id))
+  /** 组内排序：未做完的在前；同档保持调用方给的次序（已完成的沉到组尾，而非消失） */
+  const byFixedOrder =
+    (cmp: (a: Task, b: Task) => number) =>
+    (a: Task, b: Task) =>
+      Number(fixedDone.has(a.id)) - Number(fixedDone.has(b.id)) || cmp(a, b)
+
+  // 每日固定：按创建时间排序
   const daily = liveFixed
-    .filter((t) => t.repeat === 'daily' && !dailyDoneToday(t) && match(t))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .filter((t) => t.repeat === 'daily' && match(t))
+    .sort(byFixedOrder((a, b) => a.createdAt.localeCompare(b.createdAt)))
 
-  // 每月固定：本月未完成，按 N 号排序（作为提醒展示）
+  // 每月固定：按 N 号排序（作为提醒展示）
   const monthly = liveFixed
-    .filter((t) => t.monthlyDay != null && !monthlyDoneThisMonth(t) && match(t))
-    .sort((a, b) => (a.monthlyDay ?? 31) - (b.monthlyDay ?? 31))
+    .filter((t) => t.monthlyDay != null && match(t))
+    .sort(byFixedOrder((a, b) => (a.monthlyDay ?? 31) - (b.monthlyDay ?? 31)))
 
-  // 每周固定：本周未完成，按 周日→周六 排序（与每月固定同一呈现位置）
+  // 每周固定：按 周日→周六 排序（与每月固定同一呈现位置）
   const weekly = liveFixed
-    .filter((t) => t.weeklyDay != null && !weeklyDoneThisWeek(t) && match(t))
-    .sort((a, b) => (a.weeklyDay ?? 6) - (b.weeklyDay ?? 6))
+    .filter((t) => t.weeklyDay != null && match(t))
+    .sort(byFixedOrder((a, b) => (a.weeklyDay ?? 6) - (b.weeklyDay ?? 6)))
 
+  // 「已完成」列表**只收普通任务**：固定任务的完成态由它自己的分组承担（见上），
+  // 否则上一期完成的固定任务会永远挂在这里，与本期分组并列显示。
   const done = tasks
-    .filter((t) => t.done && match(t))
+    .filter((t) => t.done && !isFixedSchedule(t) && match(t))
     .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
 
   const overdueCount = open.filter((t) => t.dueDate && diffDays(t.dueDate) < 0).length
-  // 每日固定没有"哪天到期"一说 —— 今天没做就是今天的事
-  const todayDaily = daily
-  const todayMonthly = monthly.filter((t) => monthlyDueToday(t))
-  const todayWeekly = weekly.filter((t) => weeklyDueToday(t))
+  // 「今日固定」提醒卡只报**还没做**的 —— 做掉了就不该再喊
+  const todayDaily = daily.filter((t) => !fixedDone.has(t.id))
+  const todayMonthly = monthly.filter((t) => !fixedDone.has(t.id) && monthlyDueToday(t))
+  const todayWeekly = weekly.filter((t) => !fixedDone.has(t.id) && weeklyDueToday(t))
 
   return (
     <Section
@@ -133,6 +146,15 @@ export function TodoTab() {
           <span className="mono-meta ml-auto shrink-0 text-cinnabar">每日提醒</span>
         </div>
       )}
+      {todayWeekly.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 rounded-tile border border-cinnabar/30 bg-cinnabar/5 px-3 py-2">
+          <span className="h-1.5 w-1.5 shrink-0 rotate-45 bg-cinnabar" />
+          <span className="min-w-0 flex-1 text-sm text-ink">
+            今日固定 · {todayWeekly.map((t) => t.title).join('、')}
+          </span>
+          <span className="mono-meta ml-auto shrink-0 text-cinnabar">每周提醒</span>
+        </div>
+      )}
       {todayMonthly.length > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-tile border border-cinnabar/30 bg-cinnabar/5 px-3 py-2">
           <span className="h-1.5 w-1.5 shrink-0 rotate-45 bg-cinnabar" />
@@ -142,15 +164,6 @@ export function TodoTab() {
             今日固定 · {todayMonthly.map((t) => t.title).join('、')}
           </span>
           <span className="mono-meta ml-auto shrink-0 text-cinnabar">每月提醒</span>
-        </div>
-      )}
-      {todayWeekly.length > 0 && (
-        <div className="mb-3 flex items-center gap-2 rounded-tile border border-cinnabar/30 bg-cinnabar/5 px-3 py-2">
-          <span className="h-1.5 w-1.5 shrink-0 rotate-45 bg-cinnabar" />
-          <span className="min-w-0 flex-1 text-sm text-ink">
-            今日固定 · {todayWeekly.map((t) => t.title).join('、')}
-          </span>
-          <span className="mono-meta ml-auto shrink-0 text-cinnabar">每周提醒</span>
         </div>
       )}
       {overdueCount > 0 && (
@@ -176,95 +189,12 @@ export function TodoTab() {
         <p className="py-3 text-xs text-ink-faint">今日暂无待办，可点右上「添加」</p>
       )}
 
-      {/* 每日固定（三式里最高频，故排最前）：今天没做就一直在，做完即从清单消失 */}
-      {daily.length > 0 && (
-        <div className="mt-6 border-t border-line pt-3">
-          <button
-            onClick={() => setShowDaily((v) => !v)}
-            className="flex w-full items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink"
-            aria-expanded={showDaily}
-          >
-            <span className="flex items-center gap-1.5">
-              <CalendarDays size={14} />
-              每日固定 {daily.length} 项
-            </span>
-            <span className="ml-auto text-xs">{showDaily ? '收起' : '展开'}</span>
-          </button>
-          {showDaily && (
-            <div className="mt-2">
-              {daily.map((t) => (
-                <TaskItem
-                  key={t.id}
-                  task={t}
-                  onToggle={actions.toggle}
-                  onEdit={editor.openEdit}
-                  onDelete={actions.remove}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 每月固定提醒（次级：折叠展开，不占主列表视觉权重） */}
-      {monthly.length > 0 && (
-        <div className="mt-6 border-t border-line pt-3">
-          <button
-            onClick={() => setShowMonthly((v) => !v)}
-            className="flex w-full items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink"
-            aria-expanded={showMonthly}
-          >
-            <span className="flex items-center gap-1.5">
-              <CalendarDays size={14} />
-              每月固定 {monthly.length} 项
-            </span>
-            <span className="ml-auto text-xs">{showMonthly ? '收起' : '展开'}</span>
-          </button>
-          {showMonthly && (
-            <div className="mt-2">
-              {monthly.map((t) => (
-                <TaskItem
-                  key={t.id}
-                  task={t}
-                  onToggle={actions.toggle}
-                  onEdit={editor.openEdit}
-                  onDelete={actions.remove}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 每周固定提醒（与每月固定同一处理：次级折叠，不占主列表视觉权重） */}
-      {weekly.length > 0 && (
-        <div className="mt-6 border-t border-line pt-3">
-          <button
-            onClick={() => setShowWeekly((v) => !v)}
-            className="flex w-full items-center gap-2 text-sm text-ink-muted transition-colors hover:text-ink"
-            aria-expanded={showWeekly}
-          >
-            <span className="flex items-center gap-1.5">
-              <CalendarDays size={14} />
-              每周固定 {weekly.length} 项
-            </span>
-            <span className="ml-auto text-xs">{showWeekly ? '收起' : '展开'}</span>
-          </button>
-          {showWeekly && (
-            <div className="mt-2">
-              {weekly.map((t) => (
-                <TaskItem
-                  key={t.id}
-                  task={t}
-                  onToggle={actions.toggle}
-                  onEdit={editor.openEdit}
-                  onDelete={actions.remove}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* 固定任务三式，顺序固定为「每日 → 每周 → 每月」：
+          每日最高频所以最前；周与月的先后按人对"近期"的直觉排（周在下、月更远）。
+          本期已做的留在组内打勾，组头显示「已完成 N」—— 它们不进「已完成」列表。 */}
+      <FixedGroup label="每日固定" tasks={daily} doneCount={daily.length - todayDaily.length} onToggle={actions.toggle} onEdit={editor.openEdit} onDelete={actions.remove} />
+      <FixedGroup label="每周固定" tasks={weekly} doneCount={weekly.length - todayWeekly.length} onToggle={actions.toggle} onEdit={editor.openEdit} onDelete={actions.remove} />
+      <FixedGroup label="每月固定" tasks={monthly} doneCount={monthly.length - todayMonthly.length} onToggle={actions.toggle} onEdit={editor.openEdit} onDelete={actions.remove} />
 
       {/* 已完成：并入「待办」同一节，弱化为一行小字入口（不抢视觉权重，需要时展开） */}
       <div className="mt-3">

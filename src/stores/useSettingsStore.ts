@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutMode } from './useAppStore'
+import type { NotifySource } from '../services/notify-sources'
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -57,6 +58,18 @@ export interface SettingsState {
   quietEnabled: boolean
   quietFrom: string
   quietTo: string
+  /**
+   * **每源开关**：键为 `NotifySource`，缺省（无此项）视为**开启**。
+   *
+   * 为什么要有它：此前只有一个总开关，想不要"喝水提醒"就得把全部提醒关掉。
+   * 粒度定义见 `services/notify-sources.ts`；投递时由
+   * `components/notification/deliver.ts` 统一查一次。
+   *
+   * ⚠️ **刻意不进同步白名单**（与免打扰时段同类，属设备级偏好）：
+   * 它是对象，而快照是**行级 LWW** —— 两台设备各关一项会互相覆盖，
+   * 结果就是"我明明关过它怎么又开了"。总开关与浏览器通知才是所有设备都该遵守的。
+   */
+  notifySources: Partial<Record<NotifySource, boolean>>
 
   /** AI Core：Provider 配置（Key 加密存储，绝不硬编码） */
   aiProvider: 'local' | 'remote'
@@ -124,6 +137,8 @@ export const useSettingsStore = create<SettingsState>()(
       quietEnabled: false,
       quietFrom: '23:00',
       quietTo: '07:00',
+      // 空对象 = 全部开启；只有用户显式关掉某项才会写入键
+      notifySources: {},
       aiProvider: 'local',
       aiBaseUrl: 'https://apihub.agnes-ai.com/v1',
       aiModel: 'agnes-2.5-flash',

@@ -60,19 +60,25 @@ export function MobileHeader() {
       // 同步成功静默（顶栏圆点变绿即反馈），失败才弹
       await runSync()
     } catch (e) {
-      toast(`同步失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+      // 传 source：顶栏同步是"就地报错"，不走投递管线，但仍该进「最近通知」——
+      // 用户当时在别的页面、或这条一闪而过，回看时才有迹可循
+      toast(`同步失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger', undefined, 'sync')
     } finally {
       setSyncing(false)
     }
   }
 
   return (
-    <header className="sticky top-0 z-[var(--z-header)] flex items-center justify-between border-b border-white/10 bg-sidebar/97 px-4 pb-2 pt-3 backdrop-blur-sm">
+    /* pt 用 calc 叠加 env(safe-area-inset-top)：安装成 PWA 后（black-translucent）
+       内容顶到屏幕边缘，顶栏背景要从 y=0 起铺满，但**文字**必须让开状态栏（时间/电量）。
+       背景铺满、内容让位 —— 两者靠 padding 区分，不能只做其一。
+       左右同理：横屏刘海会压住 px-4 的 16px，故取 max(原值, 安全区)。 */
+    <header className="sticky top-0 z-[var(--z-header)] flex items-center justify-between border-b border-white/10 bg-sidebar/97 pb-2 pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(0.75rem+env(safe-area-inset-top,0px))] backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
-        <span className="tabular text-xs tracking-[0.2em] text-on-sidebar-muted">{current.index}</span>
+        <span className="tabular eyebrow text-on-sidebar-muted">{current.index}</span>
         <div>
           <div className="display text-lg font-semibold tracking-wide text-on-sidebar">{current.label}</div>
-          <div className="text-xs tracking-[0.2em] text-on-sidebar-muted">{current.sub}</div>
+          <div className="eyebrow text-on-sidebar-muted">{current.sub}</div>
         </div>
       </div>
       <div className="flex items-center gap-0.5 text-on-sidebar-muted">
@@ -133,11 +139,18 @@ export function MobileNav() {
 
   return (
     <>
+      {/* ⚠️ 高度必须是 `60px + 底部安全区`，不能只写 60px：
+          底栏同时带 `pb-safe`（padding-bottom: env(safe-area-inset-bottom)），而 Tailwind
+          preflight 给所有元素设了 box-sizing: border-box —— `height: 60px` 会让那 34px
+          的 padding **吃掉**底栏自己的内容区（5 个 44px 的格子只剩 26px 可用），
+          而内容区却按 `60 + safe + 24` 预留（见 MobileWorkspace / Toast / InstallPrompt），
+          于是底栏上方凭空多出一条安全区高度的空白。
+          写成 calc 后：外框 = 60 + safe，内容区恒为 60，四处预算全部对齐。 */}
       <nav
         className="fixed inset-x-0 bottom-0 z-[var(--z-nav)] border-t border-white/10 bg-sidebar/97 backdrop-blur-sm pb-safe"
-        style={{ height: 'var(--mobile-nav-h)' }}
+        style={{ height: 'calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))' }}
       >
-        <div className="mx-auto flex h-full max-w-lg items-stretch">
+        <div className="mx-auto flex h-full max-w-lg items-stretch pl-[env(safe-area-inset-left,0px)] pr-[env(safe-area-inset-right,0px)]">
           {tabs.map((s) => {
             const active = section === s.id
             return (
@@ -162,7 +175,7 @@ export function MobileNav() {
                     格宽（FINANCE ≈ 85px），故保持 8px，不收敛到令牌阶梯。 */}
                 <span
                   className={cn(
-                    'text-[8px] tracking-[0.18em]',
+                    'text-[8px] tracking-label',
                     active ? 'text-on-sidebar/70' : 'hidden',
                   )}
                 >
@@ -190,7 +203,7 @@ export function MobileNav() {
           >
             <span className="text-base leading-none">⋯</span>
             {/* 字号例外（同上一格）：MORE 与副标同档，底栏格宽不足以承载 12px 大写英文 + 字距 */}
-            <span className={cn('text-[8px] tracking-[0.18em]', moreOpen || moreSections.some((m) => m.id === section) ? 'text-on-sidebar/70' : 'hidden')}>
+            <span className={cn('text-[8px] tracking-label', moreOpen || moreSections.some((m) => m.id === section) ? 'text-on-sidebar/70' : 'hidden')}>
               MORE
             </span>
           </button>
@@ -213,7 +226,7 @@ export function MobileNav() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="display block text-base font-semibold text-on-sidebar">天机</span>
-              <span className="block text-xs tracking-[0.18em] text-on-sidebar-muted">
+              <span className="block eyebrow text-on-sidebar-muted">
                 AI 问答 · 一键简报
               </span>
             </span>
@@ -237,7 +250,7 @@ export function MobileNav() {
                     <span className="display block text-base font-semibold text-on-sidebar">
                       {s.label}
                     </span>
-                    <span className="block text-xs tracking-[0.18em] text-on-sidebar-muted">{s.sub}</span>
+                    <span className="block eyebrow text-on-sidebar-muted">{s.sub}</span>
                   </span>
                 </button>
               )

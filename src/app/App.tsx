@@ -2,7 +2,8 @@
  * App —— 应用外壳
  * 主题应用 + 首次引导 + 布局模式切换
  */
-import { Bootstrap, useBootStore } from './Bootstrap'
+import { Bootstrap } from './Bootstrap'
+import { useBootStore } from './boot-store'
 import { BootScreen } from './BootScreen'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Hotkeys } from './Hotkeys'
@@ -15,6 +16,7 @@ import { InstallPrompt } from '../components/pwa/InstallPrompt'
 import { AmbientSound } from '../components/sound/AmbientSound'
 import { PomodoroTicker } from '../components/pomodoro/PomodoroTicker'
 import { AiChatPanel } from '../components/ai/AiChatPanel'
+import { PetStage } from '../components/pet/PetStage'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useResolvedLayout } from '../layouts/useResolvedLayout'
@@ -41,6 +43,8 @@ export function App() {
         <PomodoroTicker />
         <ReminderEngine />
         <AiChatPanel />
+        {/* 桌宠：petEnabled 为 false 时返回 null（零 DOM、零定时器、零素材请求） */}
+        <PetStage />
         {onboarded ? (
           // 就绪门：数据载入前只显示启动屏，避免"空数据"闪烁。
           // 启动屏不随就绪立刻卸载 —— 它自己淡出后再移除，工作台此时

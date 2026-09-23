@@ -7,6 +7,7 @@
  *   已分别由 `reminders.ts` 的 `taskReminders` 与 `reminder-claims.ts` 取代，故移除。）
  */
 import { createId } from '../utils/id'
+import type { NoticeSourceKey } from './notify-sources'
 
 /** 关注更新计数（纯函数） */
 export function followUpdateCount(
@@ -162,6 +163,10 @@ export function isQuietNow(from: string, to: string, now = new Date()): boolean 
  * 通知历史 —— toast 2.6 秒就消失，错过的提醒此前完全无痕。
  * 每次弹 toast 时顺手记一条；存 localStorage 而不进业务表：
  * 这是本机当下的提醒流水，不是需要跨设备同步的数据。
+ *
+ * ⚠️ `source` 必填于**投递管线**（`components/notification/deliver.ts`），
+ * 操作回执（"待办已保存"）走默认的 `'app'` —— 两类混在一起的话
+ * 「最近通知」会退化成操作日志，翻不到真正错过的提醒。
  */
 const HISTORY_KEY = 'zbt:notice-history:v1'
 const HISTORY_MAX = 50
@@ -171,6 +176,8 @@ export interface NoticeRecord {
   message: string
   /** 带跳转目标时一并存下，历史里能直达对应板块 */
   hash?: string
+  /** 归属（提醒源 / `'app'` 操作回执）；老记录没有这个字段，按 `'app'` 显示 */
+  source?: NoticeSourceKey
   at: string
 }
 
@@ -185,10 +192,14 @@ export function listNoticeHistory(): NoticeRecord[] {
   return []
 }
 
-export function recordNotice(message: string, hash?: string): void {
+export function recordNotice(
+  message: string,
+  hash?: string,
+  source: NoticeSourceKey = 'app',
+): void {
   try {
     const next: NoticeRecord[] = [
-      { id: createId(), message, hash, at: new Date().toISOString() },
+      { id: createId(), message, hash, source, at: new Date().toISOString() },
       ...listNoticeHistory(),
     ].slice(0, HISTORY_MAX)
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next))

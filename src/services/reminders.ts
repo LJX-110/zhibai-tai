@@ -20,11 +20,14 @@
  *
  * 免打扰是**投递策略**不是提醒事实，由调度器（ReminderEngine）套用，这里不管。
  */
-import type { Course, Exam, Habit, HabitLog, Homework, Task, WaterLog } from '../types/entities'
-import { currentWeek, activeSlotsOfDay, upcomingClasses } from './study'
+import type { Course, CourseCancellation, CourseReschedule, Exam, Habit, HabitLog, Homework, Task, WaterLog } from '../types/entities'
+// 学域三源已按域拆到 ./reminders-study（行数规则）；聚合顺序仍由本文件的 collectReminders 决定
+import { classReminders, examReminders, homeworkReminders } from './reminders-study'
 import {
+  effectiveDone,
   fixedDoneThisPeriod,
   isFixedSchedule,
+  liveFixedTasks,
   monthlyDueToday,
   toISODate,
   weeklyDueToday,
@@ -60,6 +63,10 @@ export interface DueReminder {
 export interface ReminderSnapshot {
   tasks: Task[]
   courses: Course[]
+  /** 单次停课记录：不传 = 当没有停课（**旧调用方行为不变**） */
+  courseCancellations?: CourseCancellation[]
+  /** 单次调课记录：不传 = 当没有调课（同上，旧调用方行为不变） */
+  courseReschedules?: CourseReschedule[]
   homeworks: Homework[]
   exams: Exam[]
   habits: Habit[]
@@ -106,7 +113,11 @@ const KIND_ORDER: ReminderKind[] = [
 export function taskReminders(tasks: Task[], today: string): DueReminder[] {
   const out: DueReminder[] = []
   for (const t of tasks) {
-    if (t.done || !t.dueDate) continue
+    /* 固定任务不走这条路 —— 它由 `fixedReminders` 按「今天是否到期 + **本期**做没做」处理。
+       这里再判一次，是防"编辑时把重复方式从普通改成每日、旧 dueDate 却留着"的残留到期日：
+       否则同一条会被两条规则各报一次，而任务本身只有一个记录。
+       其余仍用 effectiveDone 而非裸 `done`，保证全仓只有一套完成判据。 */
+    if (isFixedSchedule(t) || effectiveDone(t) || !t.dueDate) continue
     if (t.dueDate < today) {
       out.push({
         key: `task:overdue:${t.id}:${t.dueDate}`,
@@ -140,7 +151,10 @@ export function taskReminders(tasks: Task[], today: string): DueReminder[] {
 export function fixedReminders(tasks: Task[], now: Date): DueReminder[] {
   const today = toISODate(now)
   const out: DueReminder[] = []
-  for (const t of tasks) {
+  /* ⚠️ 必须在**在世记录**上遍历：提醒的键是 `fixed:${repeat}:${id}:${period}`，
+     按 id 去重 —— 旧版留下的副本有各自的 id，会在同一期各报一次，
+     表现为「同一件固定任务一天响两遍」。展示层已按 seriesId 合并，提醒这里也要跟上。 */
+  for (const t of liveFixedTasks(tasks)) {
     if (!isFixedSchedule(t) || fixedDoneThisPeriod(t, now)) continue
     const dueToday =
       t.monthlyDay != null
@@ -171,119 +185,6 @@ function weekKeyOf(now: Date): string {
   return `w${toISODate(x)}`
 }
 
-/**
- * 课程：提前量提醒 + 当日概览。
- *  · ahead：进入提前量窗口的每一节课，键细到「课 + 开始时间 + 日期」；
- *  · overview：今天还有课没上时给一句概览（今天全上完就不报 ——
- *    旧版用 `?? todayClasses[0]` 兜底，把第一节当"下一节"再报一次，晚上打开就看到早八）。
- *
- * 未设学期起始日时，带周次的课无从判断该不该上 —— 宁可漏报也不错报
- * （用户反馈过「这周不上却仍提醒」），与旧 ClassReminder 的兜底一致。
- */
-export function classReminders(
-  courses: Course[],
-  termStartDate: string | undefined,
-  now: Date,
-  aheadMin = 15,
-): DueReminder[] {
-  const today = toISODate(now)
-  const week = currentWeek(termStartDate, today)
-  const weekday = now.getDay()
-  const minutes = now.getHours() * 60 + now.getMinutes()
-  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  const out: DueReminder[] = []
-
-  for (const { course, slot, minutesLeft } of upcomingClasses(courses, weekday, week, minutes, aheadMin)) {
-    if (week == null && slot.weeks?.length) continue
-    out.push({
-      key: `class:${course.id}:${slot.start}:${today}`,
-      period: today,
-      kind: 'class-ahead',
-      title: `${course.name} ${minutesLeft <= 0 ? '即将开始' : `${minutesLeft} 分钟后`}${course.room ? ` · ${course.room}` : ''}`,
-      hash: '#/study',
-      tone: 'danger',
-      critical: true,
-    })
-  }
-
-  // 当日概览：今天还有课没上时给一句"下一节"。今天全上完就不报 ——
-  // 旧版用 `?? todayClasses[0]` 兜底，把第一节当"下一节"再报一次，晚上打开就看到早八
-  const dayClasses = activeSlotsOfDay(courses, weekday, week)
-  const next = dayClasses
-    .map(({ course, slot }) => ({ name: course.name, start: slot.start }))
-    .sort((a, b) => a.start.localeCompare(b.start))
-    .find((c) => c.start > hhmm)
-  if (dayClasses.length > 0 && next) {
-    out.push({
-      key: `classes:overview:${today}`,
-      period: today,
-      kind: 'classes',
-      title: `今日 ${dayClasses.length} 节课 · 下一节 ${next.name} ${next.start}`,
-      hash: '#/study',
-      tone: 'info',
-      critical: false,
-    })
-  }
-  return out
-}
-
-/** 作业：已逾期的，以及今明两天截止且未交的 */
-export function homeworkReminders(homeworks: Homework[], today: string): DueReminder[] {
-  const out: DueReminder[] = []
-  for (const hw of homeworks) {
-    if (hw.done || !hw.dueDate) continue
-    const left = Math.round((Date.parse(`${hw.dueDate}T00:00:00`) - Date.parse(`${today}T00:00:00`)) / 86_400_000)
-    if (!Number.isFinite(left)) continue
-    if (left < 0) {
-      out.push({
-        key: `hw:overdue:${hw.id}:${hw.dueDate}`,
-        period: today,
-        kind: 'homeworks',
-        title: `${hw.title}（逾期 ${-left} 天）`,
-        hash: '#/study',
-        tone: 'danger',
-        critical: true,
-      })
-    } else if (left <= 1) {
-      out.push({
-        key: `hw:due:${hw.id}:${hw.dueDate}`,
-        period: today,
-        kind: 'homeworks',
-        title: `${hw.title}（${left === 0 ? '今天' : '明天'}截止）`,
-        hash: '#/study',
-        tone: left === 0 ? 'danger' : 'info',
-        critical: left === 0,
-      })
-    }
-  }
-  return out
-}
-
-/** 考试：只剩 3 天 / 1 天 / 当天，各提醒一次（键含剩余天数，天然每日一次） */
-export function examReminders(exams: Exam[], today: string): DueReminder[] {
-  const out: DueReminder[] = []
-  for (const exam of exams) {
-    const left = Math.round((Date.parse(`${exam.date}T00:00:00`) - Date.parse(`${today}T00:00:00`)) / 86_400_000)
-    if (!Number.isFinite(left)) continue
-    if (left !== 3 && left !== 1 && left !== 0) continue
-    const when = left === 0 ? '今天' : left === 1 ? '明天' : '三天后'
-    out.push({
-      key: `exam:${exam.id}:d${left}`,
-      period: today,
-      kind: 'exams',
-      title: `${exam.title}（${when}考试${exam.location ? ` · ${exam.location}` : ''}）`,
-      hash: '#/study',
-      tone: left <= 1 ? 'danger' : 'info',
-      critical: left <= 1,
-    })
-  }
-  return out
-}
-
-/**
- * 习惯：过了晚间门槛仍未达标才提醒（早上提醒是催，晚上提醒是收尾）。
- * 门槛定为 21:00 —— 一天结束前还有时间补救，又不至于在白天反复打扰。
- */
 const HABIT_GATE_HM = '21:00'
 
 export function habitReminders(
@@ -364,7 +265,14 @@ function pastGate(now: Date, gateHM: string): boolean {
 export function collectReminders(snap: ReminderSnapshot, now: Date, aheadMin = 15): DueReminder[] {
   const today = toISODate(now)
   return [
-    ...classReminders(snap.courses, snap.termStartDate, now, aheadMin),
+    ...classReminders(
+      snap.courses,
+      snap.termStartDate,
+      now,
+      aheadMin,
+      snap.courseCancellations ?? [],
+      snap.courseReschedules ?? [],
+    ),
     ...examReminders(snap.exams, today),
     ...homeworkReminders(snap.homeworks, today),
     ...taskReminders(snap.tasks, today),

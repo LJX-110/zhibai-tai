@@ -10,7 +10,7 @@ import { useTaskStore } from '../stores/useTaskStore'
 import { recordActivity } from '../services/activity'
 import { playSound } from '../services/sound'
 import { createId, fixedDoneThisPeriod, isFixedSchedule } from '../utils/id'
-import { useToast } from '../components/ui/Toast'
+import { useToast } from '../components/ui/toast-store'
 
 /** 按重复周期推算下一次到期日（以原到期日为基准，逾期完成则顺延追赶） */
 function nextDueDate(task: Task): string | null {
@@ -87,7 +87,7 @@ export function useTaskActions() {
     if (done) {
       playSound('task-done')
       // 重复任务：完成后自动生成下一周期
-      toast(createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 道行有进', 'success')
+      toast(createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 功行有进', 'success')
     }
   }
 

@@ -4,7 +4,7 @@
  * 连续提醒满 3 次后自动停（默认已养成熟练工，不再打扰）。
  */
 import { useEffect } from 'react'
-import { useToastStore } from '../ui/Toast'
+import { useToastStore } from '../ui/toast-store'
 import { parseISO, todayISO } from '../../utils/id'
 
 const KEY = 'zbt:backup-remind'

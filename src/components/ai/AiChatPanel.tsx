@@ -21,14 +21,15 @@ import { useTodayStats } from '../../hooks/useTodayStats'
 import { createId } from '../../utils/id'
 import { cn } from '../../utils/cn'
 import { hasActiveOverlay } from '../ui/overlay'
-import { useToastStore } from '../ui/Toast'
+import { useToastStore } from '../ui/toast-store'
 import { useAIChatStore } from './chat-store'
+import { actionSpecs } from './plugins'
 import { loadHistory, saveHistory, type ChatMessage } from './chat-history'
 import { ask } from './tianji-ask'
 import { TIANJI_CAPABILITIES, runTianjiCapability, type TianjiCapabilityKey } from './tianji-capability'
 import { parseTianjiActions, type TianjiActionPayload } from './action-protocol'
 import { applyTianjiAction } from './action-runner'
-import { actionTitle } from './action-cards'
+import { actionTitle } from './action-text'
 import { ChatHeader } from './ChatHeader'
 import { MessageStream } from './MessageStream'
 import { ChatInput } from './ChatInput'
@@ -126,7 +127,8 @@ export function AiChatPanel() {
         },
       })
       // 回答收齐后再解析动作：流式过程中的增量 JSON 不完整、不可校验，绝不中途解析
-      const proposed = parseTianjiActions(answer)
+      // 规格表来自插件注册表 —— 协议本身不认识任何具体动作
+      const proposed = parseTianjiActions(answer, actionSpecs())
       if (proposed.length > 0) {
         const aiIndex = messages.length + 1
         setPendingActions((p) => ({ ...p, [aiIndex]: proposed }))

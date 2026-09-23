@@ -11,9 +11,10 @@
  */
 import { useMemo, useState } from 'react'
 import { Bot, Box, Plus, Search } from 'lucide-react'
+import { recordActivity } from '../services/activity'
 import { useAIResourceStore } from '../stores/useAIStore'
 import { addCategory, categoryNames, removeCategory, useCategoryStore } from '../stores/useCategoryStore'
-import { useInspectorStore } from '../components/inspector/Inspector'
+import { useInspectorStore } from '../components/inspector/inspector-store'
 import { useAIChatStore } from '../components/ai/chat-store'
 import type { AIResource } from '../types/entities'
 import { createId, nowISO } from '../utils/id'
@@ -80,7 +81,7 @@ export function AIPage() {
   const save = async () => {
     if (!form.name.trim()) return
     const now = nowISO()
-    await useAIResourceStore.getState().save({
+    const saved = {
       id: editing?.id ?? createId(),
       name: form.name.trim(),
       type: form.type,
@@ -91,7 +92,17 @@ export function AIPage() {
       enabled: editing?.enabled ?? true,
       createdAt: editing?.createdAt ?? now,
       updatedAt: now,
-    })
+    }
+    await useAIResourceStore.getState().save(saved)
+    // 记一条动作流水 —— 「术」板块是九板块里此前唯一没有流水的，
+    // 不记的话在这个板块做的事不会算进功行（修行只覆盖 8/9 就失去意义）
+    if (!editing) {
+      void recordActivity({
+        entityType: 'ai',
+        entityId: saved.id,
+        title: `登记 ${saved.name}`,
+      })
+    }
     setOpen(false)
     toast(editing ? '已更新' : '已登记', 'success')
   }

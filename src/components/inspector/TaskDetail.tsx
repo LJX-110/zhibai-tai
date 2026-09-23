@@ -6,9 +6,9 @@ import { useTaskStore } from '../../stores/useTaskStore'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { useCourseStore } from '../../stores/useStudyStore'
 import { toggleTaskCore } from '../../hooks/useTaskActions'
-import { useToast } from '../ui/Toast'
+import { useToast } from '../ui/toast-store'
 import { Badge, Button } from '../ui'
-import { friendlyDate } from '../../utils/id'
+import { effectiveDone, friendlyDate } from '../../utils/id'
 import { ActionSection, EmptyInspector, InspectorShell, MetaSection } from './shared'
 
 export function TaskDetail({ id, onClose }: { id: string; onClose: () => void }) {
@@ -18,6 +18,10 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
   const courseLink = useCourseStore((s) => s.items.find((c) => c.id === task?.courseId))
 
   if (!task) return <EmptyInspector onClose={onClose} />
+
+  /* ⚠️ 与列表用同一判据：固定任务按「本期」判完成。
+     直接读 task.done 会出现「列表里没勾、详情里写着『标记未完成』」的自相矛盾。 */
+  const done = effectiveDone(task)
 
   return (
     <InspectorShell title="任务详情" onClose={onClose}>
@@ -33,17 +37,17 @@ export function TaskDetail({ id, onClose }: { id: string; onClose: () => void })
       </MetaSection>
       <ActionSection>
         <Button
-          variant={task.done ? 'secondary' : 'primary'}
+          variant={done ? 'secondary' : 'primary'}
           onClick={async () => {
             // 与待办列表共用同一完成核心：重复任务完成时同样生成下一次
-            const { done, createdNext } = await toggleTaskCore(task)
+            const { done: nowDone, createdNext } = await toggleTaskCore(task)
             toast(
-              done ? (createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 道行有进') : '已标记未完成',
-              done ? 'success' : undefined,
+              nowDone ? (createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 功行有进') : '已标记未完成',
+              nowDone ? 'success' : undefined,
             )
           }}
         >
-          {task.done ? '标记未完成' : '标记完成'}
+          {done ? '标记未完成' : '标记完成'}
         </Button>
         <Button
           variant="danger"

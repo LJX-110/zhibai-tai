@@ -78,3 +78,16 @@ export const DEFAULT_MOBILE_TABS: SectionId[] = [
   'finance',
   'study',
 ]
+
+/**
+ * `hash` → 板块（**全站唯一的解析处**）
+ *
+ * 通知深链、桌宠气泡、命令面板都要把 `#/study` 这类串变回 SectionId。
+ * 此前各自 `hash.replace('#/', '')` 会散成好几份 —— 而且**每份的兜底还不一样**
+ * （有的跳首页、有的什么都不做），排障时根本说不清"点了通知为什么跳到这里"。
+ * 收在一处之后：非法值一律 `null`，由调用方决定要不要跳、跳去哪。
+ */
+export function parseSection(hash: string | null | undefined): SectionId | null {
+  const h = String(hash ?? '').replace(/^#\/?/, '')
+  return ALL_SECTIONS.some((s) => s.id === h) ? (h as SectionId) : null
+}

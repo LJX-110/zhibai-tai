@@ -65,7 +65,7 @@ export function SettingsPage() {
       {group === 'data' && <DataGroup />}
       {group === 'sync' && <SyncGroup />}
 
-      <p className="py-6 text-center text-xs tracking-[0.3em] text-ink-faint">
+      <p className="py-6 text-center eyebrow text-ink-faint">
         知白台 v{APP_VERSION} · Local-first
       </p>
     </div>

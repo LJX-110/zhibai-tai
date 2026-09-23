@@ -1,5 +1,5 @@
 /**
- * 今日统计 —— 聚合各 store 得到当天数据，供首页「观」与道行计算复用
+ * 今日统计 —— 聚合各 store 得到当天数据，供首页「观」与今日炁象计算复用
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useBodyMetricLogStore } from '../stores/useBodyStore'
@@ -11,7 +11,7 @@ import { useSettingsStore } from '../stores/useSettingsStore'
 import { useTaskStore } from '../stores/useTaskStore'
 import { useWaterStore } from '../stores/useWaterStore'
 import type { Task } from '../types/entities'
-import { diffDays, toISODate } from '../utils/id'
+import { diffDays, effectiveDone, liveFixedTasks, toISODate } from '../utils/id'
 
 export interface TodayStats {
   date: string
@@ -29,7 +29,7 @@ export interface TodayStats {
   waterRatio: number
   habitLogs: number
   bodyLogs: number
-  /** 今日新增的记录类笔记数（道行「心」的数据源） */
+  /** 今日新增的记录类笔记数（今日炁象「心」维的数据源） */
   notesToday: number
   creations: number
 }
@@ -50,22 +50,29 @@ export function useTodayStats(): TodayStats {
     const todayStart = new Date(`${today}T00:00:00`).getTime()
     const todayEnd = new Date(`${today}T23:59:59`).getTime()
 
-    const tasksDone = tasks.filter(
-      (t) => t.done && t.completedAt && new Date(t.completedAt).getTime() >= todayStart,
+    /* 两个口径都要对，缺一不可：
+       ① **先取在世记录** —— 旧版生成的后继副本已被展示层隐藏，但物理上还在库里；
+          不先过一遍 `liveFixedTasks`，这些看不见的副本会照样进计数（"待办 N 项"虚高）。
+       ② **完成态走 effectiveDone** —— 固定任务（每日/每周/每月）只有一条记录、
+          `done` 跨期不重置；读裸字段的话，上周做完的「每日固定」今天就不算待办了，
+          而界面上它的勾又是按本期判的，两边对不上。 */
+    const live = liveFixedTasks(tasks)
+    const tasksDone = live.filter(
+      (t) => effectiveDone(t) && t.completedAt && new Date(t.completedAt).getTime() >= todayStart,
     ).length
-    const tasksOpen = tasks.filter((t) => !t.done).length
+    const tasksOpen = live.filter((t) => !effectiveDone(t)).length
 
-    const highPriorityOpen = tasks
-      .filter((t) => !t.done && t.priority === 'high')
+    const highPriorityOpen = live
+      .filter((t) => !effectiveDone(t) && t.priority === 'high')
       .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'))
       .slice(0, 5)
 
-    const todayDue = tasks
-      .filter((t) => !t.done && t.dueDate && diffDays(t.dueDate) <= 0)
+    const todayDue = live
+      .filter((t) => !effectiveDone(t) && t.dueDate && diffDays(t.dueDate) <= 0)
       .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
 
-    const upcoming = tasks
-      .filter((t) => !t.done && t.dueDate && diffDays(t.dueDate) >= 1 && diffDays(t.dueDate) <= 3)
+    const upcoming = live
+      .filter((t) => !effectiveDone(t) && t.dueDate && diffDays(t.dueDate) >= 1 && diffDays(t.dueDate) <= 3)
       .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
 
     const focus = pomo.filter((p) => {

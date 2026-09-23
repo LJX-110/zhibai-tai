@@ -9,13 +9,13 @@ import { useMemo, useState } from 'react'
 import { Bell, CheckCircle2, Plus, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/useAppStore'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
-import { useCourseStore } from '../stores/useStudyStore'
+import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore } from '../stores/useStudyStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useActivityStore, useFollowStore } from '../stores/useLifeStores'
 import { useTodayStats } from '../hooks/useTodayStats'
 import { useCultivation } from '../hooks/useCultivation'
 import { useTaskActions } from '../hooks/useTaskActions'
-import { useInspectorStore } from '../components/inspector/Inspector'
+import { useInspectorStore } from '../components/inspector/inspector-store'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
 import { Section, EmptyState, Button, PageHeader, Taiji } from '../components/ui'
@@ -29,14 +29,17 @@ import type { QiDim } from './overview/shared'
 
 export function OverviewPage() {
   const stats = useTodayStats()
-  // 首页那行阶位是「我是谁」的身份牌 —— 用**累积境界**，不用今日道行阶：
-  // 两个口径同名（丹道五阶）但取值不同，今日道行每天起伏，放首页会天天变、还
-  // 与成长页的累积境界对不上。今日道行只在成长页与四维里体现。
+  // 首页这行是「我是谁」的身份牌 —— 必须用**累积境界**（功行定阶，只升不降）。
+  // 不能用今日炁象的阶位：它是当天快照、明天重计，放首页会天天变，还和成长页对不上。
   const { realm } = useCultivation()
   const taskActions = useTaskActions()
   const setSection = useAppStore((s) => s.setSection)
   const intelItems = useIntelligenceStore((s) => s.items)
   const courses = useCourseStore((s) => s.items)
+  // 停课记录：首页今日课程要剔除已停的课（订阅而不是 getState，否则停课/恢复后首页不刷新）
+  const courseCancellations = useCourseCancellationStore((s) => s.items)
+  // 调课记录同样走订阅：调课后首页「今日课程」要立刻换成新时间那一节
+  const courseReschedules = useCourseRescheduleStore((s) => s.items)
   const termStartDate = useSettingsStore((s) => s.termStartDate)
   const activities = useActivityStore((s) => s.items)
   const follows = useFollowStore((s) => s.items)
@@ -58,7 +61,12 @@ export function OverviewPage() {
   const todayWeekday = now.getDay()
   // ⚠️ 走订阅而不是 getState()：否则改了「学期首周」首页不会重新取课（getState 不建立订阅）
   const week = currentWeek(termStartDate)
-  const todayClasses = activeSlotsOfDay(courses, todayWeekday, week)
+  // 已停 / 已调走的课不在首页今日课程里显示，调来的课要显示（首页答的是"今天实际要上什么"）
+  const todayClasses = activeSlotsOfDay(courses, todayWeekday, week, {
+    date: todayISO(),
+    cancellations: courseCancellations,
+    reschedules: courseReschedules,
+  })
     .map(({ course: c, slot }) => ({
       name: c.name,
       room: c.room,

@@ -64,7 +64,7 @@ export interface AIService {
   occultExplain(kind: 'liuyao' | 'qimen' | 'meihua' | 'daily_sign' | 'dayan', data: string, question?: string): Promise<string>
   /** 每日签个性化解读（结合今日数据；远程就绪走模型，否则本地拼装） */
   dailySignReading(sign: { title: string; text: string; tag: string; advice: string }, stats: { tasksDone: number; focusMin: number; waterMl: number }): Promise<string>
-  /** 道行周报（一周复盘：亮点 / 短板 / 下周一条可执行建议） */
+  /** 今日炁象周报（一周复盘：亮点 / 短板 / 下周一条可执行建议） */
   weeklyReport(input: { range: string; tasksDone: number; focusMin: number; creations: number; topActivity: string[] }): Promise<string>
 }
 
@@ -267,12 +267,12 @@ export const aiService: AIService = {
 
   dailyBrief: ({ date, tasksDone, focusMin, waterMl, goal, sources }) =>
     remoteOr(
-      `今天是 ${date}。已完成 ${tasksDone} 项任务，专注 ${focusMin} 分钟，饮水 ${waterMl}/${goal}ml。道行来源：${sources.map((s) => `${s.label}+${s.value}`).join('，')}。请用 2-3 句中文生成今日简报与一句建议。`,
+      `今天是 ${date}。已完成 ${tasksDone} 项任务，专注 ${focusMin} 分钟，饮水 ${waterMl}/${goal}ml。今日炁象来源：${sources.map((s) => `${s.label}+${s.value}`).join('，')}。请用 2-3 句中文生成今日简报与一句建议。`,
       () => {
         const lines: string[] = []
         lines.push(`${date} · 今日完成 ${tasksDone} 项，专注 ${focusMin} 分钟，饮水 ${waterMl}/${goal}ml`)
         if (sources.length > 0) {
-          lines.push(`道行来源：${sources.map((s) => `${s.label}+${s.value}`).join('，')}`)
+          lines.push(`今日炁象来源：${sources.map((s) => `${s.label}+${s.value}`).join('，')}`)
         }
         if (focusMin >= 100) lines.push('专注充足，注意劳逸结合。')
         else if (focusMin >= 50) lines.push('专注尚可，可再推进一段。')

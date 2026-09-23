@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { History, Trash2 } from 'lucide-react'
 import { useDivinationStore } from '../../stores/useDivinationStore'
-import { useInspectorStore } from '../../components/inspector/Inspector'
+import { useInspectorStore } from '../../components/inspector/inspector-store'
 import { Badge, Button, Dialog, EmptyState, Section, useToast } from '../../components/ui'
 
 export function HistoryTab() {

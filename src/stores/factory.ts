@@ -12,7 +12,7 @@ import { create } from 'zustand'
 import type { Repository } from '../repositories/repo'
 import { notifyDataChanged } from '../sync/auto'
 // Toast 本质是全局状态而非组件，直接引用其 store 不构成架构反向依赖
-import { useToastStore } from '../components/ui/Toast'
+import { useToastStore } from '../components/ui/toast-store'
 
 export interface CrudState<T extends { id: string }> {
   items: T[]

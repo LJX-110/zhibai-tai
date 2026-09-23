@@ -127,10 +127,10 @@ export const usePomodoroTimerStore = create<PomodoroTimerState>((set, get) => ({
         tags: [tag],
       }
       void usePomodoroStore.getState().add(session)
-      // 闭关结算：**绑定了一件实事的专注 = 一次闭关**，完成才给修为。
+      // 闭关结算：**绑定了一件实事的专注 = 一次闭关**，完成才给功行。
       // 日常行为是"不修就退"，闭关才是主动精进、把境界推上去的主路径
       // （计分见 services/cultivation.ts 的 seclusionReward）。
-      // 普通专注（未绑定待办）不给 —— 否则"坐着发呆 25 分钟"也能刷修为。
+      // 普通专注（未绑定待办）不给 —— 否则"坐着发呆 25 分钟"也能刷功行。
       if (session.taskId) {
         void useCultivationStore.getState().grantSeclusion(focusMin)
       }

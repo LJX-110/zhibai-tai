@@ -10,7 +10,7 @@
  * 启动期 font-display:swap 换字会触发重排，连带旋转动画掉帧。
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useBootStore } from './Bootstrap'
+import { useBootStore } from './boot-store'
 
 /** 淡出时长，与 index.html 中 .boot 的 transition 保持一致 */
 const LEAVE_MS = 420

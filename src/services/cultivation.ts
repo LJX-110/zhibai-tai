@@ -1,14 +1,18 @@
 /**
- * 道行服务 —— 由近期行为综合得出的轨迹分
- * 权重模型保持简单，不做复杂算法
+ * 今日炁象 —— 五维快照：行 / 学 / 身 / 心 / 创（每维 0-20，总分 0-100）
  *
- * 五维：行 / 学 / 身 / 心 / 创（每维 0-20，总分 0-100）
+ * ⚠️ **本文件不再负责境界**（2026-09-22 重做）：境界已迁到 `services/merit.ts`，
+ * 由**累计功行**定阶（六境 + 抱朴六轮）。这里只产出「今日炁象」这一张快照，
+ * 作为首页罗盘的视觉输入 —— **不参与境界判定**。
+ * 旧版曾用「今日总分」给境界定阶（今天不记录就掉阶），那套已整体移除；
+ * 两个口径**不要合并**，否则又会回到"每天清零重来"。
+ *
+ * 权重模型保持简单，不做复杂算法
  *
  * 「心」的数据源是**记录类笔记**（notes 里 kind === 'note' 的今日新增），
  * 不是已删除的 journals 表。它与「创」（灵感 + 收藏）刻意不重叠：
  * 心 = 记录与内省，创 = 创作与收拢 —— 两件事，两种分数。
  */
-import { todayISO } from '../utils/id'
 
 export type DimensionKey = 'xing' | 'xue' | 'shen' | 'xin' | 'chuang'
 
@@ -70,9 +74,11 @@ export function computeCultivation(input: CultivationInput): CultivationResult {
   return { total, dimensions }
 }
 
-/** 道行等级（丹道五阶 · 由今日总分定阶）
- *  抱朴守一 → 炼精化气 → 炼气化神 → 炼神还虚 → 炼虚合道（总分 0-100）。
- *  `tone` 取自既有品牌色（不新增颜色），供境界卡取色；`rank` 用于比较高低。 */
+/**
+ * 今日炁象的阶位（五阶 · 由今日五维总分定阶，**不参与境界判定**）。
+ *
+ * 名称取自《道德经》：**知常 → 守静 → 袭明 → 抱一 → 玄通**（总分 0-100）。
+ * `tone` 取自既有品牌色（不新增颜色）；`rank` 用于比较高低。 */
 export interface CultivationGrade {
   title: string
   desc: string
@@ -84,126 +90,21 @@ export interface CultivationGrade {
 
 export function cultivationGrade(total: number): CultivationGrade {
   if (total >= 90)
-    return { rank: 4, tone: 'cinnabar', title: '炼虚合道', desc: '今日与道合真，气机浑然，可称圆满' }
+    return { rank: 4, tone: 'cinnabar', title: '玄通', desc: '微妙玄通，今日与道相合，气机浑然' }
   if (total >= 65)
-    return { rank: 3, tone: 'bronze', title: '炼神还虚', desc: '神返内守，虚静生慧，今日功夫到火候' }
+    return { rank: 3, tone: 'bronze', title: '抱一', desc: '营魄抱一，神返内守，今日功夫到火候' }
   if (total >= 35)
-    return { rank: 2, tone: 'teal', title: '炼气化神', desc: '气机渐足，神意清明，正合今日所得' }
+    return { rank: 2, tone: 'teal', title: '袭明', desc: '是谓袭明，气机渐足，神意清明' }
   if (total >= 10)
-    return { rank: 1, tone: 'qing', title: '炼精化气', desc: '精微初聚，尚需火候，宜再添几笔' }
-  return { rank: 0, tone: 'plain', title: '抱朴守一', desc: '今日无事可记，养精蓄锐亦是修行' }
+    return { rank: 1, tone: 'qing', title: '守静', desc: '致虚极，守静笃，尚需火候，宜再添几笔' }
+  return { rank: 0, tone: 'plain', title: '知常', desc: '知常曰明，今日无事可记，养精蓄锐亦是修行' }
 }
 
 /**
- * 历史最高境界 —— 存本机。
- * 道行由**本机**今日数据算出，历史也该留在本机；跨设备同步会与"今日道行"
- * 的本机语义冲突（A 机的最高纪录不该覆盖 B 机的）。
- */
-const BEST_KEY = 'zbt:cultivation-best:v1'
-
-export interface BestRecord {
-  title: string
-  rank: number
-  total: number
-  /** 达到该纪录的日期 */
-  at: string
-}
-
-export function readBest(): BestRecord | null {
-  try {
-    const raw = localStorage.getItem(BEST_KEY)
-    const parsed = raw ? JSON.parse(raw) : null
-    if (parsed && typeof parsed.title === 'string') return parsed as BestRecord
-  } catch {
-    /* 存档损坏按无记录处理 */
-  }
-  return null
-}
-
-/** 只在刷新纪录时写入；返回是否刷新 */
-export function saveBestIfHigher(grade: CultivationGrade, total: number): boolean {
-  const prev = readBest()
-  if (prev && prev.rank >= grade.rank && prev.total >= total) return false
-  try {
-    const rec: BestRecord = { title: grade.title, rank: grade.rank, total, at: todayISO() }
-    localStorage.setItem(BEST_KEY, JSON.stringify(rec))
-  } catch {
-    /* 存储满 / 隐私模式写不进去时放弃记录，不影响界面 */
-  }
-  return true
-}
-
-/* ================================================================== *
- * 修行境界（持续累积）—— 与「今日道行」是两回事
+ * 功行总量 = 已落账的往日 + **今日已计** + 额外（闭关）。
  *
- * ⚠️ 别把这两个混起来（这是本次改造的核心区分）：
- *  · `cultivationGrade(今日总分)` —— **今日道行**。当天的心境快照，今天不记录就回落，
- *    本就是"今天的功夫"，回落是对的（罗盘上「今日炁象」用它）。
- *  · `realmOf(累计修为)` —— **修行境界**。由逐日累加的修为总量定阶，**只升不降**；
- *    忙几天不记录不会把已修到的境界抹掉（那正是用户要的"持续累积"）。
- * ================================================================== */
-
-/**
- * 境界门槛（累计修为）。取 **×3 递进**：三百 → 九百 → 二千七 → 八千一。
- * 「三三见九、九九归真」是旧说里的进境语；按每日 60-100 分计，
- * 大致对应 4 天 / 12 天 / 35 天 / 100 天的持续用功。
- * 门槛是要调就调一处的常量，不散在 UI 里。
- */
-export const REALM_THRESHOLDS = [0, 300, 900, 2700, 8100] as const
-
-/** 修行境界（与今日道行同用丹道五阶名，但口径是累计修为） */
-export function realmOf(cumulative: number): CultivationGrade {
-  let rank = 0
-  for (let i = REALM_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (cumulative >= REALM_THRESHOLDS[i]) {
-      rank = i
-      break
-    }
-  }
-  const meta = REALM_META[rank]
-  return { rank, tone: meta.tone, title: meta.title, desc: meta.desc }
-}
-
-const REALM_META: { tone: CultivationGrade['tone']; title: string; desc: string }[] = [
-  { tone: 'plain', title: '抱朴守一', desc: '守其本真，未及化气，功夫尚在日用之间' },
-  { tone: 'qing', title: '炼精化气', desc: '精微初聚，气机始动，已是可持之修' },
-  { tone: 'teal', title: '炼气化神', desc: '气足神清，渐能自主，修行已成习惯' },
-  { tone: 'bronze', title: '炼神还虚', desc: '神返内守，虚静生慧，非一日之功所至' },
-  { tone: 'cinnabar', title: '炼虚合道', desc: '积久功深，与道合真，此境以年计' },
-]
-
-/** 距下一阶的进度（用于成长页进度条）；已至顶阶时 next 为 null */
-export function realmProgress(cumulative: number): {
-  realm: CultivationGrade
-  /** 下一阶修为门槛；null = 已至顶阶 */
-  next: number | null
-  nextTitle: string | null
-  /** 当前阶内进度 0-1（顶阶恒为 1） */
-  percent: number
-  /** 距下一阶还差多少修为 */
-  remaining: number
-} {
-  const realm = realmOf(cumulative)
-  const nextIdx = realm.rank + 1
-  if (nextIdx >= REALM_THRESHOLDS.length) {
-    return { realm, next: null, nextTitle: null, percent: 1, remaining: 0 }
-  }
-  const from = REALM_THRESHOLDS[realm.rank]
-  const next = REALM_THRESHOLDS[nextIdx]
-  return {
-    realm,
-    next,
-    nextTitle: REALM_META[nextIdx].title,
-    percent: Math.max(0, Math.min(1, (cumulative - from) / (next - from))),
-    remaining: Math.max(0, next - cumulative),
-  }
-}
-
-/**
- * 修为总量 = 已落账的往日 + **今日已计** + 额外（闭关）。
- *
- * ⚠️ `todayCounted` 必须计入：它代表今天已经挣到、但尚未随跨天落进 `total` 的修为。
- * 漏掉它会出现「今天做完一堆事、修为却纹丝不动，要等明天才涨」——数字与体感直接对不上。
+ * ⚠️ `todayCounted` 必须计入：它代表今天已经挣到、但尚未随跨天落进 `total` 的功行。
+ * 漏掉它会出现「今天做完一堆事、功行却纹丝不动，要等明天才涨」——数字与体感直接对不上。
  */
 export function totalCultivation(s: {
   total: number
@@ -221,11 +122,7 @@ export function emptyCultivationState(): {
   todayDate: string
   todayCounted: number
   seclusionCount: number
-  bestRank: number
-  bestTitle: string
-  bestAt: string | null
 } {
-  const r = realmOf(0)
   return {
     id: 'cultivation',
     total: 0,
@@ -233,21 +130,20 @@ export function emptyCultivationState(): {
     todayDate: '',
     todayCounted: 0,
     seclusionCount: 0,
-    bestRank: r.rank,
-    bestTitle: r.title,
-    bestAt: null,
   }
 }
 
 /**
- * 今日结算（纯函数）—— 把「今日总分」的增量并进累计修为。
+ * 今日结算（纯函数）—— 把「今日净行」的增量并进累计功行。
+ *
+ * 这是**通用原语**：`services/merit.ts` 算出今日功行后，由它负责逐日累加。
  *
  * 两条不变式：
- *  1. **同一天绝不重复累加**：只补 `今日总分 - 今日已计入` 的差额。
+ *  1. **同一天绝不重复累加**：只补 `今日功行 - 今日已计入` 的差额。
  *     当天分数还会继续涨（上午 5 分、晚上 60 分），所以不是"一天记一笔固定的数"，
  *     而是"当天随时补差额"；跨天再把当日计数落进 total 并归零。
  *  2. **只升不降**：今日总分若因撤销操作而变低，差额为负 → 记 0，
- *     已计入的修为不回收（与"境界只升不降"同一条原则）。
+ *     已计入的功行不回收（与"境界只升不降"同一条原则）。
  */
 export function settleDaily(
   s: { total: number; todayDate: string; todayCounted: number },
@@ -266,7 +162,7 @@ export function settleDaily(
 }
 
 /**
- * 闭关修为 —— 专门的境界提升方式。
+ * 闭关功行 —— 专门的境界提升方式。
  *
  * 「闭关」= 认领一件今日实事 + 专注一段时长（复用番茄钟，绑定待办的那次专注），
  * 完成才结算。给分刻意高于零散日常：日常是"不修就退"，闭关是"主动精进"，
@@ -274,7 +170,7 @@ export function settleDaily(
  *
  * 计法：基础 20 点（肯坐下来本身就是门槛）+ 每 10 分钟 5 点。
  * 25 分钟 ≈ 32 点、60 分钟 ≈ 50 点、90 分钟 ≈ 65 点 —— 一次完整的闭关
- * 约等于半天的道行，与「专门提升方式」的定位相称。
+ * 约等于半天的功行，与「专门提升方式」的定位相称。
  */
 const SECLUSION_BASE = 20
 const SECLUSION_PER_10MIN = 5
@@ -284,7 +180,7 @@ export function seclusionReward(minutes: number): number {
   return SECLUSION_BASE + Math.floor(m / 10) * SECLUSION_PER_10MIN
 }
 
-/** 道行来源分解（行为 → 得分说明，非 RPG 数值，只是记录来源） */
+/** 今日炁象来源分解（行为 → 得分说明，非 RPG 数值，只是记录来源） */
 export function cultivationSources(input: CultivationInput): { label: string; value: number }[] {
   const out: { label: string; value: number }[] = []
   const add = (label: string, n: number) => {

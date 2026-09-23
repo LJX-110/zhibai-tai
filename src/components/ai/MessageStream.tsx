@@ -5,8 +5,10 @@
 import { Fragment } from 'react'
 import { useTodayStats } from '../../hooks/useTodayStats'
 import { cn } from '../../utils/cn'
+import { CapabilityRow } from './CapabilityRow'
 import { WelcomeBoard } from './WelcomeBoard'
-import { ActionConfirmCard, stripActionFences } from './action-cards'
+import { ActionConfirmCard } from './action-cards'
+import { stripActionFences } from './action-text'
 import type { AiRemoteHealth } from '../../services/ai/health'
 import type { ChatMessage } from './chat-history'
 import type { TianjiActionPayload } from './action-protocol'
@@ -51,6 +53,11 @@ export function MessageStream({
 }) {
   return (
     <>
+      {/* 系统能力（定位/剪贴板）—— 放在**消息流顶部**而不是欢迎页：
+          欢迎页只在"没有历史消息"时出现，一有对话这个入口就消失了，
+          用户再想授权定位就够不着。这里始终渲染，两种状态都可达。 */}
+      <CapabilityRow />
+
       {/* 消息流 —— 轮次之间靠用户气泡的 mt-2 拉开层级：
           全程等距会让"我的问题"和"天机的回答"糊成一片 */}
       {messages.length === 0 ? (

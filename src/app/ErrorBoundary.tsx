@@ -28,13 +28,32 @@ interface Props {
 
 interface State {
   error: Error | null
+  /**
+   * 上一次看到的 `resetKey`。
+   *
+   * 自愈（切换路由后清掉错误态）原本写在 `componentDidUpdate` 里 —— 那是
+   * "在更新后用 setState 推一层派生状态"，会多一次渲染，也被 lint 判为隐患。
+   * 改为 `getDerivedStateFromProps` 里比对：**同一次渲染内直接算出下一个 state**，
+   * 语义完全等价（key 变了就清错误 + 记住新 key），但没有"更新后再 setState"这一步。
+   *
+   * 必须把 resetKey 存在 state 里而不是拿 props 现比：`getDerivedStateFromError`
+   * 只能返回 error（看不到 props），若靠"props 与某处比较"来判断，捕获错误后的第一次
+   * 重渲染会被误判成"key 变了"而立刻把错误清掉 —— 那就成了"出错却什么都不显示"。
+   */
+  resetKey?: string
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { error }
+  }
+
+  /** 路由（resetKey）变化 → 清错误态，让页面自己重试一次 */
+  static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
+    if (state.resetKey === props.resetKey) return null
+    return { resetKey: props.resetKey, error: null }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -48,12 +67,6 @@ export class ErrorBoundary extends Component<Props, State> {
       where: this.props.title ?? '页面渲染',
       detail: info.componentStack ?? error.stack,
     })
-  }
-
-  componentDidUpdate(prev: Props) {
-    if (this.state.error && prev.resetKey !== this.props.resetKey) {
-      this.setState({ error: null })
-    }
   }
 
   private handleRetry = () => this.setState({ error: null })

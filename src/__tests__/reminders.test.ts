@@ -10,15 +10,14 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  classReminders,
   collectReminders,
-  examReminders,
   fixedReminders,
   habitReminders,
-  homeworkReminders,
   taskReminders,
   waterReminders,
 } from '../services/reminders'
+// 学域三源住在 ./reminders-study（按域拆分，见该文件头注释）
+import { classReminders, examReminders, homeworkReminders } from '../services/reminders-study'
 import { claimReminder } from '../services/reminder-claims'
 import { toISODate } from '../utils/id'
 import type { Course, Exam, Habit, HabitLog, Homework, Task, WaterLog } from '../types/entities'

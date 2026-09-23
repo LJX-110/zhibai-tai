@@ -91,7 +91,7 @@ export function DesktopSidebar() {
         {/* 符箓金线 */}
         <div className="mt-4 flex items-center gap-2">
           <span className="h-px flex-1 bg-gradient-to-r from-transparent via-bronze/60 to-bronze/20" />
-          <span className="scribal text-xs tracking-[0.3em] text-bronze/80">知白法台</span>
+          <span className="scribal eyebrow text-bronze/80">知白法台</span>
           <span className="h-px flex-1 bg-gradient-to-l from-transparent via-bronze/60 to-bronze/20" />
         </div>
       </div>

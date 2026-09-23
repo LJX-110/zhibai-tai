@@ -3,7 +3,7 @@
  * 纯逻辑（读各 store 的当前快照），不依赖 React 状态，便于单测与复用。
  */
 import type { SectionId } from '../../../app/navigation'
-import type { InspectorType } from '../../inspector/Inspector'
+import type { InspectorType } from '../../inspector/inspector-store'
 import { useTaskStore } from '../../../stores/useTaskStore'
 import { useNoteStore } from '../../../stores/useNoteStore'
 import { useCollectionStore } from '../../../stores/useCollectionStore'
@@ -11,6 +11,7 @@ import { useProjectStore } from '../../../stores/useProjectStore'
 import { useIntelligenceStore } from '../../../stores/useIntelligenceStore'
 import { useCourseStore } from '../../../stores/useStudyStore'
 import { useFinanceStore } from '../../../stores/useFinanceStore'
+import { effectiveDone, liveFixedTasks } from '../../../utils/id'
 
 export interface SearchResult {
   id: string
@@ -40,7 +41,8 @@ export function searchAll(query: string): SearchResult[] {
     }
   }
 
-  push('任务', 'action', useTaskStore.getState().items.map((t) => ({ id: t.id, title: t.title, sub: t.done ? '已完成' : '未完成', inspector: 'task' as const })))
+  // 副标与列表口径一致：先取在世记录（隐藏的旧副本不该出现在搜索里），再按「本期」判完成
+  push('任务', 'action', liveFixedTasks(useTaskStore.getState().items).map((t) => ({ id: t.id, title: t.title, sub: effectiveDone(t) ? '已完成' : '未完成', inspector: 'task' as const })))
   push('笔记', 'action', useNoteStore.getState().items.map((n) => ({ id: n.id, title: n.title || '（无题）', sub: n.kind === 'inspiration' ? '灵感' : '笔记' })))
   push('收藏', 'collection', useCollectionStore.getState().items.map((c) => ({ id: c.id, title: c.title, sub: c.category, inspector: 'collection' as const })))
   push('项目', 'collection', useProjectStore.getState().items.map((p) => ({ id: p.id, title: p.name, sub: p.status, inspector: 'project' as const })))

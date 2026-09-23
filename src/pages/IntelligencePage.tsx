@@ -15,7 +15,7 @@ import { addCategory, categoryNames, removeCategory, resetCategories, useCategor
 import { useFollowStore } from '../stores/useLifeStores'
 import { refreshAll, retrySource } from '../services/intelligence/run'
 import { playSound } from '../services/sound'
-import { useInspectorStore } from '../components/inspector/Inspector'
+import { useInspectorStore } from '../components/inspector/inspector-store'
 import { IntelTidy } from '../components/intelligence/IntelTidy'
 import type { IntelligenceItem, SourceType } from '../types/entities'
 import { diffDays } from '../utils/id'

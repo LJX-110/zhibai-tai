@@ -11,7 +11,8 @@
  * 所有版本均为纯增量或仅重建索引：不改动记录数据，升级不丢失任何旧数据。
  */
 import Dexie, { type Table } from 'dexie'
-import type {
+import type { CourseCancellation,
+  CourseReschedule,
   ActivityItem,
   AIResource,
   AppSettingsRow,
@@ -42,6 +43,21 @@ import type {
   Tombstone,
   WaterLog,
 } from '../types/entities'
+
+/**
+ * 数据库名。
+ *
+ * ⚠️ **测试环境每个测试文件必须用独立库名**（这里用随机后缀实现）：
+ * vitest 会在**同一个 worker 进程里复用跑多个测试文件**，而 `fake-indexeddb`
+ * 装的是全局对象、**不随模块注册表重置** —— 于是 A 文件留下的连接会撞上
+ * B 文件的 `delete()`，抛「Another connection wants to delete database」，
+ * 表现为**偶发红**（实测：连跑两次全绿，第三次挂了两个情报用例）。
+ * 每个文件重新 import 本模块 → 拿到新后缀 → 天然隔离，且不影响生产库名。
+ */
+const DB_NAME =
+  import.meta.env.MODE === 'test'
+    ? `yishu-workbench-test-${Math.random().toString(36).slice(2, 8)}`
+    : 'yishu-workbench'
 
 export class WorkbenchDB extends Dexie {
   tasks!: Table<Task, string>
@@ -89,9 +105,13 @@ export class WorkbenchDB extends Dexie {
 
   // 新增：修行状态（单行表，随快照跨设备同步）
   cultivation!: Table<CultivationState, string>
+  /** 单次停课记录（按 courseId + date 建索引：取一天/一门课的停课都是这两条路） */
+  courseCancellations!: Table<CourseCancellation, string>
+  /** 单次调课记录（索引口径与停课一致：按 courseId + date 取） */
+  courseReschedules!: Table<CourseReschedule, string>
 
   constructor() {
-    super('yishu-workbench')
+    super(DB_NAME)
     this.version(1).stores({
       tasks: 'id, done, dueDate, priority, createdAt',
       notes: 'id, kind, pinned, createdAt',
@@ -180,6 +200,17 @@ export class WorkbenchDB extends Dexie {
      * 必须进业务表才能跨设备一致 —— 此前存在 localStorage，换设备即丢。 */
     this.version(11).stores({
       cultivation: 'id',
+    })
+    /* 新增「停课记录」表（仅新增，不动既有结构）。
+     * 此前「停一次课」只能删时段 / 改周次 —— 破坏性操作，而且提醒照样响。 */
+    this.version(12).stores({
+      courseCancellations: 'id, courseId, date',
+    })
+    /* 新增「调课记录」表（仅新增，不动既有结构）。
+     * 与停课是两件事：停课 = 这次不上了；调课 = 这次换时间上（原时间空掉、新时间多一节）。
+     * 此前只有停课，于是"老师把周三的课挪到周五"只能靠停课 + 手动记，新时间那节谁也认不出来。 */
+    this.version(13).stores({
+      courseReschedules: 'id, courseId, date, toDate',
     })
   }
 }

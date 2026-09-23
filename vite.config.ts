@@ -59,9 +59,15 @@ export default defineConfig({
         short_name: '知白台',
         description: '知白台 — 知其白，守其黑 · 个人效率系统',
         lang: 'zh-CN',
-        // V1.6 冷色定稿：主题色=黛蓝（安装后标题栏），启动底色=纯白
-        theme_color: '#2e5a8c',
-        background_color: '#ffffff',
+        // 侧栏＝安装后的标题栏/状态栏色，浅色黛蓝 / 深色绛红（tokens.css 的 --sidebar）。
+        // manifest 只接受**一个**值，故这里取应用默认主题（深色）的取值；
+        // 运行时由 <meta name="theme-color"> 覆盖它（index.html 预判脚本 + ThemeApplier），
+        // 所以切到浅色主题后 Android 状态栏照样会变回黛蓝 —— 单一事实源见 src/app/theme.ts。
+        theme_color: '#5c1f1a',
+        // 启动底色。同样只能取一个值：应用默认主题是深色（见 index.html 的主题预判），
+        // 故取深色启动屏的底色，首装用户与深色用户冷启动零色差；
+        // 代价是浅色主题用户会看到一瞬黑底 —— 两害相权，不能为了少数主题让默认体验闪白。
+        background_color: '#000000',
         display: 'standalone',
         start_url: './',
         scope: './',
@@ -96,7 +102,10 @@ export default defineConfig({
         // 点击系统通知要能聚焦窗口并跳到对应板块：generateSW 产出的 SW
         // 本身不含业务逻辑，用 importScripts 注入 public/sw-notify.js；
         // 该文件也会被上面的 glob 匹配到，故排除出预缓存清单避免重复注入
-        globIgnores: ['sw-notify.js'],
+        // `pet/**` 显式排除：桌宠素材（106 个 animated WebP，保真档合计约 55MB）
+        // **绝不能进预缓存** —— 否则每次版本升级整包重拉，且未开桌宠的用户也白付流量。
+        // 现在 globPatterns 里没有 webp，但这条是"防回归"：将来有人加了 webp 也不会误收。
+        globIgnores: ['sw-notify.js', 'pet/**'],
         importScripts: ['sw-notify.js'],
         navigateFallback: 'index.html',
         runtimeCaching: [
@@ -106,6 +115,18 @@ export default defineConfig({
             options: {
               cacheName: 'fonts',
               expiration: { maxEntries: 8, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // 桌宠素材：按需逐段加载 + CacheFirst。
+            // 单个约 521KB，故给足 maxEntries（106 个全量）与一年有效期：
+            // 只有开启桌宠、且真播到某个动作时才会拉那一张，离线后复用缓存。
+            urlPattern: /\/pet\/.*\.webp$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pet-assets',
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 365 },
               cacheableResponse: { statuses: [200] },
             },
           },

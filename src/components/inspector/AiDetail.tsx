@@ -4,7 +4,7 @@
 import { nowISO } from '../../utils/id'
 import { Trash2 } from 'lucide-react'
 import { useAIResourceStore } from '../../stores/useAIStore'
-import { useToast } from '../ui/Toast'
+import { useToast } from '../ui/toast-store'
 import { Badge, Button } from '../ui'
 import { ActionSection, EmptyInspector, InspectorShell, MetaSection } from './shared'
 

@@ -1,9 +1,10 @@
 /**
  * TaskEditor —— 待办新增/编辑表单（Dialog）
  */
+import { PRIORITY_LABEL, PRIORITY_ORDER } from './shared'
 import { useState } from 'react'
 import type { Priority, Repeat, Task } from '../../types/entities'
-import { createId, todayISO, nowISO } from '../../utils/id'
+import { createId, isFixedSchedule, todayISO, nowISO } from '../../utils/id'
 import { useCourseStore } from '../../stores/useStudyStore'
 import { useProjectStore } from '../../stores/useProjectStore'
 import { Button } from '../ui/Button'
@@ -63,12 +64,18 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
   const submit = () => {
     if (!form.title.trim()) return
     const now = nowISO()
+    const id = task?.id ?? createId()
+    // 锚点只在对应重复方式下成立（切换重复方式时旧锚点必须清掉，否则会变成
+    // "每日 + 每月 27 号"这种两个分组都想收留的混合体）
+    const monthlyDay = form.repeat === 'monthly' ? form.monthlyDay : null
+    const weeklyDay = form.repeat === 'weekly' ? form.weeklyDay : null
+    const fixed = isFixedSchedule({ repeat: form.repeat, monthlyDay, weeklyDay })
     const tags = form.tagsText
       .split(/[\s,，]+/)
       .map((s) => s.trim())
       .filter(Boolean)
     onSave({
-      id: task?.id ?? createId(),
+      id,
       title: form.title.trim(),
       description: form.description.trim() || undefined,
       done: task?.done ?? false,
@@ -76,8 +83,13 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
       dueDate: form.dueDate || null,
       tags,
       repeat: form.repeat,
-      monthlyDay: form.repeat === 'monthly' ? form.monthlyDay : null,
-      weeklyDay: form.repeat === 'weekly' ? form.weeklyDay : null,
+      monthlyDay,
+      weeklyDay,
+      /* 固定任务记下**系列标识**（= 自身 id），展示层与清理逻辑靠它把各期认成一件事。
+         取 `task?.seriesId ?? id`：已有值就沿用（编辑不得悄悄换系列），
+         存量老任务没有这个字段 → 借这次编辑顺便补上，等于就地完成迁移。
+         由固定改回普通任务则置空，不留一个再也不会被读到的字段。 */
+      seriesId: fixed ? (task?.seriesId ?? id) : null,
       projectId: form.projectId || null,
       courseId: form.courseId || null,
       createdAt: task?.createdAt ?? now,
@@ -122,9 +134,9 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
             onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })}
             aria-label="优先级"
           >
-            <option value="high">急</option>
-            <option value="mid">中</option>
-            <option value="low">缓</option>
+            {PRIORITY_ORDER.map((p) => (
+              <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
+            ))}
           </Select>
           <Select
             value={form.repeat}

@@ -23,7 +23,7 @@ import { usePurchaseStore } from '../../stores/useFinanceStore'
 
 import { FINANCE_CATEGORIES, categoryLabel } from '../../services/finance'
 
-import { browserNotify } from '../../services/notification'
+import { deliverNotice } from '../../components/notification/deliver'
 import { playSound } from '../../services/sound'
 import type { Purchase } from '../../types/entities'
 import { createId, todayISO, nowISO } from '../../utils/id'
@@ -31,6 +31,7 @@ import { Seal } from '../../components/ui/Seal'
 import { parseAmountAllowZero } from '../../utils/validate'
 import { cn } from '../../utils/cn'
 import { SummaryCell } from './shared'
+import { money } from './summary'
 
 import {
   Badge,
@@ -45,8 +46,6 @@ import {
   useToast,
 } from '../../components/ui'
 
-const money = (n: number) =>
-  n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 /** 购买状态三态：想买 → 已下单/待取件 → 已到手 */
 const BUY_STATUS: { key: Purchase['status']; label: string; desc: string }[] = [
@@ -131,9 +130,17 @@ export function BuyTab() {
       createdAt: editingBuy?.createdAt ?? now,
     }
     await usePurchaseStore.getState().save(next)
-    // 状态刚变为「待取」→ 提醒取件（浏览器通知 + 应用内 toast 双保险）
+    // 状态刚变为「待取」→ 提醒取件。走统一投递管线：**免打扰时段与"其他"源开关都管得住它**
+    // （此前直接调 browserNotify，绕过总开关与免打扰 —— 夜里下单照样弹系统通知）
     if (next.status === 'ordered' && prev?.status !== 'ordered') {
-      void browserNotify('知白台 · 取件提醒', `「${next.title}」已下单，记得收快递取件`)
+      deliverNotice({
+        source: 'other',
+        title: '知白台 · 取件提醒',
+        text: `「${next.title}」已下单，记得收快递取件`,
+        hash: '#/finance',
+        system: true,
+        sound: true,
+      })
     }
     setBuyOpen(false)
     playSound('purchase')
@@ -148,7 +155,16 @@ export function BuyTab() {
     const cur = p.status ?? 'want'
     const nxt: Purchase['status'] = cur === 'want' ? 'ordered' : cur === 'ordered' ? 'done' : 'done'
     await usePurchaseStore.getState().update(p.id, { status: nxt, updatedAt: nowISO() })
-    if (nxt === 'ordered') void browserNotify('知白台 · 取件提醒', `「${p.title}」已下单，记得取件`)
+    if (nxt === 'ordered') {
+      deliverNotice({
+        source: 'other',
+        title: '知白台 · 取件提醒',
+        text: `「${p.title}」已下单，记得取件`,
+        hash: '#/finance',
+        system: true,
+        sound: true,
+      })
+    }
     toast(nxt === 'ordered' ? '已标记下单 · 记得取件' : '已标记到手', 'success')
   }
 

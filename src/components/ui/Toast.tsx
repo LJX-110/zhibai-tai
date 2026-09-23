@@ -1,57 +1,15 @@
 /**
- * Toast —— 轻提示
+ * Toast —— 轻提示（**渲染层**）
  * 桌面：右上角；移动：底部导航上方（safe-area 感知）
+ *
+ * 状态（store / `useToast`）已独立到 `./toast-store`：
+ * 同一文件既导出 store 又导出组件会让 Fast Refresh 失去完整性，
+ * 而全站十几处只需要那个 hook、并不需要这个组件。
  */
-import { create } from 'zustand'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, Info, X } from 'lucide-react'
 import { cn } from '../../utils/cn'
-import { recordNotice } from '../../services/notification'
-import { playSound } from '../../services/sound'
-
-type ToastTone = 'info' | 'success' | 'danger'
-
-interface ToastItem {
-  id: number
-  message: string
-  tone: ToastTone
-  /** 带跳转目标时，点一下直达对应板块（与系统通知的深链共用同一套 hash） */
-  hash?: string
-}
-
-interface ToastStore {
-  toasts: ToastItem[]
-  push: (message: string, tone: ToastTone, hash?: string) => void
-  dismiss: (id: number) => void
-}
-
-let seq = 0
-export const useToastStore = create<ToastStore>((set) => ({
-  toasts: [],
-  push: (message, tone, hash) => {
-    // 顺手记一笔历史：toast 一闪而过，错过的提醒要能回看
-    recordNotice(message, hash)
-    // 危险提示伴一声 error —— 全站报错声音的唯一通路（见 services/sound.ts 的反馈逻辑）：
-    // 只要弹了红色提示就一定有声，而不用指望每个调用点都记得加。
-    // 成功/信息类不在这里出声：它们的专属音由动作本身在调用点发出，这里再响就是两声。
-    if (tone === 'danger') playSound('error')
-    const id = ++seq
-    set((s) => ({ toasts: [...s.toasts, { id, message, tone, hash }] }))
-    setTimeout(() => {
-      set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
-    }, 2600)
-  },
-  dismiss: (id) =>
-    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-}))
-
-export function useToast() {
-  const push = useToastStore((s) => s.push)
-  return {
-    toast: (message: string, tone: ToastTone = 'info', hash?: string) =>
-      push(message, tone, hash),
-  }
-}
+import { useToastStore, type ToastTone } from './toast-store'
 
 const toneIcon: Record<ToastTone, typeof Info> = {
   info: Info,

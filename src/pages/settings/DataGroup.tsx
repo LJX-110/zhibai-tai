@@ -293,7 +293,8 @@ export function DataGroup() {
         {/* 说明性小字只在桌面显示（项目移动端约定第 4 条）；上面的"残留 N 条"是实时信息，移动端保留 */}
         <p className="mt-1 hidden text-xs text-ink-faint md:block">
           旧版完成「每日/每周/每月固定」任务时会多生成一条副本，导致同一件事在固定区反复出现。
-          生成逻辑已修，这里清理的是此前累积的存量副本。
+          生成逻辑已修，**启动时也会自动清理**（见 Bootstrap 的「整理固定任务」），
+          这里保留按钮是为了能先看清将要删掉什么再动手。
         </p>
         <Dialog
           open={dupOpen}

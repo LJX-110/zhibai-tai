@@ -17,11 +17,12 @@ import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useHabitLogStore } from '../../stores/useHabitStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
-import { useCourseStore } from '../../stores/useStudyStore'
+import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore } from '../../stores/useStudyStore'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { useWaterStore } from '../../stores/useWaterStore'
 import { activeSlotsOfDay, currentWeek } from '../../services/study'
-import { todayISO, weekdayCN, todayWeekday } from '../../utils/id'
+import { effectiveDone, liveFixedTasks, todayISO, weekdayCN, todayWeekday } from '../../utils/id'
+import { buildCapabilityContext } from './capability-context'
 import { buildDetailContext } from './plugins'
 
 export function buildContext(question: string): string {
@@ -41,10 +42,14 @@ export function buildContext(question: string): string {
   lines.push(`今天日期：${today}（周${weekdayCN(weekday)}）`)
 
   // ---------- 基础区：每天的常规概览 ----------
-  const open = tasks.filter((t) => !t.done)
+  // 两件事一起做：① 先取在世记录（旧版后继副本已隐藏但还在库里，会照样进计数）；
+  // ② 完成态走 effectiveDone（固定任务读裸 `done` 会把"今天还没做的每日固定"当成已完成，
+  //    模型据此以为用户已经做过了 —— 这种错它编得很自然，必须堵在源头）。
+  const live = liveFixedTasks(tasks)
+  const open = live.filter((t) => !effectiveDone(t))
   const todayTasks = open.filter((t) => t.dueDate?.startsWith(today))
   const overdue = open.filter((t) => t.dueDate && t.dueDate < today)
-  const doneToday = tasks.filter((t) => t.done && t.completedAt?.startsWith(today)).length
+  const doneToday = live.filter((t) => effectiveDone(t) && t.completedAt?.startsWith(today)).length
 
   if (todayTasks.length > 0) {
     lines.push(`今日待办：${todayTasks.slice(0, 8).map((t) => t.title).join('、')}`)
@@ -71,7 +76,12 @@ export function buildContext(question: string): string {
 
   // ---------- 今日课表：无条件注入（最高频的问题就是"今天有什么课"）----------
   const week = currentWeek(useSettingsStore.getState().termStartDate)
-  const todaySlots = activeSlotsOfDay(courses, weekday, week)
+  // 已停 / 已调走的课不算"今天的课"，调来的要算 —— 否则天机会答出一个已经不上的课表
+  const todaySlots = activeSlotsOfDay(courses, weekday, week, {
+    date: today,
+    cancellations: useCourseCancellationStore.getState().items,
+    reschedules: useCourseRescheduleStore.getState().items,
+  })
   if (todaySlots.length > 0) {
     lines.push(`【今日课表 · 第 ${week ?? '?'} 周 · 共 ${todaySlots.length} 节】`)
     for (const { course, slot } of todaySlots) {
@@ -84,6 +94,10 @@ export function buildContext(question: string): string {
 
   // ---------- 按问题注入的明细区（全部判定在各板块插件里）----------
   lines.push(...buildDetailContext(question))
+
+  // ---------- 系统能力（定位/剪贴板，与业务板块分开的独立接缝）----------
+  // 只在问题真的相关时才注入；未授权时明确写"未授权 + 别编造"
+  lines.push(...buildCapabilityContext(question))
 
   return lines.join('\n')
 }

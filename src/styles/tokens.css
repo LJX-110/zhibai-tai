@@ -119,6 +119,13 @@
   --radius-control: 4px;
   /* chip 档：比控件略大的小块 —— 徽标、勾选框、侧栏菜单项、顶栏工具按钮。
      它服务的是「小体量、需可点」的元素；与 Chip 组件的实现无关（Chip 用 tile 档）。 */
+  /* 中文小标签的字间距 —— 单一事实源。
+     ⚠️ 必须写在 @theme 内，否则 `tracking-label` 工具类不会被生成（静默失效、构建也不报错）；
+     验证方式是**查构建产物**里有没有 `.tracking-label{…}`，不是看源码。
+     取 0.08em：中文不吃宽字间距，只给一点分组感；此前散着 0.18~0.4em 五个值，
+     同类标签在不同页面疏密不一、窄屏更易折行。 */
+  --tracking-label: 0.08em;
+
   --radius-chip: 6px;
   --radius-tile: 8px;
   --radius-paper: 12px;

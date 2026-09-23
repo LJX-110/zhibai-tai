@@ -1,39 +1,33 @@
 /**
- * 修 · 成长页签 —— 修行境界（累积）+ 今日道行（快照）+ 闭关 + 五维
+ * 修 · 成长页签 —— 功行与境界（累计）+ 今日净行 + 闭关 + 今日炁象
  *
- * 改造要点（2026-09-21）：境界从「今日总分定阶」改为「**累计修为定阶、只升不降**」。
- * 两个口径刻意同屏并存、各说各的：
- *  · **修行境界** = 逐日累加的修为定阶，是"我修到什么份上"，忙几天不记录也不会掉；
- *  · **今日道行** = 当天功夫的快照，不记录就回落 —— 这是对的，它本来就是"今天的"。
- * 把它们混成一个数，就会出现"今天没记录，境界白修了"这种最打击人的体验。
+ * ## 2026-09-22 重做（这一版为什么长这样）
  *
- * 闭关（专门的提升方式）= 认领一件今日实事的专注（复用番茄钟的 task 关联），
- * 完成才结算修为。计时不另造 —— 番茄钟本就是全局唯一的专注计时。
+ * 三处硬伤被一并解决：
+ *  1. **判据单一**：境界只由**累计功行**定阶（`services/merit.ts`），
+ *     不再拿"今日某某"当判据 —— 那种口径今天不记录就掉阶，等于每天清零重来。
+ *  2. **过慢且无反馈**：阶次改为「六境 + **抱朴六轮**」，前六阶每 15 功一进 →
+ *     头几天就能连过数轮，早期有连续的小进阶感；配进度条 + 差额 + 升阶音效。
+ *  3. **只覆盖 5 个板块**：改为**九板块净行**（数据源是既有动作流水），
+ *     财/藏/情/奇/术/天机的行为终于算数了；每板块每日上限 8 功防刷。
+ *
+ * 「今日炁象」（五维）**保留但降级**：它只是首页罗盘的视觉输入，不参与境界判定。
+ * 刻意不在同一张卡里并排两个"等级感"的东西 —— 那正是上一版让人困惑的原因。
+ *
+ * 闭关 = 认领一件实事的专注（复用番茄钟），完成才结算额外功行。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  cultivationGrade,
-  readBest,
-  saveBestIfHigher,
-  seclusionReward,
-  type BestRecord,
-  type CultivationGrade,
-} from '../../services/cultivation'
+import { seclusionReward, type CultivationGrade } from '../../services/cultivation'
+import { REALM_STEPS } from '../../services/merit'
 import { useCultivation } from '../../hooks/useCultivation'
 import { usePomodoroTimerStore } from '../../stores/usePomodoroTimerStore'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { playSound } from '../../services/sound'
 import { Button, Ring, Section, Select, useToast } from '../../components/ui'
-import { todayISO } from '../../utils/id'
+import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
 import { cn } from '../../utils/cn'
 
-/** 倒计时 mm:ss（闭关中的剩余时长） */
-function countdown(sec: number): string {
-  const s = Math.max(0, Math.floor(sec))
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
-}
-
-/** 五阶视觉谱系 —— 色全部取自既有 tokens，用类名而非 inline style（便于 React Compiler 优化） */
+/** 今日炁象的阶位取色（罗盘用，与境界无关） */
 const GRADE_CLASS: Record<CultivationGrade['tone'], string> = {
   plain: 'border-ink-muted text-ink-muted',
   qing: 'border-skill-qing text-skill-qing',
@@ -42,8 +36,30 @@ const GRADE_CLASS: Record<CultivationGrade['tone'], string> = {
   cinnabar: 'border-cinnabar text-cinnabar',
 }
 
+/**
+ * 境界铭牌取色：按阶次递进（越上越重）。
+ * 抱朴六轮（rank 0-5）同为最浅档 —— 它们只是同一境里的轮次，不该显得像六个大境界。
+ */
+const REALM_TONE = [
+  'border-ink-muted text-ink-muted',
+  'border-skill-qing text-skill-qing',
+  'border-teal text-teal',
+  'border-bronze text-bronze',
+  'border-cinnabar text-cinnabar',
+]
+function realmToneClass(rank: number): string {
+  if (rank <= 5) return REALM_TONE[0]
+  return REALM_TONE[Math.min(rank - 5, REALM_TONE.length - 1)]
+}
+
+/** 倒计时 mm:ss（闭关中的剩余时长） */
+function countdown(sec: number): string {
+  const s = Math.max(0, Math.floor(sec))
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
 export function GrowthTab() {
-  const { result, grade, cumulative, realm, progress, seclusionCount } = useCultivation()
+  const { result, grade, merit, realm, progress, today, seclusionCount } = useCultivation()
   const tasks = useTaskStore((s) => s.items)
   const toast = useToast().toast
 
@@ -59,114 +75,101 @@ export function GrowthTab() {
 
   const [pickId, setPickId] = useState('')
   const inSeclusion = running && assoc === 'task'
-  /** 可认领的实事：未完成的待办（含今日到期），最多取 20 条免得下拉过长 */
+  /** 可认领的实事：本期未完成的待办（含今日到期），最多取 20 条免得下拉过长。
+   *  先取在世记录再按「本期」判完成 —— 否则昨天做完的每日固定今天认领不了，
+   *  已隐藏的历史副本也会混进下拉。 */
   const candidates = useMemo(
-    () => tasks.filter((t) => !t.done).slice(0, 20),
+    () => liveFixedTasks(tasks).filter((t) => !effectiveDone(t)).slice(0, 20),
     [tasks],
   )
   const liveTask = tasks.find((t) => t.id === assocId)
 
-  // 今日道行的历史峰值 —— 仍存本机。它记的是「单日道行最高到过多少」，
-  // 与「累积修为」不是一个量纲，所以**刻意不做折算迁移**：
-  // 拿旧峰值去推累计修为等于凭空造数据（一次日峰值怎能等于 8100 修为）。
-  // 境界从零起算、从今天开始累；旧的峰值照原样展示在今日道行卡里，什么都没丢。
-  const [best, setBest] = useState<BestRecord | null>(() => readBest())
-  useEffect(() => {
-    // 只在 total 变化时评估，并在 effect 内派生 grade ——
-    // 直接依赖 grade 对象会每次渲染都触发（它每次都是新对象），白跑一遍还掩盖真实触发源
-    if (saveBestIfHigher(cultivationGrade(result.total), result.total)) setBest(readBest())
-  }, [result.total])
-
-  // 进境反馈：修行境界升阶最值得庆祝（那是持续累积的成果）；今日道行升阶次之。
-  // 同一次变化里两者都动时只响一次 —— 否则会连响两声、弹两条提示。
+  // 升阶反馈：境界升阶是最值得庆祝的（持续累积的成果）
   const prevRealmRef = useRef<string | null>(null)
-  const prevGradeRef = useRef<string | null>(null)
   useEffect(() => {
-    const realmUp = prevRealmRef.current !== null && prevRealmRef.current !== realm.title
-    const gradeUp = prevGradeRef.current !== null && prevGradeRef.current !== grade.title
-    if (realmUp) {
+    if (prevRealmRef.current !== null && prevRealmRef.current !== realm.title) {
       playSound('levelup')
       toast(`境界提升 · ${realm.title}`, 'success')
-    } else if (gradeUp) {
-      playSound('levelup')
-      toast(`今日道行有进 · ${grade.title}`, 'success')
     }
     prevRealmRef.current = realm.title
-    prevGradeRef.current = grade.title
-  }, [realm.title, grade.title, toast])
+  }, [realm.title, toast])
+
+  const activeSections = today.sections.filter((s) => s.merit > 0)
 
   return (
     <div className="space-y-3">
-      {/* 修行境界 —— 累积口径，本页主角 */}
+      {/* 修行境界 —— 全站唯一的"等级"，由累计功行定阶 */}
       <Section title="修行境界">
         <div className="flex items-center gap-5">
           <Ring percent={progress.percent * 100} size={112} stroke={9}>
-            <span className="tabular text-xl font-semibold text-ink">{cumulative}</span>
-            {/* 字号例外：112px 环内只放得下 10px 的「修为」二字 */}
-            <span className="text-[10px] text-ink-faint">修为</span>
+            <span className="tabular text-xl font-semibold text-ink">{merit}</span>
+            {/* 字号例外：112px 环内只放得下 10px 的「功行」二字 */}
+            <span className="text-[10px] text-ink-faint">功行</span>
           </Ring>
           <div className="min-w-0 flex-1">
             <div
               className={cn(
-                'inline-flex items-center rounded-tile border px-2.5 py-1 text-sm font-medium',
-                GRADE_CLASS[realm.tone],
+                'inline-flex flex-wrap items-baseline gap-1.5 rounded-tile border px-2.5 py-1',
+                realmToneClass(realm.rank),
               )}
             >
-              {realm.title}
+              <span className="text-sm font-medium">{realm.title}</span>
+              {realm.honorific && (
+                <span className="text-xs opacity-80">尊称 · {realm.honorific}</span>
+              )}
             </div>
             <p className="mt-1 text-xs leading-relaxed text-ink-muted">{realm.desc}</p>
             <p className="mt-1 text-xs text-ink-faint">
               {progress.next === null
-                ? `已至顶阶 · 闭关 ${seclusionCount} 次`
+                ? `已至 ${REALM_STEPS[REALM_STEPS.length - 1].realm} · 闭关 ${seclusionCount} 次`
                 : `距 ${progress.nextTitle} 还差 ${progress.remaining} · 闭关 ${seclusionCount} 次`}
             </p>
           </div>
         </div>
       </Section>
 
-      {/* 今日道行 —— 快照口径。刻意与境界分开写，免得"今天没记录=境界白修"被误读 */}
-      <Section title="今日道行">
-        <div className="flex items-center gap-3">
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-nested">
-            <div
-              className={cn(
-                'h-full rounded-full transition-all',
-                // 今日道行到哪一阶，进度条就是哪一阶的色（与阶位铭牌同一色系）
-                grade.rank >= 4
-                  ? 'bg-cinnabar'
-                  : grade.rank >= 3
-                    ? 'bg-bronze'
-                    : grade.rank >= 2
-                      ? 'bg-teal'
-                      : grade.rank >= 1
-                        ? 'bg-skill-qing'
-                        : 'bg-ink-faint',
-              )}
-              style={{ width: `${result.total}%` }}
-            />
-          </div>
-          <span className="tabular w-16 shrink-0 text-right text-sm text-ink-muted">
-            {result.total}/100
-          </span>
-          <span className={cn('shrink-0 rounded-control border px-2 py-0.5 text-xs', GRADE_CLASS[grade.tone])}>
-            {grade.title}
+      {/* 今日净行 —— 让"今天修了什么"可见，这是"缺乏反馈"的正解 */}
+      <Section title="今日净行">
+        <div className="mb-2 flex flex-wrap items-baseline gap-2">
+          <span className="tabular text-lg font-semibold text-cinnabar">+{today.total}</span>
+          <span className="text-xs text-ink-muted">
+            功行
+            {activeSections.length > 0 &&
+              ` · 已修 ${activeSections.map((s) => s.label).join('')}`}
           </span>
         </div>
-        {/* 说明性小字只在桌面显示（项目移动端约定第 4 条）；历史最高带实时数据，移动端也留 */}
-        <p className="mt-1.5 text-xs text-ink-faint">
-          <span className="hidden md:inline">今日的心境快照，明天重新计；修行境界只累加、不回落 ·{' '}</span>
-          历史最高 {best ? `${best.title}（${best.total}）` : '暂无记录'}
+        <div className="flex flex-wrap gap-1.5">
+          {today.sections.map((s) => (
+            <span
+              key={s.key}
+              title={`${s.count} 次动作 · 每日上限 ${s.dailyCap} 功`}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-control border px-2 py-0.5 text-xs',
+                s.merit > 0
+                  ? 'border-teal/35 bg-teal/10 text-teal'
+                  : 'border-line bg-raised text-ink-faint',
+              )}
+            >
+              <span className="display font-medium">{s.label}</span>
+              <span className="tabular opacity-80">{s.merit > 0 ? `+${s.merit}` : '—'}</span>
+            </span>
+          ))}
+        </div>
+        {/* 纯说明，移动端不占首屏 */}
+        <p className="mt-2 hidden text-xs text-ink-faint md:block">
+          九板块里任何一件有意义的动作都会记功行；每板块每日上限 8 功，避免重复刷分。
+          观是汇总视图，不单独记功。
         </p>
       </Section>
 
-      {/* 闭关 —— 专门的境界提升方式 */}
+      {/* 闭关 —— 额外的境界提升方式 */}
       <Section title="闭关">
         {inSeclusion ? (
           <div className="flex items-center gap-3">
             <span className="tabular text-2xl font-semibold text-ink">{countdown(seconds)}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-ink">闭关中 · {liveTask?.title ?? '未命名'}</p>
-              <p className="text-xs text-ink-faint">完成即结算 {seclusionReward(seconds / 60)} 点修为</p>
+              <p className="text-xs text-ink-faint">完成即结算 {seclusionReward(seconds / 60)} 功行</p>
             </div>
             <Button size="sm" variant="tertiary" onClick={resetTimer}>
               出关
@@ -197,22 +200,21 @@ export function GrowthTab() {
                   setMode('focus')
                   setAssoc('task', pickId)
                   startTimer()
-                  toast('已入关，专注完成即结算修为', 'success')
+                  toast('已入关，专注完成即结算功行', 'success')
                 }}
               >
                 入关
               </Button>
             </div>
-            {/* 纯说明，移动端不占首屏 */}
             <p className="mt-1.5 hidden text-xs text-ink-faint md:block">
-              时长取番茄钟的专注设置；完成后额外得 20 + 每 10 分钟 5 点修为 —— 这是提升境界最快的路。
+              时长取番茄钟的专注设置；完成后额外得 20 + 每 10 分钟 5 功行 —— 这是提升境界最快的路。
             </p>
           </>
         )}
       </Section>
 
-      {/* 五维分解：行 / 学 / 身 / 心 / 创 */}
-      <Section title="五维">
+      {/* 今日炁象（五维）—— 明确标注它只是罗盘输入，不是境界 */}
+      <Section title="今日炁象">
         <div className="space-y-2.5">
           {result.dimensions.map((d) => (
             <div key={d.key} className="flex items-center gap-3">
@@ -221,8 +223,7 @@ export function GrowthTab() {
                 <div
                   className={cn(
                     'h-full rounded-full transition-all',
-                    // 低分不再用绛红：绛红在本体系里是「印章 / 危险」，
-                    // 拿它表示"分数低"会被误读成"出了问题"
+                    // 低分不用绛红：绛红在本体系里是「印章 / 危险」，拿它表示"分数低"会被误读成"出了问题"
                     d.value >= d.max * 0.75
                       ? 'bg-teal'
                       : d.value >= d.max * 0.4
@@ -238,6 +239,15 @@ export function GrowthTab() {
             </div>
           ))}
         </div>
+        <p className="mt-1.5 text-xs text-ink-faint">
+          <span className={cn('mr-1 rounded-control border px-1.5 py-0.5', GRADE_CLASS[grade.tone])}>
+            {grade.title}
+          </span>
+          <span className="hidden md:inline">
+            今日的五维快照，明天重新计、不累积；它是首页罗盘的视觉输入，
+            <strong className="text-ink-muted">不参与境界判定</strong>。
+          </span>
+        </p>
       </Section>
     </div>
   )

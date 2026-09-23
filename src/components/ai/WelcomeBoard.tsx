@@ -15,7 +15,7 @@ import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useCourseStore } from '../../stores/useStudyStore'
 import { useTodayStats } from '../../hooks/useTodayStats'
-import { todayISO } from '../../utils/id'
+import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
 import { cn } from '../../utils/cn'
 import { TIANJI_CAPABILITIES, type TianjiCapabilityKey } from './tianji-capability'
 import type { AiRemoteHealth } from '../../services/ai/health'
@@ -39,8 +39,10 @@ export function WelcomeBoard({
   const fins = useFinanceStore((s) => s.items)
   const courses = useCourseStore((s) => s.items)
 
-  const openCount = tasks.filter((t) => !t.done).length
-  const dueSoon = tasks.filter((t) => !t.done && t.dueDate && t.dueDate <= today).length
+  // 固定任务：先取在世记录（隐藏的旧副本会照样进计数），再按「本期」判完成态
+  const liveTasks = liveFixedTasks(tasks)
+  const openCount = liveTasks.filter((t) => !effectiveDone(t)).length
+  const dueSoon = liveTasks.filter((t) => !effectiveDone(t) && t.dueDate && t.dueDate <= today).length
   const unreadIntel = items.filter((it) => !it.read).length
   const month = today.slice(0, 7)
   const expense = fins
@@ -107,7 +109,7 @@ export function WelcomeBoard({
       {/* 能力胶囊：一行横滚（右缘渐隐提示还有内容）。
           只留能力名 —— 下方小字说明已按反馈移除，胶囊随之从「定宽定高两行」
           收敛为单行自适应，行高从 52px 降到 36px（与按钮触控下限一致） */}
-      <div className="mb-2 text-xs tracking-[0.18em] text-ink-faint">一键能力</div>
+      <div className="mb-2 eyebrow text-ink-faint">一键能力</div>
       {/* 负边距 + 内补白：让胶囊能滑到屏幕边缘，同时首项仍与上方内容对齐 */}
       <ScrollRow className="-mx-4 mb-3.5 px-4">
         {TIANJI_CAPABILITIES.map((c) => {
@@ -130,7 +132,7 @@ export function WelcomeBoard({
           问句按钮紧贴输入框，点一下即填入并发送，符合"在这儿问"的直觉。 */}
       <div className="mt-auto">
         {/* 快捷问句：空输入框不会自己教用户怎么问，把"能问什么"摆到明面上 */}
-        <div className="mb-2 text-xs tracking-[0.18em] text-ink-faint">可以这样问</div>
+        <div className="mb-2 eyebrow text-ink-faint">可以这样问</div>
         <div className="flex flex-wrap gap-1.5">
           {['我今天还有哪些事？', '这月花了多少钱？', '最近在关注什么？', '帮我规划今天下午'].map((h) => (
             <button

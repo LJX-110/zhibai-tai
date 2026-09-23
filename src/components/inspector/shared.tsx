@@ -9,7 +9,7 @@ export function InspectorShell({ title, onClose, children }: { title: string; on
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs tracking-[0.25em] text-ink-faint">{title}</span>
+        <span className="eyebrow text-ink-faint">{title}</span>
         <button onClick={onClose} className="touch-target flex items-center justify-center rounded-control p-1 text-ink-muted hover:bg-raised hover:text-ink" aria-label="关闭">
           <X size={15} />
         </button>

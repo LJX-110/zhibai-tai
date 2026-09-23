@@ -7,7 +7,7 @@
  *  · setSection 写 hash 形成历史记录；hashchange 回放时同值跳过，避免循环
  */
 import { create } from 'zustand'
-import { ALL_SECTIONS, type SectionId } from '../app/navigation'
+import { parseSection, type SectionId } from '../app/navigation'
 
 export type LayoutMode = 'auto' | 'desktop' | 'mobile'
 
@@ -21,9 +21,9 @@ interface AppState {
 }
 
 function sectionFromHash(): SectionId {
+  // 解析规则收在 navigation.parseSection（唯一解析处）；这里只决定"非法时去哪"
   if (typeof location === 'undefined') return 'overview'
-  const h = location.hash.replace(/^#\/?/, '')
-  return ALL_SECTIONS.some((s) => s.id === h) ? (h as SectionId) : 'overview'
+  return parseSection(location.hash) ?? 'overview'
 }
 
 function writeHash(s: SectionId): void {

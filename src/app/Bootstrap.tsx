@@ -8,8 +8,8 @@
  *  · 3 秒安全阀：任何数据源异常卡死也不阻塞进入工作台
  */
 import { useEffect } from 'react'
-import { create } from 'zustand'
 import { reloadAllStores } from '../stores/reload'
+import { useBootStore } from './boot-store'
 import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import { useSourceStore } from '../stores/useSourceStore'
@@ -24,6 +24,7 @@ import { initSyncedSettings } from '../services/settings-sync'
 import { seedAllCategories } from '../stores/useCategoryStore'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { COLLECTION_MEDIUM_LEGACY_LABEL } from '../services/categories'
+import { cleanupDuplicateFixedTasks, migrateFixedTaskSeries } from '../services/task-repair'
 
 /** 种子标记：避免 dev StrictMode 双跑导致重复播种 */
 let sourcesSeeded = false
@@ -63,6 +64,22 @@ async function migrateCollectionMediums(): Promise<void> {
   }
 }
 
+/**
+ * 固定任务整理：**先补系列标识（存量迁移），再清历史副本**。
+ *
+ * 两步必须按序 —— 先让副本链共用一个 `seriesId`，清理才能准确认出"谁是谁的副本"
+ * （反过来的话清理只能靠「锚点 + 标题」猜，遇到同名任务是两条真事就会误判）。
+ *
+ * 之所以可以**自动**跑而不必等用户点按钮：清理只删**已完成的旧副本**，
+ * 而这些副本在界面上早已不可见 —— 列表走 `liveFixedTasks`、「已完成」也不收固定任务 ——
+ * 所以这一步是零观感的垃圾回收，不会让用户"看见东西消失"。
+ * 设置页那个按钮保留，作为手动兜底与预览入口。
+ */
+async function tidyFixedTasks(): Promise<void> {
+  await migrateFixedTaskSeries()
+  await cleanupDuplicateFixedTasks()
+}
+
 /** 启动屏最短展示时长（与 index.html 里 .boot-fill 的动画时长保持一致）。
  *  本地 IndexedDB 是毫秒级就绪，若就绪即揭开，启动动画会一闪而过 ——
  *  用户反馈过「加载动画不明显、一闪而过」。 */
@@ -96,24 +113,6 @@ async function seedSources(): Promise<void> {
   if (migrated.length > 0) await useSourceStore.getState().load()
 }
 
-/** 启动就绪状态：App 据此决定显示启动屏还是工作台；
- *  `step` 是启动屏上那行阶段文案（"读取本地数据"之类）。
- *  进度条宽度由 CSS 时间动画推进，所以这里**不再维护步骤计数** ——
- *  算了没人看，反而多一份需要同步的状态。 */
-interface BootState {
-  ready: boolean
-  step: string
-  setStep: (label: string) => void
-  markReady: () => void
-}
-
-export const useBootStore = create<BootState>((set) => ({
-  ready: false,
-  step: '正在铺开文房',
-  setStep: (label) => set({ step: label }),
-  markReady: () => set({ ready: true }),
-}))
-
 export function Bootstrap() {
   useEffect(() => {
     initAutoSync()
@@ -130,6 +129,7 @@ export function Bootstrap() {
       ['载入冲突记录', () => useConflictStore.getState().load()],
       ['整理情报源', seedSources],
       ['整理分类', () => seedAllCategories()],
+      ['整理固定任务', tidyFixedTasks],
       ['迁移术类型', migrateAiResourceTypes],
       ['迁移藏品介质', migrateCollectionMediums],
     ]

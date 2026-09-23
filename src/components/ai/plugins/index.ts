@@ -17,9 +17,9 @@
  * 当前只注册**有内容可贡献**的板块；奇与术暂为保留位 —— 等它们有了明细区或一键能力
  * 再加进来，不做空壳文件（项目惯例：不留死代码）。
  */
-import type { ComponentType, SVGProps } from 'react'
+import type { ComponentType, ReactNode, SVGProps } from 'react'
 import type { SectionId } from '../../../app/navigation'
-import type { TianjiActionPayload } from '../action-protocol'
+import type { ActionFields, FieldSpec, TianjiActionSpec } from '../action-protocol'
 import type { useTodayStats } from '../../../hooks/useTodayStats'
 import { overviewPlugin } from './overview'
 import { actionPlugin } from './action'
@@ -42,11 +42,26 @@ export interface TianjiCapability {
   run(ctx: { stats: TodayStats }): Promise<{ title: string; body: string }>
 }
 
-/** 动作处理器：按 action 类型精确匹配入参（用 Extract 让 payload 类型跟着收窄） */
-export type TianjiActionHandlers = {
-  [K in TianjiActionPayload['action']]?: (
-    a: Extract<TianjiActionPayload, { action: K }>,
-  ) => Promise<boolean>
+/**
+ * 一个可被 AI 提议的动作 —— **规格、落库、预览三件一起申报**。
+ *
+ * 为什么要合成一个定义（P2 开放化）：
+ *  · 只在协议里加 `action` 名是不够的 —— 那样**卡片渲染**仍得改中心文件，
+ *    加动作依然要找两处。把预览也交给归属插件，"加一种动作只改自己的插件"才成立。
+ *  · `fields` 里读值走 `textOf / numberOf / listOf`，类型断言**收敛在插件内部**，
+ *    协议侧完全不认识任何具体字段。
+ */
+export interface TianjiActionDef {
+  /** 动作中文名（卡片与提示用） */
+  label: string
+  /** 字段规格：协议据此**通用**校验与规整（插件不必写解析代码） */
+  fields: Record<string, FieldSpec>
+  /** 「已加入…」这句回执里的简短摘要（如待办用标题、收支用「¥12.3 · 餐饮」） */
+  summary: (fields: ActionFields) => string
+  /** 落库（字段已通过校验）。一律走 store 工厂，绝不直接碰 Dexie */
+  run: (fields: ActionFields) => Promise<boolean>
+  /** 预览（卡片主体）—— 让用户在点确认前看清要写什么 */
+  preview: (fields: ActionFields) => ReactNode
 }
 
 export interface TianjiPlugin {
@@ -58,8 +73,8 @@ export interface TianjiPlugin {
   detail?(question: string): string[]
   /** 本板块的一键能力（横滚行的卡片） */
   capability?: TianjiCapability
-  /** 本板块可被 AI 提议的动作 */
-  actions?: TianjiActionHandlers
+  /** 本板块可被 AI 提议的动作（键即模型要写的 action 名） */
+  actions?: Record<string, TianjiActionDef>
 }
 
 /** 注册顺序即明细区注入顺序（见文件头约束 2） */
@@ -92,15 +107,26 @@ export function capabilityOf(key: string): TianjiCapability | undefined {
   return capabilitiesOf().find((c) => c.key === key)
 }
 
-/** 按动作类型找归属插件的执行器 */
-export function actionHandlerFor(
-  action: TianjiActionPayload['action'],
-): ((a: TianjiActionPayload) => Promise<boolean>) | undefined {
+/**
+ * 动作名 → 规格表（供协议解析用）。
+ * **只含已申报的动作** —— 未申报的名字会被协议静默跳过，正是"开放"的含义：
+ * 加动作只改自己的插件，协议与卡片文件都不用动。
+ */
+export function actionSpecs(): Record<string, TianjiActionSpec> {
+  const out: Record<string, TianjiActionSpec> = {}
   for (const p of TIANJI_PLUGINS) {
-    const handler = p.actions?.[action] as
-      | ((a: TianjiActionPayload) => Promise<boolean>)
-      | undefined
-    if (handler) return handler
+    for (const [name, def] of Object.entries(p.actions ?? {})) {
+      out[name] = { fields: def.fields }
+    }
+  }
+  return out
+}
+
+/** 动作名 → 完整定义（落库与预览都用它）。找不到即该动作未申报 → 调用方跳过 */
+export function actionDefFor(name: string): TianjiActionDef | undefined {
+  for (const p of TIANJI_PLUGINS) {
+    const def = p.actions?.[name]
+    if (def) return def
   }
   return undefined
 }

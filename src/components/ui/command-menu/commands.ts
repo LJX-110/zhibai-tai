@@ -19,7 +19,7 @@ import { saveDailySignRecord } from '../../../stores/useDivinationStore'
 import { refreshAll } from '../../../services/intelligence/run'
 import { runSync } from '../../../sync/SyncService'
 import { createId, todayISO, nowISO } from '../../../utils/id'
-import type { useToast } from '../Toast'
+import type { useToast } from '../toast-store'
 
 export interface Command {
   id: string
