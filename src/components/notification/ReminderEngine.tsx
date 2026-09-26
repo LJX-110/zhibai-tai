@@ -40,15 +40,14 @@ const FIRST_RUN_DELAY_MS = 2500
 const TICK_MS = 60_000
 
 export function ReminderEngine() {
-  /* 只订阅"要不要跑"这一个开关。浏览器通知开关、每源开关、免打扰时段
-     都**不在依赖里** —— 它们由投递管线在投递那一刻现读（`getState()`），
-     放进来只会让每分钟的调度在改设置时被重建，换不来任何正确性。 */
-  const notifyEnabled = useSettingsStore((s) => s.notifyEnabled)
-
+  /* ⚠️ **故意不订阅总开关、也不因它而停跑**（依赖数组为空）。
+   * 理由是不变式一："被静音 ≠ 没发生过" —— 总开关关掉期间到期的提醒，
+   * 仍要**进历史**（由投递管线判为 `muted` 后 `recordNotice`），
+   * 否则用户第二天翻历史看到的是空白，只会以为提醒坏了。
+   * 此前这里是 `if (!notifyEnabled) return`，整轮调度直接不跑 ——
+   * 管线里那个 `muted` 记历史的分支**永远执行不到**，与文档里的不变式自相矛盾。
+   * 空转成本可忽略：每分钟一次纯函数计算，且同一项同期间只记一次（靠 claim 去重）。 */
   useEffect(() => {
-    // 总开关关掉整条调度就不跑（省掉每分钟的空转）；管线里还有一层兜底
-    if (!notifyEnabled) return
-
     const tick = () => {
       const now = new Date()
       const st = useSettingsStore.getState()
@@ -117,7 +116,7 @@ export function ReminderEngine() {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [notifyEnabled])
+  }, [])
 
   return null
 }

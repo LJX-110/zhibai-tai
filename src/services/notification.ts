@@ -27,6 +27,24 @@ export function followUpdateCount(
   ).length
 }
 
+/**
+ * 「关注更新」这次该不该说 —— **只在计数变多时说**。
+ *
+ * ⚠️ 判据为什么不是「计数 > 0」：`followUpdateCount` 数的是"**未读**里匹配关注的数量"，
+ * 只要用户不去点阅，它就是个**稳定的非零值**。若只按"时间到了 + 计数非零"触发，
+ * 每轮抓取写入情报（数组引用一变 effect 就重跑）都会**把同一条提示再弹一次** ——
+ * 用户看到的就是"重复响"，而这与"状态一变就说"的设计声明并不一致
+ * （真正的状态变化是"未读变多了"，不是"又抓了一轮"）。
+ *
+ * 首次挂载（`prev === null`）也**不提示**，只记基线：刷新页面不是新增，
+ * "你有 N 条未读"这件事已由情报页的未读徽标承担。
+ */
+export function shouldAnnounceFollowUpdate(prev: number | null, count: number): boolean {
+  if (count === 0) return false
+  if (prev === null) return false
+  return count > prev
+}
+
 export type NotifyPermission = 'unsupported' | 'default' | 'granted' | 'denied'
 
 /** 当前系统通知权限（`getNotifyCapability` / `requestNotifyPermission` 的内部依赖） */

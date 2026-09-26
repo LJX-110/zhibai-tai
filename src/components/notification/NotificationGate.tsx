@@ -14,7 +14,7 @@ import { useFollowStore } from '../../stores/useLifeStores'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useConflictStore } from '../../stores/useConflictStore'
-import { followUpdateCount } from '../../services/notification'
+import { followUpdateCount, shouldAnnounceFollowUpdate } from '../../services/notification'
 import { deliverNotice } from './deliver'
 
 /** 关注更新的去抖：情报一轮抓取会连续写入多条，不该逐条弹 */
@@ -28,15 +28,22 @@ export function NotificationGate() {
   const follows = useFollowStore((s) => s.items)
   const intel = useIntelligenceStore((s) => s.items)
 
-  // 关注更新：监听情报变化时轻提示（去抖）
-  const lastFollowRef = useRef(0)
+  // 关注更新：**只在"未读匹配数变多"时**轻提示（去抖）
+  // ⚠️ 判据不能只看"计数 > 0" —— 未读数是个稳定值，那样每轮抓取（数组引用一变
+  // effect 就重跑）都会把同一条再弹一次。原因与判据见
+  // `services/notification.ts` 的 `shouldAnnounceFollowUpdate`。
+  const lastCountRef = useRef<number | null>(null)
+  const lastFollowAtRef = useRef(0)
   useEffect(() => {
-    if (!notifyEnabled) return
     const count = followUpdateCount(follows, intel)
-    if (count === 0) return
+    const prev = lastCountRef.current
+    // 基线无条件记录：关掉通知期间的变化不该在重开时"补弹"
+    lastCountRef.current = count
+    if (!notifyEnabled) return
+    if (!shouldAnnounceFollowUpdate(prev, count)) return
     const now = Date.now()
-    if (now - lastFollowRef.current < FOLLOW_DEBOUNCE_MS) return
-    lastFollowRef.current = now
+    if (now - lastFollowAtRef.current < FOLLOW_DEBOUNCE_MS) return
+    lastFollowAtRef.current = now
     deliverNotice({
       source: 'intel',
       title: '关注更新',

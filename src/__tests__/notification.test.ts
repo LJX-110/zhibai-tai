@@ -14,6 +14,7 @@ import {
   isQuietNow,
   listNoticeHistory,
   recordNotice,
+  shouldAnnounceFollowUpdate,
 } from '../services/notification'
 
 beforeEach(() => {
@@ -87,6 +88,27 @@ describe('关注更新计数 followUpdateCount', () => {
   it('已读条目不参与命中', () => {
     const items = [item({ title: 'AI 日报', read: true }), item({ title: 'AI 周报' })]
     expect(followUpdateCount([{ keyword: 'ai' }], items)).toBe(1)
+  })
+})
+
+describe('关注更新是否该提示 shouldAnnounceFollowUpdate', () => {
+  it('计数变多才提示', () => {
+    expect(shouldAnnounceFollowUpdate(2, 3)).toBe(true)
+    expect(shouldAnnounceFollowUpdate(0, 1)).toBe(true)
+  })
+
+  it('计数不变 / 变少 / 清零 → 不提示', () => {
+    // ⚠️ 这条钉住的是本次修掉的真问题：未读是个稳定值时，
+    // 原先"计数 > 0 就按时间窗重发"会让每轮抓取都把同一条再弹一次
+    expect(shouldAnnounceFollowUpdate(3, 3)).toBe(false)
+    expect(shouldAnnounceFollowUpdate(3, 1)).toBe(false)
+    expect(shouldAnnounceFollowUpdate(3, 0)).toBe(false)
+    expect(shouldAnnounceFollowUpdate(0, 0)).toBe(false)
+  })
+
+  it('首次挂载只记基线，不提示（刷新页面不是新增）', () => {
+    expect(shouldAnnounceFollowUpdate(null, 5)).toBe(false)
+    expect(shouldAnnounceFollowUpdate(null, 0)).toBe(false)
   })
 })
 

@@ -193,7 +193,7 @@ export function onPetClick(cfg: PetConfig, prev: PetRuntime, now: number, roll =
 }
 
 /** 外部忙闲注入口 —— **天机联动仍是预留**（P4 的另一半「气泡/碎碎念」已做，
-    这一半要先让 busy 变成可订阅状态，见 `docs/桌宠-方案与实现.md` §六） */
+    这一半要先让 busy 变成可订阅状态，见 `docs/方案与实现.md` §3.7） */
 export function setExternalBusy(prev: PetRuntime, busy: boolean): PetRuntime {
   if (prev.externalBusy === busy) return prev
   return { ...prev, externalBusy: busy }
