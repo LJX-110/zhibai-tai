@@ -25,7 +25,7 @@ export function ResourceFormDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={editing ? '改 AI 能力' : '登记 AI 能力'}
+      title={editing ? '编辑' : '记一个'}
       footer={
         <>
           <Button variant="tertiary" onClick={onClose}>取消</Button>

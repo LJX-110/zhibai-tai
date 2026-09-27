@@ -23,6 +23,8 @@ import type { CourseCancellation,
   CollectionItem,
   ConflictRecord,
   Course,
+  CoursePlan,
+  CoursePlanMeta,
   DivinationRecord,
   Exam,
   FinanceRecord,
@@ -69,6 +71,8 @@ export class WorkbenchDB extends Dexie {
   waterLogs!: Table<WaterLog, string>
   pomodoroSessions!: Table<PomodoroSession, string>
   courses!: Table<Course, string>
+  coursePlans!: Table<CoursePlan, string>
+  coursePlanMeta!: Table<CoursePlanMeta, string>
   homeworks!: Table<Homework, string>
   exams!: Table<Exam, string>
   collectionItems!: Table<CollectionItem, string>
@@ -211,6 +215,13 @@ export class WorkbenchDB extends Dexie {
      * 此前只有停课，于是"老师把周三的课挪到周五"只能靠停课 + 手动记，新时间那节谁也认不出来。 */
     this.version(13).stores({
       courseReschedules: 'id, courseId, date, toDate',
+    })
+    /* 新增「选课规划」与「选课目标」两张表（仅新增，不动既有结构）。
+     * 选课过程（候选 / 不可选 / 限选·公选·体育 / 公选分组）与学分进度此前无处可放 ——
+     * 塞进 Course 会让课表 / 提醒 / 番茄钟的每一处消费方都要自己过滤。 */
+    this.version(14).stores({
+      coursePlans: 'id, kind, status',
+      coursePlanMeta: 'id',
     })
   }
 }

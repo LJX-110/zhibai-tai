@@ -50,7 +50,17 @@ export function PetStage() {
  * 配置拉取仍会照跑（hook 已执行）—— 那就等于"关着也在请求"。
  */
 function PetStageInner() {
-  const { view, ready, onClick, spriteRef, drag } = usePetLoop()
+  const longPressedRef = useRef(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  /** 长按唤起菜单（移动端没有右键，这是等价操作）。存进 ref 传给 hook，避免依赖抖动 */
+  const onLongPress = useCallback(() => {
+    longPressedRef.current = true
+    setMenuOpen(true)
+  }, [])
+  const { view, ready, size, onClick, getPosition, getBounds, spriteRef, drag } = usePetLoop(
+    undefined,
+    onLongPress,
+  )
   const { bubble, refresh, dismiss } = usePetSaying()
   const toast = useToast().toast
   const setSection = useAppStore((s) => s.setSection)
@@ -58,11 +68,16 @@ function PetStageInner() {
   const affinity = usePetStore((s) => s.affinity)
   const petCreatedAt = usePetStore((s) => s.createdAt)
   const reducedMotion = prefersReducedMotion()
-  const [menuOpen, setMenuOpen] = useState(false)
   /** 戳它之后的顶嘴（独立于搭话，不走节流 —— 是**你主动**问的，不该被挡） */
   const [poke, setPoke] = useState<Saying | null>(null)
   const pokeTimerRef = useRef<number | null>(null)
-  const longPressedRef = useRef(false)
+  /**
+   * 气泡 / 菜单的锚点：它们要出现的那一刻**读一次**当前位置即可。
+   * 让它们每帧跟着宠物走反而会在移动中"甩"出去 —— 而它们本来就是
+   * "站在那儿说的一句话"，留在原地更自然，也省掉每帧重渲染。
+   * （刻意不用 state + effect：那样会多一轮渲染，而这里每次渲染直接读就够了。）
+   */
+  const anchor = poke || bubble || menuOpen ? getPosition() : ORIGIN
 
   // 空闲时预热待机/点击素材（首次切换不空窗）；失败静默 —— 预热失败只影响观感
   useEffect(() => {
@@ -142,23 +157,19 @@ function PetStageInner() {
     <>
       <PetSprite
         {...view}
-        size={VIEW_SIZE}
+        size={size}
         name="知白"
         reducedMotion={reducedMotion}
         onClick={onPetClick}
         nodeRef={spriteRef}
         drag={drag}
-        onLongPress={() => {
-          longPressedRef.current = true
-          setMenuOpen(true)
-        }}
       />
       {(poke ?? bubble) && (
         <PetBubble
           saying={(poke ?? bubble)!}
-          x={view.x}
-          y={view.y}
-          size={VIEW_SIZE}
+          x={anchor.x}
+          y={anchor.y}
+          size={size}
           reducedMotion={reducedMotion}
           onGo={() => {
             const cur = poke ?? bubble
@@ -175,9 +186,10 @@ function PetStageInner() {
       )}
       <PetMenu
         open={menuOpen}
-        x={view.x}
-        y={view.y}
-        size={VIEW_SIZE}
+        x={anchor.x}
+        y={anchor.y}
+        size={size}
+        bounds={getBounds()}
         meta={meta}
         onPoke={pokeBack}
         onAction={onMenuAction}
@@ -194,8 +206,8 @@ function PetStageInner() {
   )
 }
 
-/** 与 config.json 的 size 保持一致（渲染尺寸；配置仅用于几何与素材解析） */
-const VIEW_SIZE = 160
+/** 气泡 / 菜单不显示时的默认锚点（模块级常量，避免每次渲染新建对象） */
+const ORIGIN = { x: 0, y: 0 }
 
 /** 预热名单：待机与点击回应（最高频），其余等真正播到时再拉 */
 const warmupNames = ['待机呼吸休闲', '东张西望', '点击回应-开心跃动', '点击回应-元气挥手', '点击回应-害羞惊讶', '点击回应-傲娇生气']

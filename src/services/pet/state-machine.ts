@@ -40,8 +40,14 @@ export interface DecideContext {
   /** 当前身体中心（px） */
   cx: number
   cy: number
-  /** 视口（px） */
+  /** 宿主矩形（px）—— 由 host 转成，本模块不读 window，见 `./geometry` */
   viewport: Rect
+  /**
+   * 运行时实际尺寸（**effectiveSize = baseSize × scale**）。
+   * 几何口径唯一来源是 `./geometry`：状态机不再直接读 `cfg.size`，
+   * 否则"用户调大宠物"之后边界仍按基准尺寸算，宠物会走出可活动区域。
+   */
+  size: number
   /** 是否处于 prefers-reduced-motion */
   reducedMotion: boolean
   /** 注入的随机区间取值器（默认 Math.random 版；单测可固定） */
@@ -101,7 +107,7 @@ export function initialRuntime(cfg: PetConfig, now: number): PetRuntime {
  */
 export function decide(cfg: PetConfig, prev: PetRuntime, ctx: DecideContext): PetRuntime {
   const rand = ctx.rand ?? ((min: number, max: number) => Math.floor(min + Math.random() * (max - min)))
-  const { now, viewport } = ctx
+  const { now, viewport, size } = ctx
 
   // ① 外部占用优先：进 busy 段（没有 busy 动画则退回 idle，但相位仍记 busy 以便外部释放时能识别）
   if (prev.externalBusy) {
@@ -137,7 +143,7 @@ export function decide(cfg: PetConfig, prev: PetRuntime, ctx: DecideContext): Pe
     }
 
     case 'move': {
-      const halfW = cfg.size / 2
+      const halfW = size / 2
       const margin = Math.max(cfg.position.marginX, cfg.position.marginY)
       for (const dir of [1, -1] as const) {
         const plan = planMove({
@@ -146,8 +152,8 @@ export function decide(cfg: PetConfig, prev: PetRuntime, ctx: DecideContext): Pe
           W: viewport.width,
           H: viewport.height,
           dir,
-          minDist: cfg.size * 1.5,
-          maxDist: cfg.size * 5,
+          minDist: size * 1.5,
+          maxDist: size * 5,
           margin,
           halfW,
           // 身体两侧的透明边：按身体贴边而不是按整个视频盒贴边

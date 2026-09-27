@@ -34,10 +34,13 @@ const PRESENTATION: Record<
 
 export function ChatHeader({
   remote,
+  model,
   onNewChat,
   onClose,
 }: {
   remote: AiRemoteHealth
+  /** 当前远程模型名（远程未配置时不显示）——「天机到底在用哪个模型」该看得见 */
+  model?: string
   onNewChat: () => void
   onClose: () => void
 }) {
@@ -58,6 +61,12 @@ export function ChatHeader({
         <Badge tone={p.tone} title={title}>
           {p.label}
         </Badge>
+        {/* 模型名（远程就绪 / 降级时才显示）：窄屏 truncate，不让它把状态徽标挤走 */}
+        {model && remote.state !== 'unconfigured' && (
+          <span className="tabular min-w-0 truncate text-xs text-ink-faint" title={`当前模型：${model}`}>
+            {model}
+          </span>
+        )}
       </div>
       {/* 图标按钮给到 36px：28px 在手机上偏小（手指点空就关不掉/清不掉） */}
       <button

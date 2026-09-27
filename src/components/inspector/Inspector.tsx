@@ -47,7 +47,7 @@ export function Inspector() {
           aria-modal="true"
           aria-label="详情"
           tabIndex={-1}
-          className="talisman overlay-panel overlay-panel--edge absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet focus:outline-none"
+          className="talisman overlay-panel overlay-panel--edge absolute inset-x-0 bottom-0 max-h-[88vh] overflow-y-auto overscroll-contain p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet focus:outline-none"
         >
           {content}
         </div>
@@ -55,8 +55,11 @@ export function Inspector() {
     )
   }
 
+  // 桌面端是常驻侧栏（固定 360px）：`max-w-full` 兜住"被强制成桌面布局的窄屏"
+  // ——「系统 · 外观」可以把布局钉死为桌面，320px 手机上 360px 侧栏会向左溢出 40px。
+  // 只在视口 <360px 时收窄，宽屏逐像素不变。
   return (
-    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-[var(--z-header)] w-[360px] overflow-y-auto border-l border-line bg-panel p-6 anim-enter-fast">
+    <aside className="fixed right-0 top-[var(--header-h)] bottom-0 z-[var(--z-header)] w-[360px] max-w-full overflow-y-auto border-l border-line bg-panel p-6 anim-enter-fast">
       {content}
     </aside>
   )

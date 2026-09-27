@@ -20,12 +20,14 @@ export function Progress({ value, max = 100, className, bronze }: ProgressProps)
       aria-valuemax={max}
       className={cn('h-1.5 w-full overflow-hidden rounded-full bg-nested', className)}
     >
+      {/* 用 scaleX 而不是 width 做动画：width 每帧触发布局重算，
+          本项目只允许 transform / opacity 参与动画（见编码规范 §4.6） */}
       <div
         className={cn(
-          'h-full rounded-full transition-[width] duration-slow var(--ease-standard)',
+          'h-full w-full origin-left rounded-full transition-transform duration-slow',
           bronze ? 'bg-bronze' : 'bg-cinnabar',
         )}
-        style={{ width: `${pct}%` }}
+        style={{ transform: `scaleX(${pct / 100})` }}
       />
     </div>
   )

@@ -18,6 +18,26 @@ const FOCUSABLE =
 /** 打开中的模态层，按打开顺序排列（栈顶 = 最后打开） */
 let modalStack: object[] = []
 
+/**
+ * 背景滚动锁（防"滚动穿透"）：模态层打开时锁住文档滚动 ——
+ * 否则手机上手指滑弹层，页面会在背后跟着滚，关掉弹层时用户已经不知道自己到哪了。
+ * 用**计数**而不是布尔：叠放时（命令面板 → 速查表）关掉上层不该解锁下层仍需要的锁；
+ * 并保存/还原原先的内联值，避免把别处设过的 overflow 一并清掉。
+ */
+let scrollLockCount = 0
+let prevRootOverflow = ''
+function lockScroll(): void {
+  if (scrollLockCount++ === 0) {
+    prevRootOverflow = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+  }
+}
+function unlockScroll(): void {
+  if (scrollLockCount > 0 && --scrollLockCount === 0) {
+    document.documentElement.style.overflow = prevRootOverflow
+  }
+}
+
 /** 当前是否存在模态弹层（供非模态层判断是否让位） */
 export function hasActiveOverlay(): boolean {
   return modalStack.length > 0
@@ -54,6 +74,8 @@ export function useModalLayer({
     if (modal) {
       playSound('ui-open')
       modalStack.push(token)
+      // 模态层才锁背景滚动：桌面 Inspector 是非模态侧栏，锁了反而妨碍对照阅读
+      lockScroll()
     }
     const previous = document.activeElement as HTMLElement | null
     // 通过 portal 挂载的节点要到下一帧才在真实 DOM 里出现
@@ -70,6 +92,7 @@ export function useModalLayer({
       previous?.focus?.()
       playSound('ui-close')
       modalStack = modalStack.filter((t) => t !== token)
+      unlockScroll()
     }
   }, [open, modal])
 

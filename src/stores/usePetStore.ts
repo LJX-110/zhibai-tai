@@ -1,8 +1,17 @@
 /**
- * 桌宠状态 store —— 内存态 + 落库节流
+ * 桌宠**业务状态** store（好感度 / 里程碑 / lastAction）
  *
  * 纪律：写库只经本 store 的方法 → pet-repo，**禁止组件直接碰 Dexie**。
- * 位置会高频变化（漫游/拖拽），所以落库必须节流，否则同步快照会被刷爆。
+ *
+ * ⚠️ **这里不再有 position**（2026-09-27 桌宠第一阶段）。
+ * 位置曾是本 store 的高频字段（节流 3s 落库、且写在业务表里），于是每次落库都
+ * `notifyDataChanged()` → 漫游会不断刷新同步脏标记与定时器；而默认 30s 间隔下
+ * `schedule()` 是"clearTimeout 后重设"，被持续刷新就等于 **同步永远不会发生**。
+ * 位置现在交给宿主保管（`PetHost.loadLocalPosition / persistLocalPosition`，
+ * 设备级、不进快照），本 store 只管真正需要跨设备的业务数据。
+ *
+ * 旧字段 `petState.position` **保留在表里不删**（老用户数据兼容）：`usePetLoop`
+ * 首次落位时会读它一次做迁移，之后不再写入。
  */
 import { create } from 'zustand'
 import { notifyDataChanged } from '../sync/auto'
@@ -16,13 +25,9 @@ import {
   type AffinityEvent,
 } from '../services/pet/affinity'
 
-/** 位置落库的最小间隔：拖拽/漫游每秒都在动，3s 一次足够跨设备恢复 */
-const POSITION_WRITE_MS = 3000
-
 export interface PetStoreState {
   /** 是否已从库里载入过（避免重复初始化覆盖内存态） */
   loaded: boolean
-  position: { x: number; y: number }
   affinity: number
   /** 初次落库时间 —— 好感度里程碑按"相识天数"算，所以必须读得到它 */
   createdAt: string
@@ -33,8 +38,6 @@ export interface PetStoreState {
   lastAction: string | null
 
   load: () => Promise<void>
-  /** 更新位置（内存即时，落库节流） */
-  setPosition: (x: number, y: number) => void
   /** **好感度加分**（事件 → 查规则 → 落库）。返回本次实得（0 = 已到当日上限） */
   grantAffinity: (event: AffinityEvent) => Promise<number>
   /** 好感度：直接写值（数据修复/迁移用；日常加分走 `grantAffinity`） */
@@ -43,13 +46,8 @@ export interface PetStoreState {
   setLastAction: (a: string | null) => Promise<void>
 }
 
-let lastPositionWriteAt = 0
-let pendingPosition: { x: number; y: number } | null = null
-let flushTimer: ReturnType<typeof setTimeout> | undefined
-
 export const usePetStore = create<PetStoreState>((set, get) => ({
   loaded: false,
-  position: { x: 0, y: 0 },
   affinity: 0,
   createdAt: '',
   affinityDay: '',
@@ -62,7 +60,8 @@ export const usePetStore = create<PetStoreState>((set, get) => ({
     const row = await readPetState()
     if (row) {
       set({
-        position: row.position,
+        // ⚠️ 刻意不读 row.position：那是 legacy 字段，位置归宿主管（见文件头）。
+        // 读进来只会让人以为它还是"当前位置"，从而又走上"写它 → 触发同步"的老路。
         affinity: row.affinity,
         createdAt: row.createdAt ?? '',
         affinityDay: row.affinityDay ?? '',
@@ -74,33 +73,6 @@ export const usePetStore = create<PetStoreState>((set, get) => ({
     } else {
       set({ loaded: true })
     }
-  },
-
-  setPosition: (x, y) => {
-    const s = get()
-    set({ position: { x, y } })
-    // 与修行状态同一条纪律：**未载入完成前不落库**。
-    // 否则会用内存里的空态（{0,0}）覆盖已存位置 —— 宠物换设备/重载就"跑回原点"。
-    // 内存态照常更新，界面不卡顿；载入完成后下一次移动自然会补写。
-    if (!s.loaded) return
-    pendingPosition = { x, y }
-    const now = Date.now()
-    const elapsed = now - lastPositionWriteAt
-    if (elapsed >= POSITION_WRITE_MS) {
-      void commitPosition(pendingPosition)
-      pendingPosition = null
-      lastPositionWriteAt = now
-      return
-    }
-    // 未到间隔：排一个尾写，保证最后一次位置一定落库（否则停在半路就丢了）
-    clearTimeout(flushTimer)
-    flushTimer = setTimeout(() => {
-      if (pendingPosition) {
-        void commitPosition(pendingPosition)
-        pendingPosition = null
-        lastPositionWriteAt = Date.now()
-      }
-    }, POSITION_WRITE_MS - elapsed)
   },
 
   setAffinity: async (v) => {
@@ -148,8 +120,3 @@ export const usePetStore = create<PetStoreState>((set, get) => ({
     void writePetState({ lastAction: a, updatedAt: nowISO() }).then(() => notifyDataChanged())
   },
 }))
-
-async function commitPosition(pos: { x: number; y: number }): Promise<void> {
-  await writePetState({ position: pos, updatedAt: nowISO() })
-  notifyDataChanged()
-}

@@ -12,14 +12,19 @@
  * 参数用 `public/pet/config.json` 里的真值，改配置忘了改这里的假设就会红。
  */
 import { describe, expect, it } from 'vitest'
-import { boundsOf, integrate, throwVelocity, MAX_STEP_SEC, type PhysicsBounds } from '../services/pet/physics'
-import type { PhysicsParams } from '../services/pet/types'
+import { integrate, throwVelocity, MAX_STEP_SEC } from '../services/pet/physics'
+import { boundsOf } from '../services/pet/geometry'
+import type { PetBounds, PhysicsParams } from '../services/pet/types'
 
 /** 与 config.json 的 physics 段一致 */
 const P: PhysicsParams = { gravity: 1400, restitution: 0.78, groundFriction: 2.5, throwPower: 1 }
 
-/** 160×90 的宠物放在 800×600 视口里（边距 8） */
-const B: PhysicsBounds = boundsOf(160, { x: 0, y: 0, width: 800, height: 600 })
+/**
+ * 160×90 的宠物放在 800×600 宿主矩形里（边距 8）。
+ * ⚠️ 边界现在归 `services/pet/geometry` —— physics 只吃算好的 `PetBounds`，
+ * 不认识"窗口"是什么（宿主矩形换一种给法，它一行都不用改）。
+ */
+const B: PetBounds = boundsOf({ x: 0, y: 0, width: 800, height: 600 }, 160)
 
 /** 反复积分直到静止或达到步数上限 */
 function settle(
@@ -35,19 +40,6 @@ function settle(
   }
   return { ...cur, steps, resting: false }
 }
-
-describe('boundsOf：宠物可活动范围', () => {
-  it('按 16:9 推高度，四周留边距', () => {
-    // 800 - 160 - 8 = 632；600 - 90 - 8 = 502
-    expect(B).toEqual({ minX: 8, maxX: 632, minY: 8, maxY: 502 })
-  })
-
-  it('视口比宠物还小时，上下界重合而不是反转（否则 integreate 会左右来回夹）', () => {
-    const tiny = boundsOf(160, { x: 0, y: 0, width: 100, height: 60 })
-    expect(tiny.maxX).toBeGreaterThanOrEqual(tiny.minX)
-    expect(tiny.maxY).toBeGreaterThanOrEqual(tiny.minY)
-  })
-})
 
 describe('throwVelocity：松手速度', () => {
   it('采样不足 / 时间跨度为 0 → 0（除以 0 会得到 Infinity，宠物会被扔出天际）', () => {
@@ -131,12 +123,12 @@ describe('integrate：重力 / 反弹 / 摩擦 / 静止', () => {
   it('落地反弹后速度变小（restitution < 1），弹几次就停在地上', () => {
     const spun = settle({ x: 100, y: 100, vx: 0, vy: 900 })
     expect(spun.resting).toBe(true)
-    expect(spun.y).toBeCloseTo(B.maxY, 5)
+    expect(spun.y).toBeCloseTo(B.bottom, 5)
     expect(spun.vy).toBe(0)
   })
 
   it('**已经贴地且不动 → 立刻判静止**（rAF 循环当场结束，不多转一帧）', () => {
-    const r = settle({ x: 300, y: B.maxY, vx: 0, vy: 0 })
+    const r = settle({ x: 300, y: B.bottom, vx: 0, vy: 0 })
     expect(r.resting).toBe(true)
     expect(r.steps).toBe(1)
   })
@@ -144,43 +136,43 @@ describe('integrate：重力 / 反弹 / 摩擦 / 静止', () => {
   it('从半空落下：会落下来、弹几下、最终停在地上（而不是"贴地滑"或"永弹"）', () => {
     const r = settle({ x: 300, y: 400, vx: 0, vy: 0 })
     expect(r.resting).toBe(true)
-    expect(r.y).toBeCloseTo(B.maxY, 5)
+    expect(r.y).toBeCloseTo(B.bottom, 5)
     // 一次 78px 的自由落体 + 几次递减的反弹：给足余量但仍要"该停就停"
     expect(r.steps).toBeLessThan(300)
   })
 
   it('地面摩擦让水平速度衰减（贴地才摩擦，腾空不减速）', () => {
-    const onGround = integrate({ x: 300, y: B.maxY, vx: 200, vy: 0 }, 1 / 60, P, B)
+    const onGround = integrate({ x: 300, y: B.bottom, vx: 200, vy: 0 }, 1 / 60, P, B)
     expect(onGround.state.vx).toBeLessThan(200)
     const airborne = integrate({ x: 300, y: 100, vx: 200, vy: 0 }, 1 / 60, P, B)
     expect(airborne.state.vx).toBe(200)
   })
 
   it('左墙反弹：撞墙后水平速度反向且变小', () => {
-    const r = integrate({ x: B.minX + 0.1, y: 300, vx: -400, vy: 0 }, 1 / 30, P, B)
-    expect(r.state.x).toBe(B.minX)
+    const r = integrate({ x: B.left + 0.1, y: 300, vx: -400, vy: 0 }, 1 / 30, P, B)
+    expect(r.state.x).toBe(B.left)
     expect(r.state.vx).toBeGreaterThan(0)
     expect(r.state.vx).toBeLessThan(400)
   })
 
   it('右墙同理（反向到左侧）', () => {
-    const r = integrate({ x: B.maxX - 0.1, y: 300, vx: 400, vy: 0 }, 1 / 30, P, B)
-    expect(r.state.x).toBe(B.maxX)
+    const r = integrate({ x: B.right - 0.1, y: 300, vx: 400, vy: 0 }, 1 / 30, P, B)
+    expect(r.state.x).toBe(B.right)
     expect(r.state.vx).toBeLessThan(0)
   })
 
-  it('天花板也会挡住（往上甩不会飞出视口顶部）', () => {
-    const r = integrate({ x: 300, y: B.minY + 0.1, vx: 0, vy: -600 }, 1 / 30, P, B)
-    expect(r.state.y).toBe(B.minY)
+  it('天花板也会挡住（往上甩不会飞出宿主顶端）', () => {
+    const r = integrate({ x: 300, y: B.top + 0.1, vx: 0, vy: -600 }, 1 / 30, P, B)
+    expect(r.state.y).toBe(B.top)
     expect(r.state.vy).toBeGreaterThanOrEqual(0)
   })
 
   it('**静止判定要看两个轴**：水平还在滑就不算停（否则 rAF 循环永不结束）', () => {
     // 贴地、垂直已停，但水平还有速度 → 不算静止
-    const stillMoving = integrate({ x: 300, y: B.maxY, vx: 400, vy: 0 }, 1 / 60, P, B)
+    const stillMoving = integrate({ x: 300, y: B.bottom, vx: 400, vy: 0 }, 1 / 60, P, B)
     expect(stillMoving.resting).toBe(false)
     // 两轴都小 → 静止
-    const atRest = integrate({ x: 300, y: B.maxY, vx: 0, vy: 0 }, 1 / 60, P, B)
+    const atRest = integrate({ x: 300, y: B.bottom, vx: 0, vy: 0 }, 1 / 60, P, B)
     expect(atRest.resting).toBe(true)
   })
 

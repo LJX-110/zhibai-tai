@@ -46,7 +46,7 @@ export function Dialog({
         aria-labelledby={title != null ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'talisman overlay-panel relative w-full max-w-md p-5 shadow-overlay anim-enter max-h-[85vh] overflow-y-auto focus:outline-none',
+          'talisman overlay-panel relative w-full max-w-md p-5 shadow-overlay anim-enter max-h-[85vh] overflow-y-auto overscroll-contain focus:outline-none',
           className,
         )}
       >

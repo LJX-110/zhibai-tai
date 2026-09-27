@@ -15,6 +15,7 @@ import { useProjectStore } from './useProjectStore'
 import { useSourceStore } from './useSourceStore'
 import { useActivityStore, useFollowStore } from './useLifeStores'
 import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore, useExamStore, useHomeworkStore } from './useStudyStore'
+import { useCoursePlanMetaStore, useCoursePlanStore } from './useCoursePlanStore'
 import { useTaskStore } from './useTaskStore'
 import { useWaterStore } from './useWaterStore'
 import { useCategoryStore } from './useCategoryStore'
@@ -37,6 +38,9 @@ export async function reloadAllStores(): Promise<void> {
     useCourseStore.getState().load(),
     useCourseCancellationStore.getState().load(),
     useCourseRescheduleStore.getState().load(),
+    // 选课规划：条目与目标都是业务表 —— 同步 / 导入后不重载，界面会停在旧值
+    useCoursePlanStore.getState().load(),
+    useCoursePlanMetaStore.getState().load(),
     useHomeworkStore.getState().load(),
     useExamStore.getState().load(),
     useCollectionStore.getState().load(),

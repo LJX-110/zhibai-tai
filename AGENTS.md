@@ -50,7 +50,11 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
     `pruneIntelligence`（模式对齐 `services/activity.ts`：先写墓碑再删，否则远端快照会加回）。
     抓取路径统一用 `saveFetchedItems` 落库 + 裁剪，三处调用点不要各写各的。
 
-## 移动端优先约定（手机为主要场景）
+## 移动端优先约定（手机是第一产品形态）
+
+> 2026-09-28 定调：**所有视觉与交互优先按手机设计**。桌面浏览器保持"能打开、不崩、布局正常、
+> 方便开发与偶尔录入"，**不再为桌面宽屏增加专门功能**；**不做桌面 App**（Tauri / Electron /
+> Windows 桌宠）—— 真桌面壳已在文档里记为"不做"。
 
 1. **页内页签不超过 4 个**。超出的是「看不见的功能」——窄屏上横滚的页签等于藏起来。
    功能不删，收进页内子视图（例：「学」把课程管理收进课程表，6 个页签 → 4 个）。
@@ -124,13 +128,21 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
   provider 内部仍用原文做 404/409/422 分支判断 —— **两处用途不同，别合并**。
 - GitHub 同步走 Git Data API（`sync/github/GithubSyncProvider.ts`），ref fast-forward 冲突自动重跑
 - **`intelligenceSources.lastFetchedAt / lastError` 是本机字段**：导出快照时剥离、
-  写回时保留本机值（`SyncService.LOCAL_ONLY_FIELDS`），否则两台设备会互相覆盖
+  写回时保留本机值（`sync/snapshot.ts` 的 `LOCAL_ONLY_FIELDS`），否则两台设备会互相覆盖
 - **"今天上哪些课"只有一个正确取法**：`activeSlotsOfDay(courses, weekday, currentWeek(termStartDate))`
   （`services/study.ts`）。它按 `slotOnWeek` 过滤 `weeks`（单双周 / 限定周次）。
   **禁止手写 `schedule.filter(s => s.weekday === 今天)`** —— 那会漏掉周次，
   首页「今日课程」曾因此长期显示这周本来不上的课（提醒链路早修了，首页漏了）。
   `npm run check:rules` 规则 4 已把这条做成机器可查。
-- 课程表周次逻辑集中在 `services/study.ts`（当前周 / 单双周 / 时段冲突）。
+- **选课规划（「学 → 课程表 → 学分 · 选课」）的口径在 `services/study.ts` 的 `planProgress`**：
+  只数 `status === 'selected'` 的学分；**`remaining = max(goal - selected, 0)`（超额不倒扣** ——
+  负数会被读成"还欠"，与"已经选够了"正好相反）；目标为 0 视为未设目标。
+  ⚠️ **`CoursePlan`（选课规划）与 `Course`（正式课表）刻意互不依赖**：学分的真相在规划里，
+  不去问课程表 —— 把候选 / 不可选塞进 `Course` 会让课表、提醒、番茄钟每一处消费方都要自己过滤。
+  ⚠️ **`CoursePlan.title` 必须是课程名**：只有教师姓名（"蔡军""杜娟"）的内容写进 `CoursePlanMeta.notes`，
+  不建"课程名或教师名二选一"的混合实体。
+  `goals` 里的 8 / 12 / 1 只是**首次运行的起点**（仓储 `createEmpty` 里），不是写死的校规，页面上随时可改。
+  出勤与成绩当前**没有可信数据源**，如实不做，别用估算填上。
   **所有"到点提醒"由 `components/notification/ReminderEngine` 统一调度**（判定在 `services/reminders.ts`
   的纯函数里，按「键 + 期间」认领见 `services/reminder-claims.ts`）；原 `components/study/ClassReminder`
   已删除，其"提前 15 分钟逐节提醒"并入引擎的 `class-ahead` 源。**不要在别处另起一套提醒判定**。
@@ -147,6 +159,13 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
 - **单行表（偏好 / 桌宠 / 修行）走 `repositories/singleton.ts`**：统一持有两条语义 ——
   **读不到返回 null，绝不伪造行**（否则读一次就凭空多一条待同步记录）、
   **建行由调用方给工厂**（业务默认值不在仓储里猜）。别再各写一份 read/write。
+- **桌宠不许碰业务层**：它的核心（`services/pet/` 的 geometry / runtime / motion / physics /
+  state-machine / interaction）**只认数字与 `PetBounds`** —— 不读 `window` / `screen`、不 import store、
+  不写 Dexie。宿主差异一律走 `PetHost` 的三档接口（必备 / 本机状态 / 业务状态，见 `docs/方案与实现.md` §3.3）。
+  ⚠️ **位置是设备级状态**（`loadLocalPosition` / `persistLocalPosition`），**不进业务表、不触发同步** ——
+  它每几秒就变，写业务表会把同步链路的脏标记刷爆（默认 30s 间隔下定时器被反复重设 = 同步永不发生）。
+  ⚠️ **尺寸只有一个真相**：`geometry.ts` 的 `effectiveSize = baseSize(petScale)`，
+  别再在组件里写第二份尺寸常量（曾有 `PetStage` 的 `VIEW_SIZE` 与 config 的 `size` 两套）。
 - ⚠️ **「修行境界」与「今日炁象」是两回事，别混**：
   · **境界** = `realmOf(累计功行)`（`services/merit.ts`）：功行逐日累加、**只升不降**，是"等级"；
   · **今日炁象** = `cultivationGrade(今日五维总分)`（`services/cultivation.ts`）：当天快照、明天重计，
@@ -170,7 +189,13 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
 - **天机输出已全部流式**：自由问答与能力卡片共用同一个装配器（`services/ai/stream-assembly.ts`）
   与作用域 sink（`services/ai/stream-sink.ts`）。**预览与落库同源**，所以流式与非流式内容一致是构造出来的。
   动作 JSON 只在收齐后解析，**流式过程中绝不中途解析**。
-  ⚠️ `withStreamSink` 是模块级状态，**不要在无 busy 守卫处并发两个带 sink 的调用**（增量会串流）
+ - ⚠️ `withStreamSink` 是模块级状态，**不要在无 busy 守卫处并发两个带 sink 的调用**（增量会串流）
+- **AI 端点必须能浏览器直连**（纯前端没有转发）：实测 DeepSeek / Kimi 返回 CORS 头可直连，
+  **Agnes / NVIDIA 不返回任何 `Access-Control-*`，必失败** —— 默认端点是 DeepSeek；
+  预设表（`pages/settings/AiGroup.tsx` 的 `AI_PRESETS`）带 `cors` 标记，选了连不上的服务要**在界面上写明**
+  「当前浏览器无法直接连接此服务」，别让它伪装成"用户配错了"。
+  模型列表与连通性检查走 Provider 的可选接口（`listModels` / `testConnection`，带 30s 超时）——
+  **不要把 `fetch('/models')` 再写回设置页组件**（曾经那里既无超时也不随 baseUrl 失效）
 - **筛选药丸只有一种形制**：一律走 `components/ui/Chip`（`px-3 py-1.5 text-sm rounded-tile`，
   **不带计数徽标**）—— 项目中心 / 藏品 / 情报 / 记账 / 购买 / 设置页分组全部对齐它。
   另：`Section` 的 `title` **可省略**，嵌在折叠层里时外层已有标题，内层再写一遍就是同屏两行一样的字
@@ -182,6 +207,12 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
 - **列表操作按钮用 `.hover-reveal`**（`index.css`）：用 `@media (hover: hover)` 守卫，
   触屏常显。**禁止写 `opacity-0 group-hover:opacity-100`** —— 触屏没有 hover 事件，
   按钮会永远不可见，用户会以为功能没做
+- **弹层背景滚动锁在 `ui/overlay.ts`（`useModalLayer`）**：模态层打开时锁 `<html>` 的 overflow，
+  **计数式**（叠放时关掉上层不解锁下层），非模态的桌面 Inspector 不锁。
+  弹层面板自身带 `overscroll-contain`，防滚动链穿透
+- **触控热区在 <768px 用负边距撑大、视觉不动**：`Switch` / `SealCheckbox` 的可视尺寸只有
+  20–22px，移动端把它们的内层视觉元素放进 44px 按钮 + 负外边距（margin box 仍等于视觉尺寸，
+  行高与对齐零变化）。改这两个组件时**不要动那组 `max-md:` 类**
 - **版本号唯一来源是 `package.json`**：构建时由 vite 的 `define` 注入为 `__APP_VERSION__`，
   应用内统一从 `src/app/version.ts` 读取。此前页脚 / 导出备份 / package.json 三处各写一份且互相矛盾
 - **删除能力要留出口**：`灵感/笔记/情报/占卜存档/AI 资源` 等条目的删除入口分别在

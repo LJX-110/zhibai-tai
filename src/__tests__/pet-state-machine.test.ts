@@ -35,6 +35,8 @@ const ctx = (over: Partial<DecideContext> = {}): DecideContext => ({
   cx: 500,
   cy: 300,
   viewport,
+  // 运行时实际尺寸（effectiveSize）—— 状态机的几何口径，见 services/pet/geometry
+  size: cfg.size,
   reducedMotion: false,
   rand: (min) => min, // 固定取区间下限，便于断言 until
   ...over,

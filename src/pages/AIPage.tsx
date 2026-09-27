@@ -1,8 +1,8 @@
 /**
- * 术 —— AI 能力库（登记即用，可启停/编辑/删除）
+ * 术 —— 我的 AI 工具箱（登记即用，可启停/编辑/删除）
  * AI 任务（简报/计划/摘要）已收编入「天机」，这里只做资源的登记与管理。
  *
- * 类型**完全数据化**：内置 7 类（模型/Tool/Skill/Agent/Plugin/Prompt/Workflow）
+ * 类型**完全数据化**：内置 7 类（模型/工具/技能/智能体/插件/提示词/工作流）
  * 已播种进 categories 表（scope 'ai_type'），与用户新建的类型**同等可增删改**；
  * 「用法分类」行已移除 —— 它与类型功能重复，且没有独立存在的价值。
  *
@@ -100,11 +100,11 @@ export function AIPage() {
       void recordActivity({
         entityType: 'ai',
         entityId: saved.id,
-        title: `登记 ${saved.name}`,
+        title: `新增 ${saved.name}`,
       })
     }
     setOpen(false)
-    toast(editing ? '已更新' : '已登记', 'success')
+    toast(editing ? '已更新' : '已记下', 'success')
   }
 
   const toggleEnabled = async (r: AIResource) => {
@@ -167,7 +167,7 @@ export function AIPage() {
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader
-        title="术 · 能力库"
+        title="我的 AI 工具箱"
         poem="工欲善其事，必先利其器"
         action={
           <div className="flex items-center gap-2">
@@ -175,7 +175,7 @@ export function AIPage() {
               <Bot size={14} /> 打开天机
             </Button>
             <Button variant="primary" size="sm" onClick={() => openNew()}>
-              <Plus size={14} /> 登记能力
+              <Plus size={14} /> 记一个
             </Button>
           </div>
         }
@@ -207,11 +207,11 @@ export function AIPage() {
         <div className="talisman talisman--line p-6">
           <EmptyState
             icon={Box}
-            title="术库还是空的"
-            desc="模型、Tool、Skill、Agent、Prompt 都可以登记到这里，形成可复用的 AI 能力库"
+            title="工具箱还是空的"
+            desc="把你常用的模型、工具、提示词记在这里，用的时候一眼能找到。"
             action={
               <Button variant="primary" onClick={() => openNew()}>
-                <Plus size={13} /> 登记能力
+                <Plus size={13} /> 记一个
               </Button>
             }
           />

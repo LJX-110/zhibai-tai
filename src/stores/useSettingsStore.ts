@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { LayoutMode } from './useAppStore'
 import type { NotifySource } from '../services/notify-sources'
+import { DEFAULT_PET_SCALE } from '../services/pet/geometry'
 
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error'
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -97,6 +98,12 @@ export interface SettingsState {
    * "宠物在哪、多亲"（那是业务表 petState，跨设备一致）是两件事。
    */
   petEnabled: boolean
+  /**
+   * 桌宠尺寸倍率（`PET_SCALE_MIN` ~ `PET_SCALE_MAX`，即 0.8 ~ 1.4）。
+   * 设备级偏好：**刻意不进** `SYNCED_SETTING_KEYS` —— 手机上合适的尺寸在桌面上
+   * 未必合适（与 `petEnabled` 同类先例）。本阶段只落数据与接入几何，调节 UI 在下一阶段。
+   */
+  petScale: number
 
   set: (patch: Partial<SettingsState>) => void
 }
@@ -140,8 +147,10 @@ export const useSettingsStore = create<SettingsState>()(
       // 空对象 = 全部开启；只有用户显式关掉某项才会写入键
       notifySources: {},
       aiProvider: 'local',
-      aiBaseUrl: 'https://apihub.agnes-ai.com/v1',
-      aiModel: 'agnes-2.5-flash',
+      // 默认端点必须是**浏览器能直连**的：Agnes / NVIDIA 等端点不返回 CORS 头，
+      // 在纯前端里必然失败（曾经的默认 Agnes 让新用户一配就撞墙）。DeepSeek 实测可直连。
+      aiBaseUrl: 'https://api.deepseek.com/v1',
+      aiModel: 'deepseek-chat',
       aiKey: '',
       aiKeyEnc: false,
       /** 定时自动抓取默认开启：手机是主要场景，指望用户想起来点按钮并不现实。
@@ -151,6 +160,7 @@ export const useSettingsStore = create<SettingsState>()(
       intelKeepLimit: 500,
       termStartDate: undefined,
       petEnabled: false,
+      petScale: DEFAULT_PET_SCALE,
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },

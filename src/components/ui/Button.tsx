@@ -39,11 +39,13 @@ const variantClass: Record<Variant, string> = {
   primary: 'ink-btn ink-btn--teal text-on-teal',
   secondary: 'ink-btn ink-btn--paper text-ink',
   // disabled:hover 回归透明：tertiary/danger 常态就是透明底，
-  // 不写的话禁用按钮仍会随悬停浮出浅底
+  // 不写的话禁用按钮仍会随悬停浮出浅底。
+  // `active:translate-y-px` 是给它们的"压下感"—— 实底变体有 .ink-btn 的落印（轻压微斜），
+  // 无底的这两个此前只有颜色变化，按下去手感偏"空"。
   tertiary:
-    'bg-transparent text-ink-soft hover:bg-raised active:bg-nested disabled:hover:bg-transparent disabled:active:bg-transparent',
+    'bg-transparent text-ink-soft hover:bg-raised active:bg-nested active:translate-y-px disabled:hover:bg-transparent disabled:active:bg-transparent',
   danger:
-    'bg-transparent text-cinnabar border border-cinnabar/40 hover:bg-cinnabar/5 active:bg-cinnabar/10 disabled:hover:bg-transparent disabled:active:bg-transparent',
+    'bg-transparent text-cinnabar border border-cinnabar/40 hover:bg-cinnabar/5 active:bg-cinnabar/10 active:translate-y-px disabled:hover:bg-transparent disabled:active:bg-transparent',
   ritual: 'ink-btn ink-btn--bronze text-on-gold',
 }
 

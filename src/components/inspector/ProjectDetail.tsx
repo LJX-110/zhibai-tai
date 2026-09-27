@@ -63,7 +63,7 @@ export function ProjectDetail({ id, onClose }: { id: string; onClose: () => void
       {/* 项目档案聚合：任务 / 笔记 / 情报 */}
       {(projTasks.length > 0 || projNotes.length > 0 || projIntel.length > 0) && (
         <div className="mt-5 border-t border-line pt-4">
-          <div className="mb-2 eyebrow text-ink-faint">项目档案 · ARCHIVE</div>
+          <div className="mb-2 eyebrow text-ink-faint">关联内容</div>
           {projTasks.length > 0 && (
             <div className="mb-2">
               <div className="mb-1 text-xs text-ink-muted">任务 {projTasks.length}</div>

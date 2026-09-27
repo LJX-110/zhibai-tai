@@ -26,6 +26,18 @@ export interface AIProvider {
     signal?: AbortSignal,
     onFinish?: (info: StreamFinishInfo) => void,
   ): Promise<string>
+  /**
+   * 拉取可用模型列表（**可选**）。设置页的模型下拉用它；
+   * 端点不提供 `/models` 时不实现此方法，由调用方提示手填模型名。
+   */
+  listModels?(): Promise<string[]>
+  /**
+   * 轻量连通性检查（**可选**）：只验证「端点可达 + Key 有效」。
+   * 优先走 `/models`（不计费），端点不支持时才回退一次极短的补全。
+   * 失败时抛出的错误与 `complete` 同形（`AI 请求失败 HTTP …`），
+   * 由 `ai-service` 的 `explainConnectFailure` 统一译成人话。
+   */
+  testConnection?(): Promise<void>
   /** 是否可用 */
   available(): boolean
 }
@@ -63,10 +75,68 @@ export function openAICompatibleProvider(opts: {
 }): AIProvider {
   const base = opts.baseUrl.replace(/\/+$/, '')
   const timeoutMs = opts.timeoutMs ?? 30000
+  /** 拉模型列表：带超时的最小 GET（原先这段裸 fetch 写在设置页组件里，无超时） */
+  const fetchModels = async (): Promise<string[]> => {
+    if (!opts.apiKey) throw new Error('未配置 API Key')
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    try {
+      const res = await fetch(`${base}/models`, {
+        headers: { Authorization: `Bearer ${opts.apiKey}` },
+        signal: ctrl.signal,
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
+      }
+      const data = (await res.json()) as { data?: { id?: string }[] }
+      return (data.data ?? []).map((m) => m.id).filter((x): x is string => Boolean(x))
+    } finally {
+      clearTimeout(timer)
+    }
+  }
   return {
     id: 'remote',
     name: opts.name ?? opts.model,
     available: () => Boolean(opts.apiKey && opts.baseUrl),
+    listModels: fetchModels,
+    testConnection: async () => {
+      // 优先 /models（不计费、无生成开销）；端点不支持该路由时报 404/405，
+      // 此时才回退一次极短补全 —— 用列表接口的 404 判"连不上"会冤枉能正常对话的端点
+      try {
+        await fetchModels()
+      } catch (e) {
+        const raw = e instanceof Error ? e.message : String(e)
+        const status = Number(raw.match(/HTTP (\d{3})/)?.[1] ?? NaN)
+        if (status === 400 || status === 404 || status === 405) {
+          const ctrl = new AbortController()
+          const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+          try {
+            const res = await fetch(`${base}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${opts.apiKey}`,
+              },
+              body: JSON.stringify({
+                model: opts.model,
+                max_tokens: 1,
+                messages: [{ role: 'user', content: 'hi' }],
+              }),
+              signal: ctrl.signal,
+            })
+            if (!res.ok) {
+              const text = await res.text().catch(() => '')
+              throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
+            }
+          } finally {
+            clearTimeout(timer)
+          }
+          return
+        }
+        throw e
+      }
+    },
     complete: async (prompt: string) => {
       if (!opts.apiKey) throw new Error('未配置 API Key')
       const ctrl = new AbortController()

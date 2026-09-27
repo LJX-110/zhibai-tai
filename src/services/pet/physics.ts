@@ -15,20 +15,13 @@
  *  ③ **静止判定要看两个轴**：只看 vy 的话，宠物会以 1px/s 无限滑行下去，
  *     甩抛循环永远结束不了（表现为"落地后还在微微动、还占着每帧的 rAF"）。
  */
-import type { PhysicsParams, Rect } from './types'
+import type { PetBounds, PhysicsParams } from './types'
 
 export interface PhysicsState {
   x: number
   y: number
   vx: number
   vy: number
-}
-
-export interface PhysicsBounds {
-  minX: number
-  maxX: number
-  minY: number
-  maxY: number
 }
 
 /** 单步最大 dt（秒）：约 1/30 s。切后台再回来的大 dt 会被夹到这个值 */
@@ -44,17 +37,6 @@ const GROUND_EPS = 0.5
 const MAX_THROW_SPEED = 2600
 /** 取最近多少毫秒的位移来估速度（再往前就是"拖的时候慢慢挪"，不代表松手意图） */
 const VELOCITY_WINDOW_MS = 120
-
-/** 宠物可活动范围（与 `clampToViewport` 同一套边距语义） */
-export function boundsOf(size: number, viewport: Rect, margin = 8): PhysicsBounds {
-  const h = (size * 9) / 16
-  return {
-    minX: margin,
-    maxX: Math.max(margin, viewport.width - size - margin),
-    minY: margin,
-    maxY: Math.max(margin, viewport.height - h - margin),
-  }
-}
 
 /**
  * 松手速度：取最近 `VELOCITY_WINDOW_MS` 内的位移除以时间。
@@ -97,7 +79,7 @@ export function integrate(
   s: PhysicsState,
   dtSec: number,
   params: PhysicsParams,
-  bounds: PhysicsBounds,
+  bounds: PetBounds,
 ): { state: PhysicsState; resting: boolean } {
   const dt = Math.max(0, Math.min(Number.isFinite(dtSec) ? dtSec : 0, MAX_STEP_SEC))
   const restitution = Math.max(0, Math.min(1, params.restitution))
@@ -110,24 +92,24 @@ export function integrate(
   y += vy * dt
 
   // 左右墙
-  if (x < bounds.minX) {
-    x = bounds.minX
+  if (x < bounds.left) {
+    x = bounds.left
     vx = Math.abs(vx) * restitution
-  } else if (x > bounds.maxX) {
-    x = bounds.maxX
+  } else if (x > bounds.right) {
+    x = bounds.right
     vx = -Math.abs(vx) * restitution
   }
   // 天花板
-  if (y < bounds.minY) {
-    y = bounds.minY
+  if (y < bounds.top) {
+    y = bounds.top
     vy = Math.abs(vy) * restitution
   }
   // 地面
-  if (y > bounds.maxY) {
-    y = bounds.maxY
+  if (y > bounds.bottom) {
+    y = bounds.bottom
     vy = -Math.abs(vy) * restitution
   }
-  const onGround = y >= bounds.maxY - GROUND_EPS
+  const onGround = y >= bounds.bottom - GROUND_EPS
   if (onGround) {
     // 贴地才摩擦：腾空时没有地面可摩擦，减速会显得"空气有黏性"
     vx *= Math.max(0, 1 - friction * dt)
@@ -137,6 +119,6 @@ export function integrate(
   const resting = onGround && Math.abs(vy) < REST_VY && Math.abs(vx) < REST_VX
   // 静止就**精确贴地**：onGround 有 0.5px 容差，不补齐的话宠物会永远停在离地面
   // 0.2px 的地方，下一次抛掷也从那个"悬空"位置起算 —— 一次差一点，几次之后看得出来
-  if (resting) y = bounds.maxY
+  if (resting) y = bounds.bottom
   return { state: { x, y, vx, vy }, resting }
 }

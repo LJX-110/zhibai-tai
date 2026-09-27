@@ -162,6 +162,17 @@ export interface WeeklySlot {
   weeks?: number[]
 }
 
+/**
+ * 课程性质：必修 / 选修。
+ *
+ * ⚠️ **缺省 = 未标注**，不是"必修"。旧数据（以及用户懒得标的新课）一律归入未标注，
+ * 统计里单列一档 —— 这样**不需要任何迁移**，也不会把没标注的课默默算成必修。
+ *
+ * 为什么不复用 `categories` 表：那套分类是给"情报 / 收藏 / AI 资源"用的，
+ * 课程性质是固定的两值语义（不是用户可增删的标签），为它加一个 scope 属于过度设计。
+ */
+export type CourseKind = 'required' | 'elective'
+
 /** 课程 */
 export interface Course {
   id: ID
@@ -170,10 +181,72 @@ export interface Course {
   room?: string
   schedule: WeeklySlot[]
   credit: number
+  /** 必修 / 选修；缺省 = 未标注（见 `CourseKind`） */
+  kind?: CourseKind
   note?: string
   createdAt: string
   /** 改名 / 调排课需要时间戳参与跨设备 LWW 判定 */
   updatedAt?: string
+}
+
+/* ---------------- 选课规划（学分进度与选课过程） ----------------
+ *
+ * 与 `Course` **刻意分开**：`Course` 是"已正式进入课表的课"（周几、几点、教室、
+ * 提醒、番茄钟都挂在它上面）；选课规划记的是"培养方案的学分进度 + 选课过程"——
+ * 候选的课、不可选的课、公选下的官方分类、目标学分，这些一旦塞进 `Course`，
+ * 课表 / 提醒 / 番茄钟 / 天机上下文**每一处消费方都要自己过滤**，
+ * 典型的"一处漏了、别处照错"。
+ *
+ * 两者**不建强关联**（没有 `courseId`）：学分进度的真相就在规划里，不去依赖课程是否还在。
+ */
+
+/** 培养方案里的三个方向 —— 与 `CourseKind`（课程性质）是两套概念，刻意不复用 */
+export type CoursePlanKind = 'limited' | 'public' | 'pe'
+
+export type CoursePlanStatus =
+  /** 已选：学分计入进度 */
+  | 'selected'
+  /** 候选：还在挑 */
+  | 'candidate'
+  /** 不可选：问过了、不选 */
+  | 'unavailable'
+
+/**
+ * 选课规划条目。
+ *
+ * ⚠️ **`title` 必须是一门课的名字。** 教师不是课程 —— 只有教师姓名（"蔡军""杜娟"）
+ * 的内容不建在这里，而是写进 `CoursePlanMeta.notes` 的「候选教师」一段。
+ * 混装"课程名或教师名"会让这一列既不能排序也不能统计。
+ * 教师信息挂在 `teacher` 字段上（可以多人，如"周明勇、刘立坤"）。
+ */
+export interface CoursePlan {
+  id: ID
+  kind: CoursePlanKind
+  /** 公选下的官方分类（如「文化传承与安全教育」）。**自由文本**，不做预设清单、不建分类表 */
+  group?: string
+  /** 课程名（必填） */
+  title: string
+  credit?: number
+  /** 教师；多人用「、」连写（不为教师建实体体系） */
+  teacher?: string
+  status: CoursePlanStatus
+  note?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 选课规划的元数据（**单行表**，随快照同步）。
+ *
+ * `goals` 的 8 / 12 / 1 只是**首次运行的起点**，不是写死的学校规则 —— 页面上随时可改。
+ * `notes` 是自由文本逐条：只负责"记下我要记住的事"，**不做规则引擎**，
+ * 不自动判断课程编码、不自动判断"一期一门"。
+ */
+export interface CoursePlanMeta {
+  id: 'coursePlan'
+  goals: { limited: number; public: number; pe: number }
+  notes: string[]
+  updatedAt: string
 }
 
 /**
@@ -688,7 +761,16 @@ export interface CultivationState {
  */
 export interface PetState {
   id: 'pet'
-  /** 宠物包围盒左上角坐标（视口 px；桌面壳里是工作区 px） */
+  /**
+   * @deprecated **legacy 兼容字段，不要再写**（2026-09-27 桌宠第一阶段）。
+   *
+   * 它曾把高频像素坐标当业务数据存，于是漫游每几秒就把同步链路的脏标记刷新一遍
+   * （默认 30s 间隔下 `schedule()` 是"clearTimeout 后重设"，被持续刷新就等于
+   * **同步永远不会发生**）。位置现在归宿主本机状态
+   * （`PetHost.loadLocalPosition / persistLocalPosition`）。
+   *
+   * 字段**保留不删**：老用户首次落位时会被读一次做迁移，之后只读不写。
+   */
   position: { x: number; y: number }
   /** 好感度（加分规则见 `services/pet/affinity.ts`：只升不降、不设门槛） */
   affinity: number

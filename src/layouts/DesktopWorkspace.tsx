@@ -128,7 +128,8 @@ export function DesktopWorkspace() {
 
         <main
           className={cn(
-            'mx-auto max-w-[var(--content-max-w)] px-8 py-8 transition-[padding] duration-med lg:px-10',
+            // 不写 transition-[padding]：padding 动画每帧触发布局（本项目只允许 transform / opacity）
+            'mx-auto max-w-[var(--content-max-w)] px-8 py-8 lg:px-10',
             inspectorOpen && 'pr-[380px]',
           )}
         >

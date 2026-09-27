@@ -6,6 +6,7 @@
  */
 import { useState } from 'react'
 import { PageHeader, Tabs, type TabItem } from '../components/ui'
+import { CoursePlanTab } from './study/CoursePlanTab'
 import { CourseTab } from './study/CourseTab'
 import { ExamTab } from './study/ExamTab'
 import { HomeworkTab } from './study/HomeworkTab'
@@ -19,15 +20,21 @@ const TABS: TabItem[] = [
   { key: 'exam', label: '考试' },
 ]
 
+/**
+ * 课程表页签内的子视图。
+ * 「统计」放在这里而**不新开页签** —— 页内页签硬上限是 4 个（见 AGENTS.md），
+ * 而统计本来就是课程的一个视角，与「课程表 / 课程管理」同属一课。
+ */
+type CourseView = 'table' | 'manage' | 'plan'
+
 export function StudyPage() {
   const [tab, setTab] = useState('timetable')
-  /** 课程表页签内的子视图：表格 / 课程管理（原「课程」页签不再是独立页签） */
-  const [managingCourses, setManagingCourses] = useState(false)
+  const [courseView, setCourseView] = useState<CourseView>('table')
   /** 课表空格子快速加课：带上周几与一次性 nonce，切到课程管理并直接开编辑器 */
   const [quickAdd, setQuickAdd] = useState<{ weekday: number; nonce: number } | null>(null)
   const openQuickAdd = (weekday: number) => {
     setQuickAdd({ weekday, nonce: Date.now() })
-    setManagingCourses(true)
+    setCourseView('manage')
   }
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
@@ -37,17 +44,23 @@ export function StudyPage() {
         active={tab}
         onChange={(k) => {
           setTab(k)
-          // 离开课程表页签时复位子视图，回来看到的是课表本身而不是管理页
-          if (k !== 'timetable') setManagingCourses(false)
+          // 离开课程表页签时复位子视图，回来看到的是课表本身而不是管理 / 统计页
+          if (k !== 'timetable') setCourseView('table')
         }}
         className="mb-4"
       />
-      
+
       {tab === 'timetable' &&
-        (managingCourses ? (
-          <CourseTab quickAdd={quickAdd} onBack={() => setManagingCourses(false)} />
+        (courseView === 'manage' ? (
+          <CourseTab quickAdd={quickAdd} onBack={() => setCourseView('table')} />
+        ) : courseView === 'plan' ? (
+          <CoursePlanTab onBack={() => setCourseView('table')} />
         ) : (
-          <TimetableTab onGoCourse={() => setManagingCourses(true)} onQuickAdd={openQuickAdd} />
+          <TimetableTab
+            onGoCourse={() => setCourseView('manage')}
+            onGoPlan={() => setCourseView('plan')}
+            onQuickAdd={openQuickAdd}
+          />
         ))}
       {tab === 'focus' && <PomodoroTab />}
       {tab === 'homework' && <HomeworkTab />}

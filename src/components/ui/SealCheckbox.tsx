@@ -42,7 +42,11 @@ export function SealCheckbox({ checked, onChange, char, title, className }: Seal
         // 22px 框配 22px 印章：原先 20px 框内嵌 18px 印章，完成态的**视觉外径只有 ~16.3px**
         // （印章环 r=29/64 ≈ 0.906×），比未完成态的 20px 空圆小一圈 —— 看着"缩了"，
         // 这正是「印章太小」的根因。现在两者外径一致，且整体大一号、篆字各自认得清。
-        'flex h-[22px] w-[22px] shrink-0 items-center justify-center overflow-hidden rounded-full transition-all duration-fast',
+        'relative flex h-[22px] w-[22px] shrink-0 items-center justify-center overflow-hidden rounded-full transition-all duration-fast',
+        // 移动端热区：22px 的勾选框手指点不准（它是"完成待办"的主操作）。
+        // 用负外边距把按钮盒子扩到 44px —— 视觉与行高零变化（margin box 仍是 22px），
+        // 内侧那个 22px 圆仍居中显示。
+        'max-md:-m-[11px] max-md:h-11 max-md:w-11',
         className,
       )}
       title={title ?? (checked ? '标记未完成' : '标记完成')}
@@ -52,7 +56,7 @@ export function SealCheckbox({ checked, onChange, char, title, className }: Seal
       ) : (
         /* 未完成态也用圆形：与完成后的圆形印章同一形制。
            此前是圆角方框，和印章"对不上形" */
-        <span className="h-full w-full rounded-full border border-line-strong bg-raised transition-colors hover:border-cinnabar/50" />
+        <span className="h-[22px] w-[22px] rounded-full border border-line-strong bg-raised transition-colors hover:border-cinnabar/50" />
       )}
     </button>
   )

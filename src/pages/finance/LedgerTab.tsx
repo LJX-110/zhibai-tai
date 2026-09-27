@@ -296,7 +296,7 @@ export function LedgerTab() {
           <Input placeholder="备注（可选）" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           <label className="flex items-center gap-2 text-sm text-ink-muted">
             <Checkbox checked={form.isPurchase} onChange={(v) => setForm({ ...form, isPurchase: v })} />
-            这是购买物品（同步到「购买」清单）
+            同时记入「购买」清单
           </label>
         </div>
       </Dialog>

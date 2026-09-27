@@ -172,61 +172,64 @@ export function AppearanceGroup() {
         </div>
       </Section>
 
-      {/* hint 原先写「Web Audio 合成 · 默认关闭」：环境音卡片正文里已把这两点都说全
+      {/* hint 原先写「Web Audio 合成 · 默认关闭」：环境音那行正文里已把这两点都说全
           （Web Audio 实时合成 / 默认关闭），标题行再挂一遍纯属重复 */}
       <Section title="音效">
-        <div className="grid max-w-md gap-3 sm:grid-cols-2">
-          <div className="rounded-tile border border-line p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-ink">音效</span>
-              <Switch
-                checked={settings.soundEnabled}
-                label="音效"
-                onChange={() => {
-                  const next = !settings.soundEnabled
-                  settings.set({ soundEnabled: next })
-                  // 开启瞬间播一声确认：既是反馈也是"音效已可用"的自证
-                  if (next) playSound('ui-confirm')
-                }}
-              />
-            </div>
-            <div className="mt-3">
-              <div className="mb-1 flex justify-between text-xs text-ink-faint">
-                <span>音量</span>
-                <span className="tabular">{Math.round(settings.soundVolume * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={settings.soundVolume}
-                onChange={(e) => settings.set({ soundVolume: Number(e.target.value) })}
-                className="w-full accent-[var(--color-teal)]"
-                aria-label="音效音量"
-              />
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(['seal', 'paper', 'compass', 'qimen'] as const).map((k) => (
-                <Button key={k} size="sm" variant="tertiary" silent onClick={() => playSound(k)} className="!px-2">
-                  {k}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-tile border border-line p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-ink">环境音</span>
-              <Switch
-                checked={settings.ambientEnabled}
-                label="环境音"
-                onChange={() => settings.set({ ambientEnabled: !settings.ambientEnabled })}
-              />
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-              极轻的低通噪声底（纸/风/静室感），Web Audio 实时合成；默认关闭。
-            </p>
-          </div>
+        {/* 行式内容（不套卡）：本段只服务"开不开 / 多大声 / 听一下"三件事 */}
+        <div className="row flex-wrap">
+          <span className="flex-1 text-sm text-ink">音效</span>
+          <Switch
+            checked={settings.soundEnabled}
+            label="音效"
+            onChange={() => {
+              const next = !settings.soundEnabled
+              settings.set({ soundEnabled: next })
+              // 开启瞬间播一声确认：既是反馈也是"音效已可用"的自证
+              if (next) playSound('ui-confirm')
+            }}
+          />
+        </div>
+        <div className="row flex-wrap">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">音量</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={settings.soundVolume}
+            onChange={(e) => settings.set({ soundVolume: Number(e.target.value) })}
+            className="min-w-[8rem] flex-1 accent-[var(--color-teal)]"
+            aria-label="音效音量"
+          />
+          <span className="tabular text-xs text-ink-faint">
+            {Math.round(settings.soundVolume * 100)}%
+          </span>
+        </div>
+        <div className="row flex-wrap">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">试听</span>
+          {/* 按钮写**法器名**而不是内部事件键（seal / paper / …）：设置页是给用户看的 */}
+          {(
+            [
+              ['seal', '磬'],
+              ['paper', '木鱼'],
+              ['compass', '钟'],
+              ['qimen', '云锣'],
+            ] as const
+          ).map(([k, label]) => (
+            <Button key={k} size="sm" variant="tertiary" silent onClick={() => playSound(k)} className="!px-2">
+              {label}
+            </Button>
+          ))}
+        </div>
+        <div className="row flex-wrap">
+          <span className="flex-1 text-sm text-ink">环境音</span>
+          <Switch
+            checked={settings.ambientEnabled}
+            label="环境音"
+            onChange={() => settings.set({ ambientEnabled: !settings.ambientEnabled })}
+          />
+          {/* 只留"这是什么声音"——Web Audio / 默认关闭已由音效行与本行开关自证 */}
+          <span className="w-full text-xs text-ink-faint">极轻的噪声底（纸 / 风 / 静室感）</span>
         </div>
       </Section>
 

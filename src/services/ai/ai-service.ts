@@ -63,10 +63,52 @@ export async function testAIProvider(): Promise<{ ok: boolean; message: string }
   try {
     const key = s.aiKeyEnc ? await encryptor.decrypt(s.aiKey) : s.aiKey
     const p = openAICompatibleProvider({ baseUrl: s.aiBaseUrl, apiKey: key, model: s.aiModel })
-    const reply = await p.complete('用一句话确认连接成功。')
-    return { ok: true, message: `连接成功：${reply.slice(0, 60)}` }
+    // 走 Provider 的连通性检查（优先 /models，不计费）；旧 Provider 无此方法时回退一次补全
+    if (p.testConnection) await p.testConnection()
+    else await p.complete('用一句话确认连接成功。')
+    return { ok: true, message: `连接成功：${hostOf(s.aiBaseUrl)} · ${s.aiModel}` }
   } catch (e) {
     return { ok: false, message: explainConnectFailure(e) }
+  }
+}
+
+/**
+ * 拉取当前 Provider 的模型列表（OpenAI 兼容 `/models`）。
+ *
+ * 结果带上 `baseUrl`：调用方据此判断"这批模型是不是当前端点的"——
+ * 换端点后旧列表必须失效，否则会选中一个不属于当前服务的模型名。
+ * 端点不支持列表接口时不算失败，如实说明"可手填模型名"。
+ */
+export async function listAIModels(): Promise<{
+  ok: boolean
+  models: string[]
+  baseUrl: string
+  message: string
+  /** true = 真的出错了（该报 danger）；false = 只是端点没有列表接口（如实说明即可） */
+  fatal: boolean
+}> {
+  const s = useSettingsStore.getState()
+  const baseUrl = s.aiBaseUrl
+  if (!s.aiKey) return { ok: false, models: [], baseUrl, fatal: false, message: '先保存 API Key 再拉取模型列表' }
+  try {
+    const key = s.aiKeyEnc ? await encryptor.decrypt(s.aiKey) : s.aiKey
+    const p = openAICompatibleProvider({ baseUrl, apiKey: key, model: s.aiModel })
+    const models = (await p.listModels?.()) ?? []
+    if (models.length === 0) {
+      return { ok: false, models: [], baseUrl, fatal: false, message: '该端点没有返回模型列表 —— 直接手填模型名即可' }
+    }
+    return { ok: true, models, baseUrl, fatal: false, message: `拉到 ${models.length} 个模型` }
+  } catch (e) {
+    return { ok: false, models: [], baseUrl, fatal: true, message: explainConnectFailure(e) }
+  }
+}
+
+/** 取 baseUrl 的主机名，给成功回执一个人能读的服务标识（解析失败返回原文） */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host
+  } catch {
+    return baseUrl
   }
 }
 
@@ -87,9 +129,9 @@ function explainConnectFailure(e: unknown): string {
   if (status === 429) return '触发限流（HTTP 429）—— 稍后重试，或换用免费端点的其他模型'
   if (status && status >= 500) return `服务端异常（HTTP ${status}）—— 多为服务商临时故障，稍后重试`
 
-  if (e instanceof Error && e.name === 'AbortError') return '请求超时（30 秒无响应）—— 检查网络，或确认该端点不允许浏览器直连'
+  if (e instanceof Error && e.name === 'AbortError') return '请求超时（30 秒无响应）—— 检查网络，或换一个允许浏览器直连的服务'
 
-  return `连不上：${raw}。可能是跨域被拦（该端点不允许浏览器直连，需自建转发）或网络不通 —— 浏览器区分不了这两种，请先确认网络，再试换端点`
+  return `连不上：${raw}。大概率是跨域被拦 —— 当前浏览器无法直接连接此服务（服务端未开放跨域），或只是网络不通；浏览器区分不了这两种，请先确认网络，再改用 DeepSeek / Kimi 这类支持浏览器直连的服务`
 }
 
 /** 兼容早期导出格式（原 localAIService） */

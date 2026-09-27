@@ -2,30 +2,10 @@
  * 学 · CourseTab（从 StudyPage 拆出，见 docs/编码规范.md 路线图第 2 步）
  */
 import { useMemo, useRef, useState } from 'react'
-import {
-  AlertTriangle,
-  ChevronLeft,
-  Download,
-  Plus,
-  Trash2,
-  Pencil,
-  Eye,
-} from 'lucide-react'
+import { AlertTriangle, ChevronLeft, Download, Plus } from 'lucide-react'
 import { useCourseStore } from '../../stores/useStudyStore'
-import { usePomodoroStore } from '../../stores/usePomodoroStore'
 
-import { useInspectorStore } from '../../components/inspector/inspector-store'
-
-import {
-  Badge,
-  Button,
-  Dialog,
-  EmptyState,
-  Input,
-  Select,
-  Section,
-  useToast,
-} from '../../components/ui'
+import { Button, Dialog, Input, Select, Section, useToast } from '../../components/ui'
 
 import { createId, todayISO, nowISO } from '../../utils/id'
 import {
@@ -36,9 +16,10 @@ import {
   type WeeksForm,
   type WeeksMode,
 } from '../../services/study'
-import type { Course, WeeklySlot } from '../../types/entities'
+import type { Course, CourseKind, WeeklySlot } from '../../types/entities'
 import { cn } from '../../utils/cn'
-import { WEEKDAY_NAMES, WEEKDAY_SHORT, courseLabel } from './shared'
+import { WEEKDAY_NAMES, WEEKDAY_SHORT } from './shared'
+import { CourseList } from './CourseList'
 
 export function CourseTab({
   quickAdd,
@@ -49,7 +30,6 @@ export function CourseTab({
   onBack: () => void
 }) {
   const courses = useCourseStore((s) => s.items)
-  const sessions = usePomodoroStore((s) => s.items)
   const toast = useToast().toast
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Course | null>(null)
@@ -58,6 +38,8 @@ export function CourseTab({
     teacher: '',
     room: '',
     credit: '0',
+    /** 课程性质；空串 = 未标注（用空串而非 undefined，便于直接绑 Select 的 value） */
+    kind: '' as CourseKind | '',
     note: '',
   })
   const [slots, setSlots] = useState<WeeklySlot[]>([])
@@ -74,6 +56,7 @@ export function CourseTab({
       teacher: c?.teacher ?? '',
       room: c?.room ?? '',
       credit: String(c?.credit ?? 0),
+      kind: c?.kind ?? '',
       note: c?.note ?? '',
     })
     setSlots(c?.schedule?.map((s) => ({ ...s })) ?? [])
@@ -102,6 +85,7 @@ export function CourseTab({
       room: form.room.trim() || undefined,
       schedule: slots,
       credit: Number(form.credit) || 0,
+      kind: form.kind || undefined,
       note: form.note.trim() || undefined,
       createdAt: editing?.createdAt ?? nowISO(),
       updatedAt: nowISO(),
@@ -223,55 +207,8 @@ export function CourseTab({
         </div>
       }
     >
-      {courses.length > 0 ? (
-        <div>
-          {courses.map((c) => (
-            <div key={c.id} className="row">
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-ink">{courseLabel(c)}</span>
-                  <Badge tone="teal">{c.credit} 学分</Badge>
-                  {(() => {
-                    const mins = sessions
-                      .filter((s) => s.type === 'focus' && s.courseId === c.id)
-                      .reduce((a, s) => a + s.durationMin, 0)
-                    return mins > 0 ? (
-                      <span className="seal seal--active">累计学习 {mins} 分钟</span>
-                    ) : null
-                  })()}
-                </div>
-                <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-ink-faint">
-                  {c.teacher && <span>师 · {c.teacher}</span>}
-                  {c.room && <span>室 · {c.room}</span>}
-                  {c.schedule?.map((sl, i) => (
-                    <span key={i} className="tabular">
-                      周{WEEKDAY_SHORT[sl.weekday]} {sl.start}–{sl.end}
-                      {sl.weeks && sl.weeks.length > 0 && (
-                        <span className="ml-1 text-bronze">{describeWeeks(sl.weeks)}</span>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <button
-                className="touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-ink"
-                onClick={() => useInspectorStore.getState().open('course', c.id)}
-                aria-label="详情"
-              >
-                <Eye size={14} />
-              </button>
-              <button className="touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-ink" onClick={() => openEditor(c)} aria-label="编辑">
-                <Pencil size={14} />
-              </button>
-              <button className="touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => useCourseStore.getState().remove(c.id)} aria-label="删除">
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyState title="还没有课程" action={<Button variant="primary" onClick={() => openEditor(null)}><Plus size={14} /> 添加课程</Button>} />
-      )}
+      <CourseList courses={courses} onEdit={openEditor} />
+
 
       <Dialog open={open} onClose={() => setOpen(false)} title={editing ? '改课程' : '新课程'}>
         <div className="space-y-3">
@@ -280,7 +217,15 @@ export function CourseTab({
             <Input placeholder="教师" value={form.teacher} onChange={(e) => setForm({ ...form, teacher: e.target.value })} />
             <Input placeholder="教室" value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} />
           </div>
-          <Input type="number" min={0} step={0.5} placeholder="学分" value={form.credit} onChange={(e) => setForm({ ...form, credit: e.target.value })} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input type="number" min={0} step={0.5} placeholder="学分" value={form.credit} onChange={(e) => setForm({ ...form, credit: e.target.value })} />
+            {/* 课程性质：统计「必修 / 选修」的唯一来源；缺省未标注，旧数据不必迁移 */}
+            <Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as CourseKind | '' })} aria-label="课程性质">
+              <option value="">未标注</option>
+              <option value="required">必修</option>
+              <option value="elective">选修</option>
+            </Select>
+          </div>
 
           {/* 排课：周几 + 起止 + 周次（单双周靠它表达） */}
           <div>

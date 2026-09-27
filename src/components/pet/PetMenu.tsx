@@ -14,15 +14,22 @@
 import { useEffect, useRef } from 'react'
 import { PERSONA as P } from '../../services/pet/persona'
 import { cn } from '../../utils/cn'
+import type { PetBounds } from '../../services/pet/types'
 
 export type PetMenuAction = 'seclusion' | 'quick' | 'today' | 'hush' | 'off'
 
 export interface PetMenuProps {
   open: boolean
-  /** 宠物包围盒左上角（视口 px） */
+  /** 宠物包围盒左上角（宿主矩形 px） */
   x: number
   y: number
   size: number
+  /**
+   * 宿主可活动边界 —— 用来把菜单夹回屏内。
+   * ⚠️ 刻意**不读 `window.innerWidth`**：那是把"宿主"硬编码进组件，
+   * 边界该由宿主提供（见 `services/pet/adapter.ts`），读 window 会绕过这层收口。
+   */
+  bounds: PetBounds
   /** 菜单头部那行（「相识 N 天 · 好感 N」） */
   meta: string
   /** 点名字 = 戳它一下 —— 它会顶一句（人格特质 `TRAIT_NOT_FAT_REFUSE` 的出口） */
@@ -35,7 +42,7 @@ export interface PetMenuProps {
 const MENU_W = 186
 const MENU_MARGIN = 8
 
-export function PetMenu({ open, x, y, size, meta, onPoke, onAction, onClose }: PetMenuProps) {
+export function PetMenu({ open, x, y, size, bounds, meta, onPoke, onAction, onClose }: PetMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   // 点外面 / Esc 关闭 —— 与全站弹层同一套键盘约定
@@ -57,10 +64,11 @@ export function PetMenu({ open, x, y, size, meta, onPoke, onAction, onClose }: P
 
   if (!open) return null
 
-  const left = Math.min(
-    Math.max(MENU_MARGIN, x + size / 2 - MENU_W / 2),
-    Math.max(MENU_MARGIN, window.innerWidth - MENU_W - MENU_MARGIN),
-  )
+  // 水平居中于宠物，并**夹回宿主矩形**（宠物贴边时菜单不能被裁掉）。
+  // 可用宽度 = bounds.right + size + MENU_MARGIN，化简后即下式。
+  const maxLeft = Math.max(MENU_MARGIN, bounds.right + size - MENU_W)
+  const left = Math.min(Math.max(MENU_MARGIN, x + size / 2 - MENU_W / 2), maxLeft)
+  // 贴在宠物上方（菜单自己用 translateY(-100%) 抬起），顶端不越出
   const top = Math.max(MENU_MARGIN, y - 8)
 
   return (

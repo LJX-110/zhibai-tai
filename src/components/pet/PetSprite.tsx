@@ -3,73 +3,49 @@
  *
  * 只做三件事：**定位（transform）、朝向（scaleX 镜像）、换动画（key 重挂载）**。
  *
- * 动画性能纪律（与全站一致）：
- *  · 位移只走 `transform`（GPU 合成），**不动 left/top** —— 后者每帧触发重排；
- *  · 换动画用 `key={anim}` 重挂载 `<img>` —— 不重挂载的话，同一张 animated WebP
- *    不会从第一帧重播，表现为"点了它但没反应"；
- *  · `prefers-reduced-motion` 下由状态机保证不会进入 move/turn，这里再用
- *    `transition-none` 兜一层，避免样式层面残留补间。
+ * ⚠️ **位置不由 React 管**（2026-09-27 改）：`transform` 从 style 里彻底移出，
+ * 完全交给 hook 直接写 DOM —— 若走 React，任何一次无关渲染（换动画、气泡出现）
+ * 都会用"上一次渲染时的旧位置"把 DOM 覆盖回去。
+ * 本组件挂载后 hook 会立刻 paint 一次真实位置（`ready` 的 effect）。
  *
  * 交互：只有宠物自身的矩形可点（`pointer-events` 只在该矩形上开），
  * 否则一个 fixed 全屏层会挡住整个应用的点击。
  *
- * P3 拖拽（2026-09-23）：指针事件**原样转发**给 hook，这里不做任何判断 ——
- * 阈值、跟手、夹回视口、甩抛全在 `usePetLoop` 里（可测），渲染层越薄越好。
- * `nodeRef` 由 hook 持有：抛掷阶段它直接写这个节点的 `transform`，
- * 绕开 React 渲染（每帧 60 次 setState 会把整棵树带上渲染路径）。
+ * 指针事件**原样转发**给 hook，这里不做任何判断 —— 点击 / 长按 / 拖拽三者的互斥、
+ * 阈值、跟手、夹回、甩抛全在 `usePetDrag` + `services/pet/interaction`（可测）。
+ * 渲染层越薄越好：长按判定曾因为在这里与拖拽层**各持一份 ref 且互相清空**而失效，
+ * 表现为"拖它也不取消长按，500ms 后照样弹菜单"。
  */
-import { memo, useRef } from 'react'
+import { memo } from 'react'
 import { cn } from '../../utils/cn'
+import { petHeight } from '../../services/pet/geometry'
 import type { PetView } from '../../hooks/usePetLoop'
 import type { PetDragHandlers } from '../../hooks/usePetDrag'
 
-/** 长按多久算"唤起菜单"（移动端的右键等价操作） */
-const LONG_PRESS_MS = 500
-/** 长按期间手指移动超过这个距离就取消（那是在拖它，不是要菜单） */
-const LONG_PRESS_SLOP = 8
-
 export interface PetSpriteProps extends PetView {
-  /** 宠物显示边长（px，宽；高按 16:9 推） */
+  /** 宠物显示边长（px；**effectiveSize**，高按 16:9 推） */
   size: number
   /** 显示名（悬浮提示） */
   name: string
   reducedMotion: boolean
   onClick: () => void
-  /** 由 hook 持有：抛掷阶段直接改它的 transform */
+  /** 由 hook 持有：运动与抛掷阶段都由它直接改这个节点的 transform */
   nodeRef: React.RefObject<HTMLDivElement | null>
   drag: PetDragHandlers
-  /** 长按唤起菜单（桌面走 contextmenu，由外层处理） */
-  onLongPress?: () => void
 }
 
 export const PetSprite = memo(function PetSprite({
   anim,
   src,
-  x,
-  y,
   facing,
-  transitionMs,
   size,
   name,
   reducedMotion,
   onClick,
   nodeRef,
   drag,
-  onLongPress,
 }: PetSpriteProps) {
-  const height = (size * 9) / 16
-  /* 长按：手指按下不动 500ms 才唤菜单；中途移动或抬手就取消 ——
-     否则"拖着玩"每次都会被误判成要菜单。与拖拽共用同一组指针事件，
-     所以在这里**转发**，不让外层再挂一份（两份会互相覆盖）。 */
-  const longPressRef = useRef<number | null>(null)
-  const startRef = useRef<{ x: number; y: number } | null>(null)
-  const cancelLongPress = () => {
-    if (longPressRef.current !== null) {
-      window.clearTimeout(longPressRef.current)
-      longPressRef.current = null
-    }
-    startRef.current = null
-  }
+  const height = petHeight(size)
   return (
     <div
       ref={nodeRef}
@@ -77,9 +53,7 @@ export const PetSprite = memo(function PetSprite({
       style={{
         width: size,
         height,
-        transform: `translate3d(${x}px, ${y}px, 0)`,
-        // 位移走 CSS 过渡：一次设置、浏览器合成，不用逐帧改状态
-        transition: !reducedMotion && transitionMs > 0 ? `transform ${transitionMs}ms linear` : undefined,
+        // ⚠️ 刻意不写 transform：位置由 hook 每帧直接写 DOM（见文件头）
         zIndex: 'var(--z-pet)',
         willChange: 'transform',
         // 只让宠物矩形本身可点，别挡应用
@@ -89,29 +63,10 @@ export const PetSprite = memo(function PetSprite({
       <button
         type="button"
         onClick={onClick}
-        onPointerDown={(e) => {
-          drag.onPointerDown(e)
-          if (e.button !== 0) return
-          startRef.current = { x: e.clientX, y: e.clientY }
-          cancelLongPress()
-          longPressRef.current = window.setTimeout(() => {
-            longPressRef.current = null
-            onLongPress?.()
-          }, LONG_PRESS_MS)
-        }}
-        onPointerMove={(e) => {
-          drag.onPointerMove(e)
-          const s = startRef.current
-          if (s && Math.abs(e.clientX - s.x) + Math.abs(e.clientY - s.y) > LONG_PRESS_SLOP) cancelLongPress()
-        }}
-        onPointerUp={(e) => {
-          cancelLongPress()
-          drag.onPointerUp(e)
-        }}
-        onPointerCancel={(e) => {
-          cancelLongPress()
-          drag.onPointerCancel(e)
-        }}
+        onPointerDown={drag.onPointerDown}
+        onPointerMove={drag.onPointerMove}
+        onPointerUp={drag.onPointerUp}
+        onPointerCancel={drag.onPointerCancel}
         aria-label={`${name}（点击互动，可拖动）`}
         title={`${name}（点一下互动，可以拖着玩）`}
         className="block h-full w-full cursor-grab border-0 bg-transparent p-0 active:cursor-grabbing"

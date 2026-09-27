@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { getAiRemoteHealth, subscribeAiRemoteHealth } from '../../services/ai/health'
+import { useSettingsStore } from '../../stores/useSettingsStore'
 import { withStreamSink } from '../../services/ai/stream-sink'
 import { createStreamAssembler } from '../../services/ai/stream-assembly'
 import { playSound } from '../../services/sound'
@@ -96,6 +97,8 @@ export function AiChatPanel() {
    * 之前的 `useMemo([open])` 只在打开面板时评估一次，降级根本传不下来。
    */
   const remote = useSyncExternalStore(subscribeAiRemoteHealth, getAiRemoteHealth)
+  /** 当前远程模型：订阅式取值，设置页改了模型后头部显示同步更新 */
+  const aiModel = useSettingsStore((s) => s.aiModel)
 
   const send = async (text?: string) => {
     const q = (text ?? input).trim()
@@ -249,7 +252,12 @@ export function AiChatPanel() {
           'md:my-auto md:mx-auto md:h-[min(72vh,640px)] md:max-w-xl md:rounded-sheet md:border md:border-line',
         )}
       >
-        <ChatHeader remote={remote} onNewChat={newChat} onClose={() => setOpen(false)} />
+        <ChatHeader
+          remote={remote}
+          model={aiModel}
+          onNewChat={newChat}
+          onClose={() => setOpen(false)}
+        />
 
         {/* 消息流 —— space-y-2.5 管段内节奏，轮次之间靠用户气泡的 mt-2 拉开层级：
             全程等距会让"我的问题"和"天机的回答"糊成一片 */}

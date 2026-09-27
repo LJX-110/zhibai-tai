@@ -152,7 +152,7 @@ export function IntelligenceDetail({ id, onClose }: { id: string; onClose: () =>
         </a>
       )}
       <div className="mt-5 border-t border-line pt-4">
-        <div className="mb-2 eyebrow text-ink-faint">闭环 · CLOSED LOOP</div>
+        <div className="mb-2 eyebrow text-ink-faint">操作</div>
         <div className="grid grid-cols-2 gap-2">
           <Button size="sm" variant="secondary" onClick={summarize}>
             <Sparkles size={13} /> {intel.aiSummary ? '已有摘要' : 'AI 摘要'}
@@ -184,9 +184,9 @@ export function IntelligenceDetail({ id, onClose }: { id: string; onClose: () =>
             {intel.read ? '标为未读（稍后）' : '标为已读'}
           </Button>
         </div>
-        <p className="mt-3 text-xs text-ink-faint">
-          {aiRes.length > 0 ? `已登记 ${aiRes.length} 项 AI 能力，可用于扩展摘要/标签。` : '摘要由本地 AI 服务生成（可接入远程 Provider）。'}
-        </p>
+        {aiRes.length > 0 && (
+          <p className="mt-3 text-xs text-ink-faint">{aiRes.length} 项能力可扩展摘要 / 标签</p>
+        )}
       </div>
     </InspectorShell>
   )

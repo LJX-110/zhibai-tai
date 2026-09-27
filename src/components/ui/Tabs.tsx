@@ -38,9 +38,10 @@ export function Tabs({ items, active, onChange, className }: TabsProps) {
           onClick={() => onChange(t.key)}
           className={cn(
             'relative shrink-0 rounded-tile px-3 py-2 text-sm transition-colors duration-fast',
+            // 未选中页签补 active 反馈：触屏没有 hover，否则点下去毫无按压感
             active === t.key
               ? 'font-medium text-ink'
-              : 'text-ink-muted hover:text-ink-soft',
+              : 'text-ink-muted hover:text-ink-soft active:bg-nested',
           )}
         >
           {t.label}

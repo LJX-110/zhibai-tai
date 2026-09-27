@@ -50,7 +50,7 @@ export const NAV_SECTIONS: NavSection[] = [
   { id: 'collection', label: '藏', sub: 'ARCHIVE', index: '06', icon: Archive, desc: '收藏 · 项目 · GitHub' },
   { id: 'intelligence', label: '情', sub: 'FEED', index: '07', icon: Rss, desc: '情报 · 灵感 · RSS · GitHub' },
   { id: 'occult', label: '奇', sub: 'OCCULT', index: '08', icon: Compass, desc: '抽签 · 八卦 · 六爻 · 奇门' },
-  { id: 'ai', label: '术', sub: 'AI', index: '09', icon: Cpu, desc: 'AI 模型 · Tool · Skill · Agent' },
+  { id: 'ai', label: '术', sub: 'AI', index: '09', icon: Cpu, desc: '我的 AI 工具箱 · 常用资源速查' },
 ]
 
 /** 底部「系统」 */

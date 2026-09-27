@@ -9,9 +9,8 @@ import { useMemo, useRef, useState } from 'react'
 import { Download, Trash2, Upload } from 'lucide-react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
-import { db } from '../../db/db'
-import { BUSINESS_TABLES, TOMBSTONES } from '../../db/tables'
-import { markTombstones } from '../../repositories/repo'
+import { BUSINESS_TABLES } from '../../db/tables'
+import { clearAllData, exportAllData, getDataStats, importAllData } from '../../services/data-admin'
 import { reloadAllStores } from '../../stores/reload'
 import { seedAllCategories } from '../../stores/useCategoryStore'
 import {
@@ -22,7 +21,7 @@ import {
 import { APP_VERSION } from '../../app/version'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { cleanupDuplicateFixedTasks, previewDuplicateFixedTasks } from '../../services/task-repair'
-import { toISODate, nowISO } from '../../utils/id'
+import { toISODate } from '../../utils/id'
 import { Button, Collapse, Dialog, Section, Select, useToast } from '../../components/ui'
 
 export function DataGroup() {
@@ -37,18 +36,8 @@ export function DataGroup() {
   const dup = useMemo(() => previewDuplicateFixedTasks(tasks), [tasks])
 
   const exportData = async () => {
-    // 以 BUSINESS_TABLES 单一事实源为准，导出全部业务表并附带墓碑
-    const dump: Record<string, unknown> = {}
-    for (const t of BUSINESS_TABLES) {
-      dump[t.key] = await db.table(t.key).toArray()
-    }
-    dump.tombstones = await db.table(TOMBSTONES).toArray()
-    dump._meta = {
-      app: 'yishu-workbench',
-      version: APP_VERSION,
-      tables: BUSINESS_TABLES.length,
-      exportedAt: nowISO(),
-    }
+    // 表遍历与墓碑都在 services/data-admin（那里是 BUSINESS_TABLES 单一事实源的消费方）
+    const dump = await exportAllData()
     const blob = new Blob([JSON.stringify(dump, null, 2)], {
       type: 'application/json',
     })
@@ -63,15 +52,9 @@ export function DataGroup() {
 
   const clearAll = async () => {
     try {
-      for (const t of BUSINESS_TABLES) {
-        // 先取主键再清表，并为每行写墓碑：
-        // 否则本机清空后一次同步，远端快照会把数据原样加回来（清空被"撤销"）。
-        const ids = (await db.table(t.key).toCollection().primaryKeys()) as string[]
-        await db.table(t.key).clear()
-        await markTombstones(t.key, ids)
-      }
-      // 冲突记录一并清空；墓碑保留 —— 它承载"清空"这一事实的跨设备传播
-      await db.table('conflicts').clear()
+      // 清表 + 逐表写墓碑（见 services/data-admin：不写墓碑的话，
+      // 一次同步就会把数据从远端原样加回来）
+      await clearAllData()
       // 分类是业务数据，清空后立刻播回默认清单，否则情报/藏阁页签会全空
       await reloadAllStores()
       await seedAllCategories()
@@ -109,19 +92,8 @@ export function DataGroup() {
     try {
       // 安全网：写入前把当前数据自动导出一份，误操作可回退
       await exportData()
-      let tables = 0
-      for (const t of BUSINESS_TABLES) {
-        const rows = pendingImport.dump[t.key]
-        if (!Array.isArray(rows)) continue
-        await db.table(t.key).clear()
-        if (rows.length > 0) await db.table(t.key).bulkPut(rows as never[])
-        tables++
-      }
-      // 墓碑随备份恢复（若包含），保持删除意图一致
-      if (Array.isArray(pendingImport.dump.tombstones)) {
-        await db.table(TOMBSTONES).clear()
-        await db.table(TOMBSTONES).bulkPut(pendingImport.dump.tombstones as never[])
-      }
+      // 覆盖写入 + 墓碑恢复都在 services/data-admin（顺序与备份格式与从前一致）
+      const tables = await importAllData(pendingImport.dump)
       await reloadAllStores()
       setPendingImport(null)
       toast(`已恢复 ${tables} 张表；恢复前的数据已自动导出为安全备份`, 'success')
@@ -132,10 +104,7 @@ export function DataGroup() {
 
   /** 一键诊断：版本 / 浏览器 / 同步状态 / 各表数据量，复制给协作者排查问题 */
   const copyDiagnostics = async () => {
-    const counts: Record<string, number> = {}
-    for (const t of BUSINESS_TABLES) {
-      counts[t.label] = await db.table(t.key).count()
-    }
+    const counts = await getDataStats()
     const detail = Object.entries(counts)
       .map(([k, v]) => `${k} ${v}`)
       .join(' / ')
@@ -293,8 +262,7 @@ export function DataGroup() {
         {/* 说明性小字只在桌面显示（项目移动端约定第 4 条）；上面的"残留 N 条"是实时信息，移动端保留 */}
         <p className="mt-1 hidden text-xs text-ink-faint md:block">
           旧版完成「每日/每周/每月固定」任务时会多生成一条副本，导致同一件事在固定区反复出现。
-          生成逻辑已修，**启动时也会自动清理**（见 Bootstrap 的「整理固定任务」），
-          这里保留按钮是为了能先看清将要删掉什么再动手。
+          生成逻辑已修，启动时也会自动清理；这里保留按钮是为了能先看清将要删掉什么再动手。
         </p>
         <Dialog
           open={dupOpen}

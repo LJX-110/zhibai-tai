@@ -13,7 +13,7 @@ import { runSync } from '../../sync/SyncService'
 import { encryptor } from '../../sync/encryption/encryption'
 import { isDirty, subscribeDirty } from '../../sync/auto'
 import { SYNC_TONE_CLASS, syncSummary } from '../../sync/status'
-import { Badge, Button, Collapse, Input, Section, useToast } from '../../components/ui'
+import { Badge, Button, Collapse, Input, Section, Switch, useToast } from '../../components/ui'
 import { cn } from '../../utils/cn'
 
 export function SyncGroup() {
@@ -132,31 +132,33 @@ export function SyncGroup() {
       )}
 
       <div className="space-y-2 py-1">
-        <div className="row">
+        {/* ⚠️ 这几行必须 flex-wrap：320px 上「标签 + 输入 + 按钮 + 状态字」挤在一行
+            会把输入框压到只剩几十像素（Token / 口令这种必须能看清内容的字段尤其致命） */}
+        <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">仓库</span>
           <Input
             placeholder="owner/repo"
             value={settings.githubRepo ?? ''}
             onChange={(e) => settings.set({ githubRepo: e.target.value })}
-            className="max-w-[300px]"
+            className="min-w-[10rem] flex-1"
           />
         </div>
-        <div className="row">
+        <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">分支</span>
           <Input
             value={settings.githubBranch ?? 'main'}
             onChange={(e) => settings.set({ githubBranch: e.target.value })}
-            className="max-w-[300px]"
+            className="min-w-[10rem] flex-1"
           />
         </div>
-        <div className="row">
+        <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">Token</span>
           <Input
             type="password"
             placeholder="GitHub Token"
             value={tokenDraft}
             onChange={(e) => setTokenDraft(e.target.value)}
-            className="max-w-[300px]"
+            className="min-w-[10rem] flex-1"
           />
           <Button size="sm" variant="secondary" onClick={saveToken} disabled={!tokenDraft.trim()}>
             加密保存
@@ -166,14 +168,14 @@ export function SyncGroup() {
           )}
         </div>
 
-        <div className="row">
+        <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">同步口令</span>
           <Input
             type="password"
             placeholder="同步密码"
             value={passwordDraft}
             onChange={(e) => setPasswordDraft(e.target.value)}
-            className="max-w-[300px]"
+            className="min-w-[10rem] flex-1"
           />
           <Button size="sm" variant="secondary" onClick={savePassword} disabled={passwordDraft.length < 6}>
             加密保存
@@ -195,21 +197,13 @@ export function SyncGroup() {
         {/* 自动同步 */}
         <div className="mt-2 flex flex-wrap items-center gap-3 rounded-paper bg-raised px-3 py-2">
           <span className="text-sm text-ink-soft">自动同步</span>
-          <button
-            onClick={() => settings.set({ autoSync: !settings.autoSync })}
-            className={cn(
-              'relative h-5 w-10 rounded-full transition-colors',
-              settings.autoSync ? 'bg-teal' : 'bg-nested',
-            )}
-            aria-label="自动同步开关"
-          >
-            <span
-              className={cn(
-                'absolute top-0.5 h-4 w-4 rounded-full bg-paper shadow-soft transition-all',
-                settings.autoSync ? 'left-[22px]' : 'left-0.5',
-              )}
-            />
-          </button>
+          {/* 用共用 Switch（位移走 translate-x）；此前这里手抄了一份用 `left` 过渡的开关 —— 
+              既重复实现，又在动画 `left`（只允许 transform / opacity） */}
+          <Switch
+            checked={settings.autoSync}
+            onChange={() => settings.set({ autoSync: !settings.autoSync })}
+            label="自动同步开关"
+          />
           <select
             value={settings.syncInterval}
             onChange={(e) => settings.set({ syncInterval: e.target.value as SyncInterval })}

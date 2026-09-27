@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Plus,
   CalendarX,
+  BarChart3,
   Pencil,
 } from 'lucide-react'
 import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore } from '../../stores/useStudyStore'
@@ -32,9 +33,12 @@ import {
 
 export function TimetableTab({
   onGoCourse,
+  onGoPlan,
   onQuickAdd,
 }: {
   onGoCourse: () => void
+  /** 「学分 · 选课」（课表页签内的第三个视图，见 StudyPage） */
+  onGoPlan: () => void
   onQuickAdd: (weekday: number) => void
 }) {
   const courses = useCourseStore((s) => s.items)
@@ -155,6 +159,10 @@ export function TimetableTab({
           {/* 原「课程」页签的入口：功能还在，只是收进课程表里，省一个页签 */}
           <Button size="sm" variant="tertiary" onClick={onGoCourse} className="shrink-0">
             <Pencil size={13} /> 管理
+          </Button>
+          {/* 学分 · 选课同理收进这个页签：页内页签硬上限 4 个，不为它新开一页 */}
+          <Button size="sm" variant="tertiary" onClick={onGoPlan} className="shrink-0">
+            <BarChart3 size={13} /> 学分 · 选课
           </Button>
         </div>
       </div>

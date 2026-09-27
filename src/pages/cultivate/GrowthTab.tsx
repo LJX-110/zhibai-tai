@@ -220,9 +220,10 @@ export function GrowthTab() {
             <div key={d.key} className="flex items-center gap-3">
               <span className="display w-6 shrink-0 text-sm font-semibold text-ink">{d.label}</span>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-nested">
+                {/* 宽度用 scaleX 表达（只动 transform），不写 transition-all + width */}
                 <div
                   className={cn(
-                    'h-full rounded-full transition-all',
+                    'h-full w-full origin-left rounded-full transition-transform',
                     // 低分不用绛红：绛红在本体系里是「印章 / 危险」，拿它表示"分数低"会被误读成"出了问题"
                     d.value >= d.max * 0.75
                       ? 'bg-teal'
@@ -230,7 +231,7 @@ export function GrowthTab() {
                         ? 'bg-skill-qing'
                         : 'bg-ink-faint',
                   )}
-                  style={{ width: `${(d.value / d.max) * 100}%` }}
+                  style={{ transform: `scaleX(${d.value / d.max})` }}
                 />
               </div>
               <span className="tabular w-10 shrink-0 text-right text-xs text-ink-muted">

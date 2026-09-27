@@ -28,8 +28,10 @@ export function Chip({ active = false, children, onClick, className }: ChipProps
       data-active={active || undefined}
       onClick={onClick}
       className={cn(
-        'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors',
-        active ? 'bg-ink text-on-dark' : 'bg-raised text-ink-muted hover:text-ink',
+        // active 反馈不能少：触屏没有 hover —— 只靠"选中态"变化的话，
+        // 点下去到状态更新之间没有任何按压感（与 Button 的 active:translate-y-px 同一手感）
+        'shrink-0 rounded-tile px-3 py-1.5 text-sm transition-colors active:translate-y-px',
+        active ? 'bg-ink text-on-dark active:opacity-90' : 'bg-raised text-ink-muted hover:text-ink active:bg-nested',
         className,
       )}
     >

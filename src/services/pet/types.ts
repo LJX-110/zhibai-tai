@@ -13,12 +13,29 @@
 /** 支持的角落 */
 export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
-/** 轴对齐矩形（视口语义：左上角 + 宽高） */
+/**
+ * 轴对齐矩形 —— **宿主矩形**（当前宿主 = 浏览器视口）。
+ * 语义是"左上角 + 宽高"。
+ */
 export interface Rect {
   x: number
   y: number
   width: number
   height: number
+}
+
+/**
+ * 桌宠**可活动边界** —— 宠物左上角的取值区间（设备无关的几何概念）。
+ *
+ * 与 `Rect` 的区别是刻意的：`Rect` 描述"宿主给了多大的地方"，
+ * `PetBounds` 描述"宠物能在其中跑到哪儿"（已扣掉自身尺寸与边距）。
+ * physics / motion / state-machine **只认后者** —— 它们不该知道窗口是什么。
+ */
+export interface PetBounds {
+  left: number
+  top: number
+  right: number
+  bottom: number
 }
 
 /** 移动动作：动作名 + 可选覆盖参数（未写字段取 `moves.default`） */

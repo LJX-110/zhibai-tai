@@ -39,7 +39,7 @@ export function Sheet({ open, onClose, title, children, footer, className, tone 
         aria-labelledby={title != null ? titleId : undefined}
         tabIndex={-1}
         className={cn(
-          'talisman overlay-panel overlay-panel--edge absolute inset-x-0 bottom-0 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet max-h-[88vh] overflow-y-auto focus:outline-none',
+          'talisman overlay-panel overlay-panel--edge absolute inset-x-0 bottom-0 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] shadow-overlay anim-sheet max-h-[88vh] overflow-y-auto overscroll-contain focus:outline-none',
           tone === 'sidebar' && 'sheet-sidebar',
           className,
         )}

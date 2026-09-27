@@ -11,7 +11,7 @@ export interface TableMeta {
   label: string
 }
 
-/** 参与同步、备份导出与清空操作的业务表（共 28 张） */
+/** 参与同步、备份导出与清空操作的业务表（共 30 张） */
 export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'tasks', label: '待办' },
   { key: 'notes', label: '笔记/灵感' },
@@ -26,6 +26,8 @@ export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'courses', label: '课程' },
   { key: 'courseCancellations', label: '停课记录' },
   { key: 'courseReschedules', label: '调课记录' },
+  { key: 'coursePlans', label: '选课规划' },
+  { key: 'coursePlanMeta', label: '选课目标' },
   { key: 'homeworks', label: '作业' },
   { key: 'exams', label: '考试' },
   { key: 'collectionItems', label: '收藏' },

@@ -88,7 +88,7 @@ export function DayanTab() {
           <Section title="大衍筮法" hint="十八变成卦">
             <div className="space-y-3">
               <p className="text-xs leading-relaxed text-ink-faint">
-                大衍之数五十，其用四十九。每爻分二、挂一、揲四、归奇，三变得一爻，十八变而成卦——起卦最繁复，亦最庄重。
+                大衍之数五十，其用四十九。每爻分二、挂一、揲四、归奇，三变得一爻，十八变而成卦。
               </p>
               {/* 所占之事：建局前先问事（AI 解卦会结合此问） */}
               <Input

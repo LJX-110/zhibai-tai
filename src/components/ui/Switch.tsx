@@ -52,20 +52,25 @@ export function Switch({
       disabled={disabled}
       onClick={onChange}
       className={cn(
-        'relative shrink-0 rounded-full transition-colors',
-        s.track,
-        checked ? 'bg-teal' : 'bg-nested',
+        // 结构：按钮 = 热区，内层 span = 视觉轨道（轨道尺寸与从前逐像素一致）。
+        // 这样移动端可以把热区撑到 44px 而不动视觉：负外边距让 margin box 仍等于轨道尺寸，
+        // 行高 / 对齐零变化（此前 20px 高的开关是真难点到）。
+        'group relative flex shrink-0 items-center justify-center',
+        'max-md:h-11 max-md:w-11',
+        size === 'sm' ? 'max-md:-mx-1 max-md:-my-3' : 'max-md:-my-2.5',
         disabled && 'pointer-events-none opacity-45',
         className,
       )}
     >
-      <span
-        className={cn(
-          'absolute left-0.5 top-0.5 rounded-full bg-paper shadow-sm transition-transform',
-          s.knob,
-          checked ? s.on : 'translate-x-0',
-        )}
-      />
+      <span className={cn('relative block rounded-full transition-colors', s.track, checked ? 'bg-teal' : 'bg-nested')}>
+        <span
+          className={cn(
+            'absolute left-0.5 top-0.5 rounded-full bg-paper shadow-sm transition-transform',
+            s.knob,
+            checked ? s.on : 'translate-x-0',
+          )}
+        />
+      </span>
     </button>
   )
 }

@@ -112,7 +112,7 @@ export function SignTab() {
       <div className="mt-2">
         <Section title="常用工具">
           <div className="grid grid-cols-2 gap-2">
-            <ToolTile icon={ScrollText} label="记今日签" desc="签文入档" onClick={saveDailySign} />
+            <ToolTile icon={ScrollText} label="记今日签" desc="入档 · 可在「历史」回看" onClick={saveDailySign} />
             <ToolTile
               icon={Sparkles}
               label="每日签"
