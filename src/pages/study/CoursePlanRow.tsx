@@ -1,116 +1,78 @@
 /**
- * 学 · 学分选课的条目列表（行 + 公选分组）
+ * 学 · 学分选课的**统一课程行**（2026-09-28 重做）
  *
- * 从 `CoursePlanTab` 抽出：那一页已顶到单文件 400 行上限，
- * 而"怎么显示一条 / 怎么按分组摊开"是自成一块的渲染逻辑。
+ * ## 为什么并成一行
+ * 旧版把条目按方向 / 状态摊成六个区块（限选 / 公选 / 体育 / 候选 / 不可选 / 事项），
+ * 同一门课在两处出现、状态靠方块记号与文字标签表达 —— "很多小板块"就是这么攒出来的。
+ * 现在：**一行一课**，方向、状态、学分、教师、备注全在这一行里。
+ *
+ * ## 一行的信息（规格指定的最小集）
+ * 方向印 · 状态印 · 课程名 · 学分 · 教师（有才显示）· 备注（有才显示）· 删除
+ *
+ * ## 两枚印章都是体系里的 `Seal` 符箓（2026-09-29）
+ *  · **方向**（限选/公选/体育）原先是一段纯文字，和后面的印章并列时"一个像标签、一个像印章"；
+ *  · **状态**（选/候/否）原先是一枚手搓的 `<span class="rounded-full border">`，字用楷体。
+ * 现在两枚都交给 `components/ui/Seal`：圆形 · 细线环 · 无实底 · 印文取自小篆 ——
+ * 与财（收/支）、待办落印、今日签是同一套语言。
+ *
+ * **层级靠颜色而不是尺寸**：方向一律中性墨色（分类信息），颜色语义留给状态三态；
+ * 两枚都只有 20px，视觉上明显低于课程标题。全称由 `aria-label`（Seal 的 `title`）
+ * 与筛选行（全部 | 已选 | 候选 | 不可选）承担 —— 圆里塞不下两个汉字还不抢焦点。
  */
-import { Trash2 } from 'lucide-react'
+import { Eye, Pencil, Trash2 } from 'lucide-react'
 import type { CoursePlan } from '../../types/entities'
-import { EmptyState } from '../../components/ui'
-import { cn } from '../../utils/cn'
-import { KIND_LABEL, STATUS_LABEL, STATUS_MARK, trim } from './plan-shared'
+import { Seal } from '../../components/ui/Seal'
+import { RowActions } from '../../components/ui/RowActions'
+import { KIND_LABEL, KIND_SEAL, STATUS_LABEL, STATUS_SEAL, trim } from './plan-shared'
 
-/** 一条规划条目（点正文进编辑；删除按钮走 `.hover-reveal`，触屏常显） */
 export function PlanRow({
   item,
+  onDetail,
   onEdit,
   onRemove,
-  showKind,
 }: {
   item: CoursePlan
+  onDetail: () => void
   onEdit: () => void
   onRemove: () => void
-  /** 在「候选 / 不可选」汇总里多给一个方向标记，否则看不出它属于限选还是公选 */
-  showKind?: boolean
 }) {
+  const seal = STATUS_SEAL[item.status]
+  const kind = KIND_SEAL[item.kind]
   return (
-    <div className="row">
-      <span
-        className={cn(
-          'w-4 shrink-0 text-center text-sm',
-          item.status === 'selected' ? 'text-teal' : 'text-ink-faint',
-        )}
-        aria-label={STATUS_LABEL[item.status]}
-      >
-        {STATUS_MARK[item.status]}
-      </span>
+    <div className="row group">
+      {/* 方向印（限选 / 公选 / 体育）：中性墨色 —— 一眼把课与「选课目标」三行对上 */}
+      <Seal size={20} char={kind.char} tone={kind.tone} title={KIND_LABEL[item.kind]} />
+      {/* 状态印（选 / 候 / 否）：颜色即语义 */}
+      <Seal size={20} char={seal.char} tone={seal.tone} title={STATUS_LABEL[item.status]} />
       <button className="min-w-0 flex-1 text-left" onClick={onEdit}>
         <span className="text-sm text-ink">{item.title}</span>
         {item.teacher && <span className="ml-2 text-xs text-ink-faint">{item.teacher}</span>}
+        {/* 公选分类与备注都是"有才显示"的补充信息：与教师同一档小字 */}
+        {item.group && item.kind === 'public' && (
+          <span className="ml-2 text-xs text-ink-faint">· {item.group}</span>
+        )}
         {item.note && <span className="ml-2 text-xs text-ink-faint">· {item.note}</span>}
       </button>
-      {showKind && <span className="shrink-0 text-xs text-ink-faint">{KIND_LABEL[item.kind]}</span>}
-      {item.status !== 'selected' && (
-        <span className="shrink-0 text-xs text-ink-faint">{STATUS_LABEL[item.status]}</span>
-      )}
       <span className="tabular shrink-0 text-xs text-ink-muted">
-        {item.credit != null ? `${trim(item.credit)} 学分` : '—'}
+        {item.credit != null ? `${trim(item.credit)} 学分` : null}
       </span>
-      <button
-        className="hover-reveal touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar"
-        onClick={onRemove}
-        aria-label="删除"
-      >
-        <Trash2 size={14} />
-      </button>
-    </div>
-  )
-}
-
-/**
- * 公选：按 `group` 分组展示；**没填分组的平铺在最后**（"未分类"）。
- *
- * 分组顺序来自 `publicGroupsOf`（首次出现的顺序 = 你录入的顺序），不排序 ——
- * 这六个分类是你学校的规定顺序，按拼音重排只会更难找。
- */
-export function PublicList({
-  groups,
-  ungrouped,
-  onEdit,
-  onRemove,
-  onAddIn,
-}: {
-  groups: { group: string; items: CoursePlan[] }[]
-  ungrouped: CoursePlan[]
-  onEdit: (c: CoursePlan) => void
-  onRemove: (c: CoursePlan) => void
-  onAddIn: (group: string) => void
-}) {
-  if (groups.length === 0 && ungrouped.length === 0) {
-    return <EmptyState title="还没有条目" />
-  }
-  return (
-    <div className="space-y-2">
-      {groups.map(({ group, items }) => (
-        <div key={group}>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-ink-muted">{group}</span>
-            <button
-              className="text-xs text-ink-faint hover:text-ink"
-              onClick={() => onAddIn(group)}
-              aria-label={`在「${group}」下添加`}
-            >
-              ＋
-            </button>
-          </div>
-          {items.map((c) => (
-            <PlanRow key={c.id} item={c} onEdit={() => onEdit(c)} onRemove={() => onRemove(c)} />
-          ))}
-        </div>
-      ))}
-      {ungrouped.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-ink-muted">未分类</span>
-            <button className="text-xs text-ink-faint hover:text-ink" onClick={() => onAddIn('')}>
-              ＋
-            </button>
-          </div>
-          {ungrouped.map((c) => (
-            <PlanRow key={c.id} item={c} onEdit={() => onEdit(c)} onRemove={() => onRemove(c)} />
-          ))}
-        </div>
-      )}
+      {/* 操作区走共用的 `RowActions`（2026-09-29 · 批 B；5-3E 修正）
+          改前这里**只有**一个 hover-reveal 的删除按钮 —— 于是"能编辑"这件事
+          完全没有可见线索（能力其实一直在：点课程名就进编辑），用户会以为不能改。
+          现在**与待办行同形制**（5-3E 用户拍板）：详情 / 编辑 / 删除 三个图标直显，
+          窄屏也不收进「更多」—— `alwaysInline` 就是这条约定（见 RowActions 注释）。 */}
+      <div className="hover-reveal flex shrink-0 items-center gap-0.5">
+        <RowActions
+          alwaysInline
+          moreTitle={item.title}
+          actions={[
+            // 详情排第一：与待办、财·流水同序（看 → 改 → 删），三处语言一致
+            { key: 'detail', label: '详情', icon: Eye, onClick: onDetail },
+            { key: 'edit', label: '编辑', icon: Pencil, onClick: onEdit },
+            { key: 'remove', label: '删除', icon: Trash2, onClick: onRemove, danger: true },
+          ]}
+        />
+      </div>
     </div>
   )
 }

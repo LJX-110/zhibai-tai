@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 财 · 共享**子组件**（记账 / 购买 / 统计共用，从 FinancePage 拆出）
  *
  * ⚠️ 本文件**只导出组件**：金额格式化、台账筛选、月度汇总这些非组件已迁到 `./summary`
@@ -15,7 +15,6 @@
  */
 import {
   Eye,
-  MoreHorizontal,
   Pencil,
   Trash2,
 } from 'lucide-react'
@@ -24,8 +23,9 @@ import { useInspectorStore } from '../../components/inspector/inspector-store'
 import { categoryLabel } from '../../services/finance'
 
 import type { FinanceRecord } from '../../types/entities'
-import { money } from './summary'
+import { money } from '../../utils/money'
 import { Seal } from '../../components/ui/Seal'
+import { RowActions } from '../../components/ui/RowActions'
 
 import { cn } from '../../utils/cn'
 import { Badge } from '../../components/ui'
@@ -42,14 +42,10 @@ export function SummaryCell({ label, value, tone }: { label: string; value: stri
 
 export function FinanceRow({
   r,
-  compact,
-  onMore,
   onEdit,
   onDelete,
 }: {
   r: FinanceRecord
-  compact: boolean
-  onMore: () => void
   onEdit: (r: FinanceRecord) => void
   onDelete: (r: FinanceRecord) => void
 }) {
@@ -77,31 +73,23 @@ export function FinanceRow({
       <span className={cn('tabular text-sm font-medium', r.kind === 'income' ? 'text-teal' : 'text-ink')}>
         {r.kind === 'income' ? '+' : '-'}{money(r.amount)}
       </span>
-      {compact ? (
-        <button
-          onClick={onMore}
-          className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-raised"
-          aria-label="更多操作"
-        >
-          <MoreHorizontal size={16} />
-        </button>
-      ) : (
-        <>
-          <button
-            className="touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised"
-            onClick={() => useInspectorStore.getState().open('finance', r.id)}
-            aria-label="详情"
-          >
-            <Eye size={13} />
-          </button>
-          <button className="touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={() => onEdit(r)} aria-label="编辑">
-            <Pencil size={13} />
-          </button>
-          <button className="touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={() => onDelete(r)} aria-label="删除">
-            <Trash2 size={13} />
-          </button>
-        </>
-      )}
+      {/* 操作区走共用 `RowActions`（Step 5-2C C 批 · 用户拍板并入）。
+          改前这里是"compact ? More : inline"两套写法各写一遍，而情报源那边又写了第三套、
+          还多出一个只服务情报源的 MobileActionDialog —— 同一件事四份实现。
+          业务逻辑（详情开 Inspector / 编辑 / 删除）**一个字没改**，只统一了交互实现。 */}
+      <RowActions
+        moreTitle={r.merchant || categoryLabel(r.category)}
+        actions={[
+          {
+            key: 'detail',
+            label: '详情',
+            icon: Eye,
+            onClick: () => useInspectorStore.getState().open('finance', r.id),
+          },
+          { key: 'edit', label: '编辑', icon: Pencil, onClick: () => onEdit(r) },
+          { key: 'remove', label: '删除', icon: Trash2, onClick: () => onDelete(r), danger: true },
+        ]}
+      />
     </div>
   )
 }

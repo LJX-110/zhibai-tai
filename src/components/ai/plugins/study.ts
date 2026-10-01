@@ -6,8 +6,11 @@
  */
 import { GraduationCap } from 'lucide-react'
 import { aiService } from '../../../services/ai/ai-service'
-import { useCourseStore, useExamStore, useHomeworkStore } from '../../../stores/useStudyStore'
-import { diffDays, weekdayCN } from '../../../utils/id'
+import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore, useExamStore, useHomeworkStore } from '../../../stores/useStudyStore'
+import { useSettingsStore } from '../../../stores/useSettingsStore'
+import { activeSlotsOfDay, currentWeek } from '../../../services/study'
+import { defineTool } from '../../../services/agent/tools'
+import { diffDays, todayISO, weekdayCN } from '../../../utils/id'
 import type { Course } from '../../../types/entities'
 import type { TianjiPlugin } from './index'
 
@@ -33,6 +36,41 @@ function dueText(due: string): string {
 
 export const studyPlugin: TianjiPlugin = {
   id: 'study',
+
+  /**
+   * 工具：今日课程。
+   * 与明细区的差别：明细是"按关键词预先注入"，工具是"模型自己去查" ——
+   * 后者在多轮追问（"那明天呢"）里才拿得到新数据，因为每轮都会重跑。
+   */
+  tools: [
+    defineTool({
+      id: 'courses.today',
+      name: '查今日课程',
+      description:
+        '取「今天上哪些课」——按当前周次与单双周过滤，已停课 / 已调走的不算、调来的算。问"今天有课吗 / 几点上课 / 在哪上课"时用它。',
+      inputSchema: { date: '可选：yyyy-mm-dd（默认今天）' },
+      mode: 'read',
+      riskLevel: 'read',
+      execute: async (args) => {
+        const date =
+          typeof args.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args.date) ? args.date : todayISO()
+        const weekday = new Date(`${date}T00:00:00`).getDay()
+        const week = currentWeek(useSettingsStore.getState().termStartDate)
+        // ⚠️ 取课点必须走 activeSlotsOfDay（含周次 / 停课 / 调课），不要手写按周几过滤
+        const slots = activeSlotsOfDay(useCourseStore.getState().items, weekday, week, {
+          date,
+          cancellations: useCourseCancellationStore.getState().items,
+          reschedules: useCourseRescheduleStore.getState().items,
+        })
+        if (slots.length === 0) return { count: 0, text: `${date} 没有课。` }
+        const rows = slots.map(({ course, slot }) => {
+          const where = [course.room, course.teacher].filter(Boolean).join(' · ')
+          return `- ${slot.start}–${slot.end} ${course.name}${where ? `（${where}）` : ''}`
+        })
+        return { count: slots.length, text: `${date} 共 ${slots.length} 节：\n${rows.join('\n')}` }
+      },
+    }),
+  ],
 
   detail: (q) => {
     const courses = useCourseStore.getState().items

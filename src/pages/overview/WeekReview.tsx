@@ -9,6 +9,7 @@ import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useHabitLogStore } from '../../stores/useHabitStore'
 import { Section } from '../../components/ui'
 import { todayISO } from '../../utils/id'
+import { money } from '../../utils/money'
 import { cn } from '../../utils/cn'
 
 function weekStart(weeksAgo = 0): Date {
@@ -64,7 +65,10 @@ export function WeekReview() {
     { label: '专注时长', value: `${data.focusMin}`, unit: '分钟', tone: 'text-cinnabar' },
     {
       label: '本月结余',
-      value: `${data.income - data.expense >= 0 ? '+' : ''}${data.income - data.expense}`,
+      // 金额一律走 utils/money（全站唯一 formatter）：此前这里直接 `${income - expense}`，
+      // 与财页的两位小数口径不一致 —— 同一个"本月结余"两处显示格式不同。
+      // 符号也不自己拼：正数不加 `+`（规格：0.00 / 128.50 / -35.20）
+      value: money(data.income - data.expense),
       unit: '元',
       tone: data.income - data.expense >= 0 ? 'text-teal' : 'text-cinnabar',
     },

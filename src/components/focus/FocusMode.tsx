@@ -67,7 +67,7 @@ export function FocusMode() {
       {/* 顶栏：退出 */}
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-2 eyebrow text-ink-faint">
-          <Seal size={22} char="异" /> FOCUS · 专注
+          <Seal size={20} char="异" /> FOCUS · 专注
         </div>
         <Button size="sm" variant="tertiary" onClick={() => setFocusMode(false)}>
           <X size={14} /> 退出专注

@@ -115,12 +115,44 @@ describe('classifyFetchError', () => {
     expect(classifyFetchError(new Error('parse: 不是合法 JSON（试试 RSS/Web Provider）')).kind).toBe('parse')
   })
 
-  it('拿到状态码说明链路通、是目标自身报错', () => {
-    expect(classifyFetchError(new Error('目标返回 HTTP 404（直连 HTTP 404）')).kind).toBe('http')
+  it('拿到状态码说明链路通、是目标自身报错：404 单独成类（该换地址）', () => {
+    expect(classifyFetchError(new Error('目标返回 HTTP 404（直连 HTTP 404）')).kind).toBe('not_found')
+    expect(classifyFetchError(new Error('404 Not Found')).kind).toBe('not_found')
+  })
+
+  it('上游 5xx 单独成类（该等一等），**绝不能**报成「需认证」', () => {
+    for (const code of [500, 502, 503, 504]) {
+      const info = classifyFetchError(new Error(`目标返回 HTTP ${code}（直连 HTTP ${code}）`))
+      expect(info.kind).toBe('server')
+      expect(info.message).not.toContain('认证')
+    }
+    expect(classifyFetchError(new Error('Internal Server Error')).kind).toBe('server')
   })
 
   it('需要凭证的源归为需认证', () => {
     expect(classifyFetchError(new Error('HTTP 401 unauthorized')).kind).toBe('auth')
+    expect(classifyFetchError(new Error('invalid api key')).kind).toBe('auth')
+  })
+
+  // ── Step 5-1 · C3 回归：这一条以前是错的 ──
+  it('**HTML 错误页 / 非法 JSON → parse，不是 auth**（旧版被 `unexpected token` 里的 token 骗了）', () => {
+    const jsonParse = new SyntaxError(`Unexpected token '<', "<!DOCTYPE "... is not valid JSON`)
+    const info = classifyFetchError(jsonParse)
+    expect(info.kind).toBe('parse')
+    expect(info.message).not.toContain('认证')
+
+    // 代理把非 JSON 上游包成的那句话，同样必须是 parse
+    expect(
+      classifyFetchError(new Error('上游 返回非 JSON（HTTP 200，正文开头：<!DOCTYPE html><html lang="zh">')).kind,
+    ).toBe('parse')
+    // 限流页也是 HTML —— 但带 429 的消息仍应先归 rate_limit（限流有了明确状态码）
+    expect(classifyFetchError(new Error('上游 返回非 JSON（HTTP 429，正文开头：<html>')).kind).toBe('rate_limit')
+  })
+
+  it('parse 与 auth 的边界：真的带凭证字样的才归 auth', () => {
+    expect(classifyFetchError(new Error('unauthorized: missing token')).kind).toBe('auth')
+    // 只是恰好出现 token 这个词（如 parse 报错）不应被抢走 —— 已被上一条覆盖，这里再钉一次前缀情形
+    expect(classifyFetchError(new Error('Unexpected token } in JSON at position 3')).kind).toBe('parse')
   })
 })
 
@@ -258,5 +290,49 @@ describe('refreshAll', () => {
 
     expect(res.attempted).toBe(0)
     expect(calls).not.toHaveBeenCalled()
+  })
+
+  it('**一个源 504 不会拖垮整轮**：其他源照常抓、失败单独记（Step 5-1 · C4）', async () => {
+    useProvider(async (source) => {
+      if (source.name === '坏源') throw new Error('目标返回 HTTP 504（直连 HTTP 504）')
+      return [itemOf({ id: `ok-${source.id}`, source: source.name })]
+    })
+    const good = sourceOf('好源')
+    await seed(good, sourceOf('坏源'))
+
+    const res = await run.refreshAll()
+
+    expect(res.failures).toHaveLength(1)
+    expect(res.failures[0].kind).toBe('server')
+    expect(res.failures[0].sourceName).toBe('坏源')
+    // 好源的数据照常落库 —— 一个源失败不该让整轮白跑
+    expect(res.added).toBe(1)
+    expect(await db.intelligenceItems.count()).toBe(1)
+    const badRow = (await db.intelligenceSources.toArray()).find((s) => s.name === '坏源')
+    expect(badRow?.lastError).toBeTruthy()
+    expect(badRow?.lastSuccessAt).toBeUndefined()
+  })
+
+  it('**抓取失败不清空旧数据**（Step 5-1 · C7）：旧条目原样保留', async () => {
+    // 先成功抓一轮，库里有数据
+    useProvider(async () => [itemOf({ id: 'keep-1', source: '反复源', url: 'https://example.com/1' })])
+    const s = sourceOf('反复源')
+    await seed(s)
+    await run.refreshAll()
+    expect(await db.intelligenceItems.count()).toBe(1)
+
+    // 第二轮开始一直失败
+    useProvider(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await db.intelligenceSources.update(s.id, { failCount: 0, lastFetchedAt: undefined })
+    await sourceStore.getState().load()
+    const res = await run.refreshAll({ force: true })
+
+    expect(res.failures).toHaveLength(1)
+    expect(res.added).toBe(0)
+    // 关键：旧条目还在，且没有被任何"清空重写"碰到
+    expect(await db.intelligenceItems.count()).toBe(1)
+    expect((await db.intelligenceItems.toArray())[0].id).toBe('keep-1')
   })
 })

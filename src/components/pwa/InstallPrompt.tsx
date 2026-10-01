@@ -50,8 +50,11 @@ export function InstallPrompt() {
     if (outcome === 'accepted') dismiss()
   }
 
+  // ⚠️ 层级必须高于桌宠（`--z-pet` 55）：横幅里的「立即安装」是核心按钮，
+  //    而桌宠的活动矩形只扣掉顶/底栏，扣不到这条横幅 —— 用 `--z-nav`(50) 的话
+  //    宠物停在右下角时就可能压住按钮，用户点不动（Step 4-3 · 十）。
   return (
-    <div className="fixed inset-x-3 bottom-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom,0px)+8px)] z-[var(--z-nav)] mx-auto max-w-md md:bottom-4">
+    <div className="fixed inset-x-3 bottom-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom,0px)+8px)] z-[var(--z-overlay)] mx-auto max-w-md md:bottom-4">
       <div className="anim-enter flex items-center gap-3 rounded-paper border border-line bg-paper/95 px-3.5 py-3 shadow-float backdrop-blur">
         <MonitorDown size={18} className="shrink-0 text-skill-indigo" />
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">

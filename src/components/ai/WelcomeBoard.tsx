@@ -1,10 +1,15 @@
 /**
- * 天机 · 空会话看板：实时状态（各板块脉搏）+ 能力胶囊 + 快捷问句。
+ * 天机 · 空会话看板：实时状态（各板块脉搏）+ 动作胶囊。
  * 管家先亮出"我已经看到什么"，再给一键动作 —— 不堆 2×2 大卡占屏。
+ *
+ * ⚠️ **「可以这样问」快捷问句已删**（Step 5-3C）：天机的定位是
+ * 「通用 AI + 数据助手」，不是九大板块的问答入口 —— 把"能问什么"
+ * 列成四颗按钮，等于把它的能力说小了，还把它变成了另一个导航层。
+ * 空输入框不需要教学，用户直接说要做什么即可。
  *
  * 布局取舍（用户反馈过"占位过大、过于简陋"，后又指出空态下方一大片空白最刺眼）：
  * · 内容贴顶、输入贴底，中间不留空洞 —— 看板用 min-h-full 撑满消息区，
- *   把"可以这样问"+模式说明用 mt-auto 锚到输入框正上方，空白变成段落间距而非死洞；
+ *   把状态说明用 mt-auto 锚到输入框正上方，空白变成段落间距而非死洞；
  * · 脉搏格「标签+数值」同一行，空值统一为 faint 的"—"，一眼扫出今天哪些板块有事；
  * · 胶囊定高横滚，不靠缩小字号换密度。
  */
@@ -16,6 +21,7 @@ import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useCourseStore } from '../../stores/useStudyStore'
 import { useTodayStats } from '../../hooks/useTodayStats'
 import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
+import { money } from '../../utils/money'
 import { cn } from '../../utils/cn'
 import { TIANJI_CAPABILITIES, type TianjiCapabilityKey } from './tianji-capability'
 import type { AiRemoteHealth } from '../../services/ai/health'
@@ -23,14 +29,12 @@ import type { AiRemoteHealth } from '../../services/ai/health'
 export function WelcomeBoard({
   stats,
   remote,
-  onPick,
   onRunCap,
 }: {
   stats: ReturnType<typeof useTodayStats>
   /** 远程状态三态：未就绪与**降级**要分开说 —— "为什么天机答得浅"与
    *  "远程本来好好的怎么变浅了"是两回事，一句通用说明会让后者被当成能力上限 */
   remote: AiRemoteHealth
-  onPick: (q: string) => void
   onRunCap: (key: TianjiCapabilityKey) => void
 }) {
   const today = todayISO()
@@ -56,7 +60,7 @@ export function WelcomeBoard({
     { label: '近日到期', value: dueSoon > 0 ? `${dueSoon} 项` : '—', tone: dueSoon > 0 ? 'cinnabar' : 'plain' },
     { label: '课程', value: courses.length > 0 ? `${courses.length} 门` : '—', tone: courses.length > 0 ? 'teal' : 'plain' },
     { label: '情报未读', value: unreadIntel > 0 ? `${unreadIntel} 条` : '—', tone: unreadIntel > 0 ? 'bronze' : 'plain' },
-    { label: '本月支出', value: expense > 0 ? `¥${Math.round(expense).toLocaleString()}` : '—', tone: expense > 0 ? 'bronze' : 'plain' },
+    { label: '本月支出', value: expense > 0 ? `¥${money(expense)}` : '—', tone: expense > 0 ? 'bronze' : 'plain' },
     { label: '今日专注', value: stats.focusMinutes > 0 ? `${stats.focusMinutes}m` : '—', tone: stats.focusMinutes > 0 ? 'teal' : 'plain' },
   ]
 
@@ -127,24 +131,9 @@ export function WelcomeBoard({
         })}
       </ScrollRow>
 
-      {/* 底部锚定组：mt-auto 把"可以这样问"+模式说明压到输入框正上方。
-          上方内容再短，空白也只落在两段之间，不会在中间戳出空洞；
-          问句按钮紧贴输入框，点一下即填入并发送，符合"在这儿问"的直觉。 */}
+      {/* 底部锚定组：mt-auto 把状态说明压到输入框正上方 —— 上方内容再短，
+          空白也只落在两段之间，不会在中间戳出空洞 */}
       <div className="mt-auto">
-        {/* 快捷问句：空输入框不会自己教用户怎么问，把"能问什么"摆到明面上 */}
-        <div className="mb-2 eyebrow text-ink-faint">可以这样问</div>
-        <div className="flex flex-wrap gap-1.5">
-          {['我今天还有哪些事？', '这月花了多少钱？', '最近在关注什么？', '帮我规划今天下午'].map((h) => (
-            <button
-              key={h}
-              onClick={() => onPick(h)}
-              className="rounded-tile border border-line bg-raised px-2.5 py-1.5 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
-            >
-              {h}
-            </button>
-          ))}
-        </div>
-
         {/* 远程不可用时一句带过出路：原来那段长说明已删（与头部 Badge 重复），
             这里只留一行最关键的"下一步做什么"，作页脚而非中段说明，信息降权。
             降级与未配置分成两句 —— 前者的下一步是「再试一次 / 查额度」，
@@ -152,12 +141,12 @@ export function WelcomeBoard({
         {remote.state === 'degraded' && (
           <p className="mt-3 text-xs leading-relaxed text-cinnabar/80">
             远程 AI 暂时不可用{remote.reason ? `（${remote.reason}）` : ''} · 当前为本地规则概览。
-            再问一次可重试；持续失败请检查「系统 · AI Core」的 Key、额度与 Base URL。
+            再问一次可重试；持续失败请检查「系统 · AI · 模型与连接」的 Key、额度与 Base URL。
           </p>
         )}
         {remote.state === 'unconfigured' && (
           <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-            未接入远程 AI · 在「系统 · AI Core」填好 Base URL / 模型 / Key，天机才能结合你的数据作答。
+            未接入远程 AI · 在「系统 · AI · 模型与连接」填好 Base URL / 模型 / Key，天机才能结合你的数据作答。
           </p>
         )}
       </div>

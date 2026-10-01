@@ -143,6 +143,8 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
   不建"课程名或教师名二选一"的混合实体。
   `goals` 里的 8 / 12 / 1 只是**首次运行的起点**（仓储 `createEmpty` 里），不是写死的校规，页面上随时可改。
   出勤与成绩当前**没有可信数据源**，如实不做，别用估算填上。
+  **行内状态一律用圆形印章**（`pages/study/plan-shared.ts` 的 `STATUS_SEAL`：选 / 候 / 否 —— 细边、低面积、
+  不抢标题焦点，不用 badge / pill），机器可查断言在 `study-plan.test.ts`。
   **所有"到点提醒"由 `components/notification/ReminderEngine` 统一调度**（判定在 `services/reminders.ts`
   的纯函数里，按「键 + 期间」认领见 `services/reminder-claims.ts`）；原 `components/study/ClassReminder`
   已删除，其"提前 15 分钟逐节提醒"并入引擎的 `class-ahead` 源。**不要在别处另起一套提醒判定**。
@@ -159,13 +161,23 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
 - **单行表（偏好 / 桌宠 / 修行）走 `repositories/singleton.ts`**：统一持有两条语义 ——
   **读不到返回 null，绝不伪造行**（否则读一次就凭空多一条待同步记录）、
   **建行由调用方给工厂**（业务默认值不在仓储里猜）。别再各写一份 read/write。
-- **桌宠不许碰业务层**：它的核心（`services/pet/` 的 geometry / runtime / motion / physics /
-  state-machine / interaction）**只认数字与 `PetBounds`** —— 不读 `window` / `screen`、不 import store、
-  不写 Dexie。宿主差异一律走 `PetHost` 的三档接口（必备 / 本机状态 / 业务状态，见 `docs/方案与实现.md` §3.3）。
+- **桌宠不许碰业务层**：它的核心（`services/pet/` 的 geometry / runtime / motion /
+  state-machine / interaction / state）**只认数字与 `PetBounds`** —— 不读 `window` / `screen`、
+  不 import store、不写 Dexie。宿主差异一律走 `PetHost` 的三档接口（见 `docs/方案与实现.md` §3.3）。
   ⚠️ **位置是设备级状态**（`loadLocalPosition` / `persistLocalPosition`），**不进业务表、不触发同步** ——
   它每几秒就变，写业务表会把同步链路的脏标记刷爆（默认 30s 间隔下定时器被反复重设 = 同步永不发生）。
+  ⚠️ **移动端必须扣掉顶 / 底栏**（`MobileNav` 的 `data-pet-reserve-top/bottom` + `adapter.reserveInsets()`，
+  保底 120px）—— 桌宠不得压住底栏与系统操作。
   ⚠️ **尺寸只有一个真相**：`geometry.ts` 的 `effectiveSize = baseSize(petScale)`，
   别再在组件里写第二份尺寸常量（曾有 `PetStage` 的 `VIEW_SIZE` 与 config 的 `size` 两套）。
+  ⛔ **无重力、无惯性、无甩抛**（2026-09-28 定）：物理整套已移除（归档 `备份/2026-09-Step4/`）——
+  重力会在热区之外持续下坠（"宠物一直往下掉"的根因）；现为拖拽 1:1 跟手、**松手即停**，
+  位置权威只剩 `posRef` + localStorage，**别再引入物理**。
+  ⚠️ **状态驱动优先于随机表演**：真实状态（`services/agent/status.ts` 的 AgentStatus / 番茄钟 / 互动间隔）
+  经 `hooks/usePetWorld.ts` 汇成 `PetContext` → `services/pet/state.ts` 的 `resolvePetState`
+  （确定性优先级 ERROR > WAITING > WORKING > THINKING > SUCCESS > FOCUSED > SLEEP > IDLE）决定动画；
+  随机动作链**只在 idle 参与**。**漫游默认关**（`petWander`，开关保留）。
+  **UI 只写 AgentStatus、桌宠只读** —— 天机不指挥桌宠播放，不许反向连线。
 - ⚠️ **「修行境界」与「今日炁象」是两回事，别混**：
   · **境界** = `realmOf(累计功行)`（`services/merit.ts`）：功行逐日累加、**只升不降**，是"等级"；
   · **今日炁象** = `cultivationGrade(今日五维总分)`（`services/cultivation.ts`）：当天快照、明天重计，
@@ -181,17 +193,32 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
   规则 4 起因：首页曾手写 `schedule.filter(weekday)`，漏了单双周——提醒链路早修过，首页漏了半年。
   查死代码**必须排除 `__tests__`**：测试会给死代码"续命"，让它看起来仍被引用。
 - **天机的板块能力走插件注册表**（`components/ai/plugins/*.ts`，`index.ts` 是注册表）：
-  每个板块自带 `detail`（明细区）/ `capability`（一键能力）/ `actions`（AI 提议动作的落库）。
+  每个板块自带 `detail`（明细区）/ `capability`（一键能力）/ `actions`（AI 提议动作的落库）/
+  `tools`（只读检索工具，供 Agent Loop 调用）。
   **注册顺序 = 明细区注入顺序**（`overview, action, study, finance, collection, cultivate, intelligence`），
-  改顺序 = 改上下文 = 可能改回答。三条红线：**插件之间不得互相 import**；
-  **插件不直接写库**（走 store 工厂）；奇 / 术暂无内容，**不注册空壳**。
+  改顺序 = 改上下文 = 可能改回答。四条红线：**插件之间不得互相 import**；
+  **插件不直接写库**（走 store 工厂）；**工具必须只读**；奇 / 术暂无内容，**不注册空壳**。
   `context.ts` 只留跨板块的基础概览 + 聚合，不含任何具体板块逻辑。
+- **天机是小 Agent Loop，不是一次性问答**（2026-09-28）：`services/agent/loop.ts` 多轮工具调用 ——
+  模型在回答末尾用 ```json 围栏提出调用（`protocol.ts` 解析，文本协议；Provider 仍是纯文本、无 `tools` 字段），
+  宿主执行后把结果回喂再推理；`MAX_ITERATIONS = 8`、超时与 AbortController 中止，
+  结束原因（完成 / 撞上限 / 出错 / 用户停止）必须让用户看见。
+  ⚠️ **高风险写入永不作为工具**（金额 / 删除 / 批量）—— 只走「确认卡片」（先预览、点确认才落库），
+  分工表在 `services/agent/tools.ts` 文件头。**加工具只改归属插件**；动作协议文本由
+  `describeActionProtocol(actionSpecs())` 从规格生成，**别再硬编码示例**。
+- **人设与记忆是数据不是提示词**：`personas` / `memories` 两张业务表（Dexie v15；新增表必须进
+  `db/tables.ts` 单一事实源）。人设经 `services/persona/prompt.ts` 的
+  `buildAgentSystemPrompt(persona, memories)` 进**每轮**输入；**UNKNOWN 字段不得当作事实、不得自行补全**。
+  记忆只在**用户明确保存**时写入，可查看 / 编辑 / 删除 / 禁用，检索是关键词 + 标签（不用向量库）。
+  `activePersonaId` 是设置项、**进同步白名单**；聊天记录 / streaming / loading 等 UI 状态**一律不同步** ——
+  只把持久业务数据进 Dexie + 快照。
 - **天机输出已全部流式**：自由问答与能力卡片共用同一个装配器（`services/ai/stream-assembly.ts`）
   与作用域 sink（`services/ai/stream-sink.ts`）。**预览与落库同源**，所以流式与非流式内容一致是构造出来的。
   动作 JSON 只在收齐后解析，**流式过程中绝不中途解析**。
  - ⚠️ `withStreamSink` 是模块级状态，**不要在无 busy 守卫处并发两个带 sink 的调用**（增量会串流）
-- **AI 端点必须能浏览器直连**（纯前端没有转发）：实测 DeepSeek / Kimi 返回 CORS 头可直连，
-  **Agnes / NVIDIA 不返回任何 `Access-Control-*`，必失败** —— 默认端点是 DeepSeek；
+- **AI 端点必须能浏览器直连**（纯前端没有转发）：实测 DeepSeek / Kimi / **Agnes**
+  （2026-10-01 复测：预检 204 + `ACAO: *`）可直连，
+  **NVIDIA 不返回任何 `Access-Control-*`，必失败** —— 默认端点是 DeepSeek；
   预设表（`pages/settings/AiGroup.tsx` 的 `AI_PRESETS`）带 `cors` 标记，选了连不上的服务要**在界面上写明**
   「当前浏览器无法直接连接此服务」，别让它伪装成"用户配错了"。
   模型列表与连通性检查走 Provider 的可选接口（`listModels` / `testConnection`，带 30s 超时）——
@@ -204,6 +231,10 @@ python ../scripts/generate_maskable_icon.py  # 生成 PWA/iOS 图标（public/ic
 
 - **层级必须用 `styles/tokens.css` 的 `--z-*` 令牌**，不要各组件写死 `z-50`。
   移动底栏曾是 `z-[60]`，把 `z-50` 的 Sheet / Dialog 压在下半屏，弹层内容被底栏遮死
+- **金额只有一份实现**：一律 `utils/money.ts` 的 `money(n)`（zh-CN、固定两位小数、null → 0）——
+  禁止页面里再写 `${x}` / `toFixed(2)`（曾有 4 份实现互相不一致；测试在 `__tests__/money-format.test.ts`）
+- **动画只许动 `transform` / `opacity`**（合成器友好），并尊重 `prefers-reduced-motion`（`utils/motion.ts`）。
+  **禁止补间 `width / height / padding / stroke-dashoffset`** —— `Ring` 曾用 dashoffset 做进度补间，已移除
 - **列表操作按钮用 `.hover-reveal`**（`index.css`）：用 `@media (hover: hover)` 守卫，
   触屏常显。**禁止写 `opacity-0 group-hover:opacity-100`** —— 触屏没有 hover 事件，
   按钮会永远不可见，用户会以为功能没做

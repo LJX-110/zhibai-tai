@@ -49,11 +49,19 @@ export async function fetchFromSource(
   return provider.fetch(source, signal)
 }
 
-/** 首次启动的默认源 —— 按用户兴趣精选（宁少勿杂）。
- *  兴趣类（鸣潮/战双/国产单机/国漫/网文）走 RSSHub 的 B站关键词路由。
- *  曾默认停用这些源（担心 rsshub.app 公共实例限流），但「静默停用」让用户
- *  误以为功能坏了——现默认全部启用：抓取失败会在源卡片上显示 lastError，
- *  由用户自行决定换镜像或删除；抓取链路本身直连+多代理兜底（见 rss.ts）。 */
+/** 首次启动的默认源 —— 按用户兴趣精选（**宁少勿杂**）。
+ *
+ *  Step 5-1 · C5 收口后的默认状态：**只有实测可靠的两个源默认启用**
+ *  （GitHub 热榜 · 少数派，二者都自带 CORS、无需代理）。其余一律默认停用：
+ *   · 候选源（`CANDIDATE_SOURCE_NAMES`）—— 实测不可靠，见那里；
+ *   · 需自建转发端点的源（B 站 / 量子位 / IT之家）—— 没配代理前拉取必失败。
+ *
+ *  为什么不再"默认全部启用"：默认源是**开箱体验**，一条必然失败的红叉源会让人
+ *  怀疑整个模块坏了（历史教训：静默停用又让人误以为功能缺失，两头都错）。
+ *  现在的口径是：**默认可用的就必须真能用；不能保证可用的就别默认开**。
+ *
+ *  ⚠️ 抓取链路**不做公共代理兜底**（见 `proxy.ts` 文件头）——直连不行就快速失败
+ *  并明确提示去配自建代理。 */
 /** 机器之心 RSS 端点已下线（302 跳产品页）、战双帕弥什 B站路由无稳定数据源
  *  （rsshub.app 国内不通、镜像 503、公共代理间歇可用，2026-09 实测）——
  *  从默认源移除；老数据由 revive 迁移移除。
@@ -87,6 +95,18 @@ const PROXY_NEEDED_RSS: { name: string; url: string; category: string }[] = [
   { name: 'IT之家 · 科技', url: 'https://www.ithome.com/rss/', category: '科技' },
 ]
 
+/**
+ * **候选源**（Step 5-1 · C1）：实测不可靠、因此**默认停用**的源名。
+ *
+ * 判据不是"我觉得它不好"，而是实测：`api.jikan.moe/v4/seasons/now`（含应用实际使用的
+ * `?filter=tv&limit=12`）在 2026-09-29 连续 4 次返回 **504**（上游过载）。
+ * 默认启用它 = 新用户开箱第一眼就是一个**必然失败**的红叉源，且他没有任何可控的修复手段。
+ *
+ * ⚠️ provider **不删**：用户想用随时可在「情 · 源管理」里手动启用。
+ * 见 `retireUnreliableDefaults()`（只对"从未成功抓取过"的存量降级）。
+ */
+const CANDIDATE_SOURCE_NAMES: ReadonlySet<string> = new Set(['日漫新番'])
+
 export function defaultSources(): IntelligenceSource[] {
   const now = new Date().toISOString()
   const base = (p: Partial<IntelligenceSource> & { name: string; provider: IntelligenceProviderId; category: string }): IntelligenceSource => ({
@@ -99,7 +119,7 @@ export function defaultSources(): IntelligenceSource[] {
     ...p,
   })
   return [
-    // —— 开箱即用（实测自带 CORS，无需任何配置）——
+    // —— 开箱即用（实测自带 CORS，无需任何配置、无需代理）——
     base({
       name: 'GitHub 热榜',
       provider: 'github',
@@ -118,10 +138,12 @@ export function defaultSources(): IntelligenceSource[] {
       url: 'https://sspai.com/feed',
       category: '科技',
     }),
+    // —— **候选源**：实测不可靠，默认停用（用户可自行启用）——
     base({
       name: '日漫新番',
       provider: 'jikan',
       category: '动漫',
+      enabled: false,
       config: JSON.stringify({ mode: 'season', type: 'anime' }),
     }),
     // —— 需自建转发端点（默认停用，配好后一键启用）——
@@ -144,6 +166,31 @@ export function defaultSources(): IntelligenceSource[] {
       }),
     ),
   ]
+}
+
+/**
+ * 存量降级：把候选源（见 `CANDIDATE_SOURCE_NAMES`）关掉。
+ *
+ * 只动「**从未成功抓取过**」的那些（`lastSuccessAt` 为空）—— 用户若自己抓到过，
+ * 说明它对他可用，不该被我们关掉；主动重新启用的也同理（`lastFetchedAt` 有值但没成功过
+ * 的情况极少，此时宁可尊重现状不动）。
+ *
+ * @returns 被改写的源 id（Bootstrap 据此决定要不要刷新内存）
+ */
+export async function retireUnreliableDefaults(
+  sources: readonly IntelligenceSource[],
+): Promise<string[]> {
+  const changed: string[] = []
+  for (const s of sources) {
+    if (!CANDIDATE_SOURCE_NAMES.has(s.name)) continue
+    if (!s.enabled || s.lastSuccessAt || s.lastFetchedAt) continue
+    await db.intelligenceSources.update(s.id, {
+      enabled: false,
+      updatedAt: new Date().toISOString(),
+    })
+    changed.push(s.id)
+  }
+  return changed
 }
 
 /**

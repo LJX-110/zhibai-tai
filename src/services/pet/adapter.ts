@@ -52,15 +52,43 @@ export interface PetHost {
 /** 本机位置存档键（与桌宠其它本机数据同前缀，见 `usePetSaying` 的 last-seen） */
 const LOCAL_POSITION_KEY = 'zbt:pet-position:v1'
 
-/** 浏览器实现（PWA 场景）：宿主矩形 = 视口，本机状态 = localStorage */
+/** 移动端顶栏 / 底栏的标记属性（由 `layouts/MobileNav.tsx` 打在元素上） */
+const RESERVE_TOP = '[data-pet-reserve-top]'
+const RESERVE_BOTTOM = '[data-pet-reserve-bottom]'
+
+/**
+ * 视口 → **可活动矩形**：扣掉移动端的顶栏与底栏。
+ *
+ * 为什么要扣：桌宠的层级高于顶栏与底栏（`--z-pet` > `--z-nav`），不扣的话
+ *  · 它会盖住底部导航（用户点不到「观 / 行 / 财 / 学」）——"不遮挡系统操作"；
+ *  · 也可能压在顶部状态栏上（安全区里），看起来像错位。
+ *
+ * ⚠️ "哪些区域不该被盖住"由**布局层**决定（打标记），宿主只负责量 ——
+ * 宿主不该认识"哪个是导航栏"，那是布局的事。
+ */
+function reserveInsets(): { top: number; bottom: number } {
+  const vh = window.innerHeight
+  const topEl = document.querySelector(RESERVE_TOP)
+  const bottomEl = document.querySelector(RESERVE_BOTTOM)
+  const top = topEl ? topEl.getBoundingClientRect().bottom : 0
+  const bottom = bottomEl ? vh - bottomEl.getBoundingClientRect().top : 0
+  return { top: Math.max(0, top), bottom: Math.max(0, bottom) }
+}
+
+/** 浏览器实现（PWA 场景）：可活动矩形 = 视口扣掉布局保留区；本机状态 = localStorage */
 export function createBrowserHost(): PetHost {
   return {
-    getViewport: () => ({
-      x: 0,
-      y: 0,
-      width: window.innerWidth,
-      height: window.innerHeight,
-    }),
+    getViewport: () => {
+      const { top, bottom } = reserveInsets()
+      return {
+        x: 0,
+        y: top,
+        width: window.innerWidth,
+        // 保底 120px：极端情况下（键盘弹出 + 小屏）不能让可活动区变成负数 / 0，
+        // 否则宠物会被夹成一个点、再也拖不动
+        height: Math.max(120, window.innerHeight - top - bottom),
+      }
+    },
     resolveAsset: petAssetUrl,
     onVisibilityChanged: (fn) => {
       const onChange = () => fn(document.visibilityState === 'visible')

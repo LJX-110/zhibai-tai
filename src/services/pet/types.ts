@@ -71,6 +71,15 @@ export interface Weights {
   move: number
 }
 
+/**
+ * **语义状态 → 动画池**（Step 4-2 · B5）。
+ *
+ * 桌宠的核心状态来自真实应用状态（`services/pet/state.ts` 的 `resolvePetState`），
+ * 每个状态在这里登记一池动画（触发时池内抽一个）。**代码不写死任何动画名** ——
+ * 换素材只改 `config.json`。
+ */
+export type StateAnims = Record<string, string[]>
+
 /** 配置的 animations 段 */
 export interface Animations {
   idle: string[]
@@ -79,14 +88,8 @@ export interface Animations {
   moves: MovesConfig
   categories: Category[]
   events: Events
-}
-
-/** 拖拽抛掷物理参数 —— **P3 已实现**（见 `services/pet/physics.ts` 与 `hooks/usePetDrag.ts`） */
-export interface PhysicsParams {
-  gravity: number
-  restitution: number
-  groundFriction: number
-  throwPower: number
+  /** 语义状态池（thinking / working / waiting / success / error / focused / sleep…） */
+  states: StateAnims
 }
 
 /** 整份配置（= `public/pet/config.json` 的形状） */
@@ -100,5 +103,12 @@ export interface PetConfig {
   tickMs: { min: number; max: number }
   animations: Animations
   weights: Weights
-  physics: PhysicsParams
+  /**
+   * **备用素材登记表**（Step 4-2 · B5）：素材目录里有、但当前没有被任何池引用的动画，
+   * 逐个登记"它对应什么语义 / 为什么留着"。
+   *
+   * 存在的意义：这些不是死文件 —— 它们对应还没接线的状态（如"余额""碎碎念"），
+   * 删掉就再也回不来（素材是离线产线出的）。登记在这里，等接上对应状态时直接引用。
+   */
+  reserve?: Record<string, string>
 }

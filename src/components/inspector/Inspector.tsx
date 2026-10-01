@@ -19,6 +19,7 @@ import { CollectionDetail } from './CollectionDetail'
 import { ProjectDetail } from './ProjectDetail'
 import { IntelligenceDetail } from './IntelligenceDetail'
 import { CourseDetail } from './CourseDetail'
+import { CoursePlanDetail } from './CoursePlanDetail'
 import { FinanceDetail } from './FinanceDetail'
 import { AiDetail } from './AiDetail'
 import { DivinationDetail } from './DivinationDetail'
@@ -78,6 +79,8 @@ function InspectorBody({ type, id, onClose }: { type: string; id: string; onClos
       return <IntelligenceDetail id={id} onClose={onClose} />
     case 'course':
       return <CourseDetail id={id} onClose={onClose} />
+    case 'coursePlan':
+      return <CoursePlanDetail id={id} onClose={onClose} />
     case 'finance':
       return <FinanceDetail id={id} onClose={onClose} />
     case 'ai':

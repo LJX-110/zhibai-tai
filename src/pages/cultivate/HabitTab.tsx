@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { Flame, Plus } from 'lucide-react'
 import { useHabitLogStore, useHabitStore } from '../../stores/useHabitStore'
+import { emitCompletion } from '../../services/completion'
 import { recordActivity } from '../../services/activity'
 import { Button, Dialog, EmptyState, Input, Section } from '../../components/ui'
 import { createId, shiftDate, todayISO, nowISO } from '../../utils/id'
@@ -51,19 +52,31 @@ export function HabitTab() {
 
   const bump = async (h: Habit) => {
     const todayLog = habitLogs.find((l) => l.habitId === h.id && l.date === today)
+    const nextCount = (todayLog?.count ?? 0) + 1
+    const logId = todayLog?.id ?? createId()
     if (todayLog) {
-      await useHabitLogStore.getState().update(todayLog.id, {
-        count: todayLog.count + 1,
-      })
+      await useHabitLogStore.getState().update(todayLog.id, { count: nextCount })
     } else {
-      await useHabitLogStore.getState().add({
-        id: createId(),
-        habitId: h.id,
-        date: today,
-        count: 1,
-      })
+      await useHabitLogStore.getState().add({ id: logId, habitId: h.id, date: today, count: 1 })
     }
     void recordActivity({ entityType: 'habit', entityId: h.id, title: `斩三尸 +1：${h.name}` })
+
+    /**
+     * **只有"跨过今日目标"的那一刻才算一次完成**（Step 5-2C D 批）。
+     *
+     * `bump` 的语义是"再来一次"—— 每敲一下都发事件就等于"敲一下庆祝一次"。
+     * 所以判据是 `nextCount === target`（**等于**而不是 `>=`：再次点击不该重复庆祝）。
+     * 字段是 `targetPerDay`（该实体真实存在的字段，别写成 `target`）；缺省 1 = 做一次就算完成。
+     * 反馈档位由 `services/completion.ts` 统一决定（习惯默认 light：只落印，不发声不弹条）。
+     */
+    if (nextCount === (h.targetPerDay || 1)) {
+      emitCompletion({
+        source: 'habit',
+        entityType: 'habitLogs',
+        entityId: logId,
+        completedAt: nowISO(),
+      })
+    }
   }
 
   const removeHabit = async (h: Habit) => {

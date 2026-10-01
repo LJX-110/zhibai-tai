@@ -52,7 +52,7 @@ export function SealCheckbox({ checked, onChange, char, title, className }: Seal
       title={title ?? (checked ? '标记未完成' : '标记完成')}
     >
       {checked ? (
-        <Seal size={22} char={char} tone="bronze" />
+        <Seal size={20} char={char} tone="bronze" />
       ) : (
         /* 未完成态也用圆形：与完成后的圆形印章同一形制。
            此前是圆角方框，和印章"对不上形" */

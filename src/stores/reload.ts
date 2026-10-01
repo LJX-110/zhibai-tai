@@ -21,6 +21,8 @@ import { useWaterStore } from './useWaterStore'
 import { useCategoryStore } from './useCategoryStore'
 import { useCultivationStore } from './useCultivationStore'
 import { usePetStore } from './usePetStore'
+import { usePersonaStore } from './usePersonaStore'
+import { useMemoryStore } from './useMemoryStore'
 import { hydrateSyncedSettings } from '../services/settings-sync'
 
 /** 重新从 IndexedDB 载入全部领域 store */
@@ -60,6 +62,9 @@ export async function reloadAllStores(): Promise<void> {
     // 修行状态与桌宠状态都是业务表：同步/导入后不重载，界面会停在旧值
     useCultivationStore.getState().load(),
     usePetStore.getState().load(),
+    // 人设与长期记忆是用户资产（业务表）：同步/导入后必须回灌
+    usePersonaStore.getState().load(),
+    useMemoryStore.getState().load(),
   ])
   // 偏好设置存在业务表里，同步/导入后同样要回灌，否则界面还停在旧值
   await hydrateSyncedSettings()

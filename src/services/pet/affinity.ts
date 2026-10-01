@@ -21,6 +21,12 @@ export type AffinityEvent =
   | 'seclusion'
   /** 完成一项固定任务 */
   | 'fixed-done'
+  /**
+   * 完成一件**重要**的事（高优先级待办 / 交作业 / 收工）。
+   * 2026-09-30 按用户拍板接入完成反馈：由 `services/completion.ts` 的
+   * `onCompletion` 在 `level === 'important'` 时触发。
+   */
+  | 'task-done'
 
 export interface AffinityRule {
   event: AffinityEvent
@@ -35,6 +41,8 @@ const AFFINITY_RULES: readonly AffinityRule[] = [
   { event: 'click', gain: 1, dailyCap: 3, desc: '当天点击' },
   { event: 'seclusion', gain: 2, dailyCap: Infinity, desc: '完成一次闭关' },
   { event: 'fixed-done', gain: 1, dailyCap: 2, desc: '完成一项固定任务' },
+  // 上限 3：一天做成三件重要的事已经很多；不设上限就等于「连点完成刷好感」
+  { event: 'task-done', gain: 1, dailyCap: 3, desc: '完成一件重要的事' },
 ]
 
 /**
@@ -46,6 +54,41 @@ export function affinityGain(event: AffinityEvent, usedToday = 0): number {
   if (!rule) return 0
   if (usedToday >= rule.dailyCap) return 0
   return rule.gain
+}
+
+/**
+ * 好感**等级门槛**（累积值）—— 纯展示用，**不参与任何判定**。
+ *
+ * 为什么是这几个数：好感按上面的规则表增长（每日上限合计约 7），
+ * 于是 5 是"用了一周"、15 是"半个月"、30 是"一个月"量级 ——
+ * 门槛跟着真实累积速度走，不另搞一套"经验/金币"经济系统。
+ */
+export const AFFINITY_TIERS = [0, 5, 15, 30, 50, 80] as const
+
+export interface AffinityTier {
+  /** 等级从 1 开始 */
+  level: number
+  /** 本级内已累积 */
+  current: number
+  /** 本级跨度；已满级为 null */
+  span: number | null
+  /** 本级进度 0~1；已满级为 1 */
+  progress: number
+}
+
+/** 把累积好感折算成「等级 / 本级进度」——纯函数，可确定化单测 */
+export function affinityTier(total: number): AffinityTier {
+  const v = Number.isFinite(total) && total > 0 ? total : 0
+  let idx = 0
+  for (let i = 0; i < AFFINITY_TIERS.length; i++) {
+    if (v >= AFFINITY_TIERS[i]) idx = i
+  }
+  const start = AFFINITY_TIERS[idx]
+  const nextStart = AFFINITY_TIERS[idx + 1]
+  if (nextStart == null) return { level: idx + 1, current: v - start, span: null, progress: 1 }
+  const span = nextStart - start
+  const current = v - start
+  return { level: idx + 1, current, span, progress: span > 0 ? current / span : 1 }
 }
 
 /** 里程碑：连续使用满一定天数的一次性加成（**只加一次**） */

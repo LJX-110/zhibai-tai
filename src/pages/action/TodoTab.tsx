@@ -11,7 +11,7 @@ import { byPriorityThenDue } from '../../components/task/shared'
 import { FixedGroup } from './FixedGroup'
 import { TaskEditor } from '../../components/task/TaskEditor'
 import { Button, Input, Section } from '../../components/ui'
-import { createId, diffDays, effectiveDone, isFixedSchedule, liveFixedTasks, monthlyDueToday, weeklyDueToday, todayISO, nowISO } from '../../utils/id'
+import { diffDays, effectiveDone, isFixedSchedule, liveFixedTasks, monthlyDueToday, weeklyDueToday } from '../../utils/id'
 import type { Task } from '../../types/entities'
 import { useTaskEditor } from './useTaskEditor'
 
@@ -21,31 +21,7 @@ export function TodoTab() {
   const editor = useTaskEditor()
   const [query, setQuery] = useState('')
   const [showDone, setShowDone] = useState(false)
-  const [quick, setQuick] = useState('')
-  const today = todayISO()
 
-  const quickAdd = async () => {
-    if (!quick.trim()) return
-    const now = nowISO()
-    await useTaskStore.getState().add({
-      id: createId(),
-      title: quick.trim(),
-      description: undefined,
-      done: false,
-      priority: 'mid',
-      dueDate: today,
-      tags: [],
-      repeat: 'none',
-      monthlyDay: null,
-      weeklyDay: null,
-      projectId: null,
-      courseId: null,
-      createdAt: now,
-      updatedAt: now,
-      completedAt: null,
-    })
-    setQuick('')
-  }
 
   const q = query.trim().toLowerCase()
   const match = (t: Task) =>
@@ -114,18 +90,6 @@ export function TodoTab() {
         </Button>
       }
     >
-      <div className="mb-3 flex gap-2">
-        <Input
-          placeholder="记一条待办，回车添加"
-          value={quick}
-          onChange={(e) => setQuick(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && quickAdd()}
-        />
-        <Button variant="primary" onClick={quickAdd} disabled={!quick.trim()}>
-          <Plus size={14} />
-        </Button>
-      </div>
-
       <div className="relative mb-3">
         <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
         <Input

@@ -22,6 +22,7 @@ import { useTaskStore } from '../../stores/useTaskStore'
 import { useWaterStore } from '../../stores/useWaterStore'
 import { activeSlotsOfDay, currentWeek } from '../../services/study'
 import { effectiveDone, liveFixedTasks, todayISO, weekdayCN, todayWeekday } from '../../utils/id'
+import { money } from '../../utils/money'
 import { buildCapabilityContext } from './capability-context'
 import { buildDetailContext } from './plugins'
 
@@ -66,7 +67,7 @@ export function buildContext(question: string): string {
   const income = fins.filter((f) => f.kind === 'income' && f.date.startsWith(month)).reduce((s, f) => s + f.amount, 0)
   const expense = fins.filter((f) => f.kind === 'expense' && f.date.startsWith(month)).reduce((s, f) => s + f.amount, 0)
   const waterToday = waterLogs.filter((w) => w.date === today).reduce((s, w) => s + w.amountMl, 0)
-  lines.push(`本月收入 ¥${income.toFixed(2)} · 支出 ¥${expense.toFixed(2)}（可追问明细）`)
+  lines.push(`本月收入 ¥${money(income)} · 支出 ¥${money(expense)}（可追问明细）`)
   lines.push(
     `今日饮水 ${waterToday}/${useSettingsStore.getState().waterGoalMl}ml · 斩三尸打卡 ${habitLogs.filter((l) => l.date === today).length} 次 · 身体记录 ${bodyLogs.filter((l) => l.date === today).length} 条`,
   )

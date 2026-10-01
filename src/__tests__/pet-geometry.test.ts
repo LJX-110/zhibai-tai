@@ -6,7 +6,8 @@
  * 只改一处就会出现"渲染多大"与"能走到哪"对不上，而且**不报错**。
  *
  * 另一半是**边界语义**：宠物整体（含 16:9 画布）永不越出宿主矩形；
- * 宿主矩形比宠物还小时上下界重合而不是反转（否则积分会在两界之间来回夹）。
+ * 宿主矩形比宠物还小时上下界重合而不是反转；**矩形的原点自 2026-09-28 起参与计算**
+ * （移动端靠它扣掉顶栏 / 底栏，见 pet-position.test.ts）。
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -21,6 +22,9 @@ import {
   clampToBounds,
   effectiveSize,
   petHeight,
+  PET_SCALE_STEPS,
+  nearestPetScale,
+  petScaleKeyOf,
 } from '../services/pet/geometry'
 import type { Corner } from '../services/pet/types'
 
@@ -79,15 +83,19 @@ describe('boundsOf：可活动边界', () => {
     expect(big.bottom).toBe(600 - 126 - PET_MARGIN)
   })
 
-  it('宿主矩形比宠物还小时，上下界重合而不是反转（否则积分会在两界间来回夹）', () => {
+  it('宿主矩形比宠物还小时，上下界重合而不是反转（否则会在两界间来回夹）', () => {
     const tiny = boundsOf({ x: 0, y: 0, width: 100, height: 60 }, 160)
     expect(tiny.right).toBeGreaterThanOrEqual(tiny.left)
     expect(tiny.bottom).toBeGreaterThanOrEqual(tiny.top)
   })
 
-  it('只吃宿主矩形的尺寸，与它的原点无关（宿主矩形 x/y 可能非 0）', () => {
-    const shifted = boundsOf({ x: 120, y: 40, width: 800, height: 600 }, 160)
-    expect(shifted).toEqual(boundsOf(rect, 160))
+  it('**原点参与计算**（2026-09-28 起）：移动端的可活动矩形有 y 偏移，边界整体平移', () => {
+    // 顶栏 64 + 底栏 84 被布局保留 → 可活动矩形 { x:0, y:64, w:390, h:624 }
+    const shifted = boundsOf({ x: 0, y: 64, width: 390, height: 624 }, 160)
+    expect(shifted.top).toBe(64 + PET_MARGIN)
+    expect(shifted.bottom).toBe(64 + 624 - petHeight(160) - PET_MARGIN)
+    // 左侧同理（横屏刘海时 rect.x 可能非 0）
+    expect(boundsOf({ x: 30, y: 0, width: 390, height: 624 }, 160).left).toBe(30 + PET_MARGIN)
   })
 })
 
@@ -157,5 +165,38 @@ describe('anchorOf：四角落位', () => {
     const p = anchorOf({ rect, corner: 'bottom-right', marginX: 12, marginY: 24, size: big })
     expect(p.x + big).toBeLessThanOrEqual(rect.width)
     expect(p.y + petHeight(big)).toBeLessThanOrEqual(rect.height)
+  })
+})
+
+describe('尺寸档位（Step 5-2C E-2）：老连续值自动吸附到最近档', () => {
+  it('三档定义齐备且互不相同', () => {
+    expect(PET_SCALE_STEPS.map((s) => s.key)).toEqual(['small', 'standard', 'large'])
+    expect(new Set(PET_SCALE_STEPS.map((s) => s.value)).size).toBe(3)
+  })
+
+  it('**历史连续值吸附到最近档**（不需要迁移写入）', () => {
+    expect(nearestPetScale(0.8)).toBe(0.85) // 贴着下限的老值 → 小
+    expect(nearestPetScale(1.15)).toBe(1.25) // 1.15 距 1.25 更近 → 大
+    expect(nearestPetScale(1.05)).toBe(1) // 仍靠近标准
+    expect(nearestPetScale(1.4)).toBe(1.25) // 贴着上限 → 大
+    expect(nearestPetScale(1)).toBe(1)
+  })
+
+  it('非法输入回落标准档（不炸、不返回 NaN）', () => {
+    expect(nearestPetScale(Number.NaN)).toBe(1)
+    expect(nearestPetScale(undefined)).toBe(1)
+    expect(nearestPetScale('x')).toBe(1)
+  })
+
+  it('petScaleKeyOf 供设置界面点亮选中项', () => {
+    expect(petScaleKeyOf(0.85)).toBe('small')
+    expect(petScaleKeyOf(1.15)).toBe('large')
+    expect(petScaleKeyOf(Number.NaN)).toBe('standard')
+  })
+
+  it('吸附结果一定落在档位表内（渲染尺寸不会被历史值带偏）', () => {
+    for (const v of [0.8, 0.9, 1.02, 1.1, 1.2, 1.39, 1.4]) {
+      expect(PET_SCALE_STEPS.map((s) => s.value)).toContain(nearestPetScale(v))
+    }
   })
 })

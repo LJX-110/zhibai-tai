@@ -10,7 +10,6 @@ import { useSettingsStore } from '../../stores/useSettingsStore'
 import type { ThemeMode } from '../../stores/useSettingsStore'
 import { useResolvedLayout } from '../../layouts/useResolvedLayout'
 import type { LayoutMode } from '../../stores/useAppStore'
-import { playSound } from '../../services/sound'
 import {
   hasInstallPrompt,
   isIOS,
@@ -19,11 +18,8 @@ import {
   promptInstall,
   subscribeInstall,
 } from '../../components/pwa/install'
-import { Button, Collapse, Input, Section, Switch } from '../../components/ui'
+import { Button, Input, Section } from '../../components/ui'
 import { cn } from '../../utils/cn'
-import { PetGroup } from './PetGroup'
-import { NotifyGroup } from './NotifyGroup'
-import { ErrorLogPanel } from './ErrorLogPanel'
 
 const LAYOUT_OPTIONS: { value: LayoutMode; label: string; desc: string }[] = [
   { value: 'desktop', label: '桌面工作台', desc: '左侧导航 · 宽内容区 · 多列信息' },
@@ -33,7 +29,7 @@ const LAYOUT_OPTIONS: { value: LayoutMode; label: string; desc: string }[] = [
 
 // 描述写的是**主题实际的主辅色**（改配色时这里必须同步，否则是误导）
 const THEME_OPTIONS: { value: ThemeMode; label: string; desc: string; icon: typeof Sun }[] = [
-  { value: 'light', label: '浅色', desc: '纸白 · 墨 · 黛蓝', icon: Sun },
+  { value: 'light', label: '浅色', desc: '纯白 · 墨 · 黛蓝', icon: Sun },
   { value: 'dark', label: '深色', desc: '玄黑 · 绛红 · 黛蓝', icon: Moon },
   { value: 'system', label: '跟随系统', desc: '随设备自动切换', icon: Monitor },
 ]
@@ -145,8 +141,8 @@ export function AppearanceGroup() {
         </div>
       </Section>
 
-      {/* 低频项各归一处：手机首屏只留「改完立刻能感知」的项，其余一键展开 */}
-      <Collapse title="更多设置" hint="番茄钟 · 音效 · 通知">
+      {/* 番茄钟：与「目标」同类（都是"我怎么用它"的参数），不再压进折叠里 ——
+          折叠去掉后这一组只剩 6 段，首屏也不会长到需要收。 */}
       <Section title="番茄钟">
         <div className="row">
           <span className="w-28 shrink-0 text-sm text-ink-muted">番茄钟 · 专注</span>
@@ -174,81 +170,6 @@ export function AppearanceGroup() {
 
       {/* hint 原先写「Web Audio 合成 · 默认关闭」：环境音那行正文里已把这两点都说全
           （Web Audio 实时合成 / 默认关闭），标题行再挂一遍纯属重复 */}
-      <Section title="音效">
-        {/* 行式内容（不套卡）：本段只服务"开不开 / 多大声 / 听一下"三件事 */}
-        <div className="row flex-wrap">
-          <span className="flex-1 text-sm text-ink">音效</span>
-          <Switch
-            checked={settings.soundEnabled}
-            label="音效"
-            onChange={() => {
-              const next = !settings.soundEnabled
-              settings.set({ soundEnabled: next })
-              // 开启瞬间播一声确认：既是反馈也是"音效已可用"的自证
-              if (next) playSound('ui-confirm')
-            }}
-          />
-        </div>
-        <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">音量</span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={settings.soundVolume}
-            onChange={(e) => settings.set({ soundVolume: Number(e.target.value) })}
-            className="min-w-[8rem] flex-1 accent-[var(--color-teal)]"
-            aria-label="音效音量"
-          />
-          <span className="tabular text-xs text-ink-faint">
-            {Math.round(settings.soundVolume * 100)}%
-          </span>
-        </div>
-        <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">试听</span>
-          {/* 按钮写**法器名**而不是内部事件键（seal / paper / …）：设置页是给用户看的 */}
-          {(
-            [
-              ['seal', '磬'],
-              ['paper', '木鱼'],
-              ['compass', '钟'],
-              ['qimen', '云锣'],
-            ] as const
-          ).map(([k, label]) => (
-            <Button key={k} size="sm" variant="tertiary" silent onClick={() => playSound(k)} className="!px-2">
-              {label}
-            </Button>
-          ))}
-        </div>
-        <div className="row flex-wrap">
-          <span className="flex-1 text-sm text-ink">环境音</span>
-          <Switch
-            checked={settings.ambientEnabled}
-            label="环境音"
-            onChange={() => settings.set({ ambientEnabled: !settings.ambientEnabled })}
-          />
-          {/* 只留"这是什么声音"——Web Audio / 默认关闭已由音效行与本行开关自证 */}
-          <span className="w-full text-xs text-ink-faint">极轻的噪声底（纸 / 风 / 静室感）</span>
-        </div>
-      </Section>
-
-      {/* 通知与提醒：整段搬到 ./NotifyGroup —— 通知不是"外观"，混在这一组里
-          才导致「只想关掉喝水提醒」无处可说（那里现在有每源开关）。 */}
-      <Section title="通知" hint="提醒 · 免打扰 · 分类">
-        <NotifyGroup />
-      </Section>
-
-      {/* 桌宠开关（设备级偏好，不进同步白名单） */}
-      <Section title="桌宠">
-        <PetGroup />
-      </Section>
-
-      {/* 故障记录：三类异常（渲染 / 脚本 / 未处理异步）的本机流水。
-          放在这层折叠里是因为它属低频诊断项，不该挤占首屏。 */}
-      <ErrorLogPanel />
-
-      </Collapse>
     </>
   )
 }

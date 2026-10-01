@@ -19,6 +19,17 @@ export interface Task {
   priority: Priority
   /** 截止日期 yyyy-mm-dd */
   dueDate?: string | null
+  /**
+   * 截止**时刻** HH:mm（可选，2026-09-30 按用户拍板加入）。
+   *
+   * 用途：让待办能进「今日」的**同一条时间轴**与课程并排（课程有 start/end）。
+   * 不填就仍按「逾期 / 今天 / 临近」三段分组 —— 绝不强制任何人填。
+   *
+   * ⚠️ 同步注意：本字段会进入同步快照。旧版本 App 读到会忽略（不坏），
+   * 但它保存时按整行 LWW 覆盖 → 会把 dueTime 丢掉。
+   * 所以要等设备都更新到含本字段的版本之后，再开始填。
+   */
+  dueTime?: string | null
   tags: string[]
   /**
    * 重复方式。**固定三式**（每日 / 每周 / 每月）构成一套统一的固定提醒体系：
@@ -147,6 +158,12 @@ export interface PomodoroSession {
   taskId?: ID | null
   /** 关联项目 */
   projectId?: ID | null
+  /**
+   * 本次专注/闭关的**自由文本内容**（Step 5-3C）。
+   * 与 `taskId` 并列：有关联实体时作补充说明；没有关联时它就是唯一的内容描述 ——
+   * 闭关不再局限于"从待办里认领"。老记录无此字段，按 `undefined` 处理。
+   */
+  label?: string
   tags: string[]
   createdAt?: string
   updatedAt?: string
@@ -748,6 +765,89 @@ export interface CultivationState {
   todayCounted: number
   /** 闭关次数 */
   seclusionCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 天机 · 人设（Persona）—— 业务表 `personas`，随快照跨设备同步（Step 4-2 · C1）
+ *
+ * ## 为什么是业务表
+ * 人设是**用户资产**：他可能改了很多遍，也可能新建好几个（工作用 / 闲聊用）。
+ * 存 localStorage 换设备就丢，与"用户资产"的语义不符 —— 与分类、固定任务同类先例。
+ *
+ * ## 为什么字段都是长文本
+ * 人设不是"给程序判断的开关"，而是**喂给模型的自然语言**。拆成结构化枚举只会
+ * 强迫用户用机器的词说话（"活泼度 7/10"这种），反而不如让他直接写人话。
+ * 每个字段对应提示词里的一个小节，见 `services/persona/prompt.ts`。
+ *
+ * ⚠️ `unknown` 字段的内容**必须原样进提示词并附纪律**：未标注为 UNKNOWN 的内容
+ * 会被模型当作事实继续编（"她喜欢吃草莓"是模型自己补的，用户会以为是真的）。
+ */
+export interface Persona {
+  id: ID
+  name: string
+  /** 内置人设：可编辑、可重置，不建议删除（删了可从「恢复默认」重建） */
+  builtin?: boolean
+  /** 自称（如「人家 / 本鲸」） */
+  selfClaim: string
+  /** 对用户的称呼（如「主人」） */
+  userName: string
+  /** 与用户的关系 */
+  relationship: string
+  /** 性格 */
+  personality: string
+  /** 说话方式 / 口癖 */
+  speech: string
+  /** 行为习惯 */
+  behavior: string
+  /** 情感表达 */
+  emotion: string
+  /** 外观与视觉符号 */
+  appearance: string
+  /** 能力 */
+  ability: string
+  /** 爱好 */
+  hobby: string
+  /** 小习惯 */
+  habit: string
+  /** 主食 / 零食 / 标志性道具 */
+  likes: string
+  /** 禁止的 OOC 演法 */
+  ooc: string
+  /** 绝对禁区与不可改变的核心设定 */
+  forbidden: string
+  /** 未知资料（**必须保持 UNKNOWN，禁止模型自行补全**） */
+  unknown: string
+  /** 作为 Agent 的行事风格 */
+  agentStyle: string
+  /** 接到任务时的态度 */
+  taskAttitude: string
+  /** 调用工具时的表现 */
+  toolBehavior: string
+  /** 记忆行为（什么该记、什么不该记） */
+  memoryBehavior: string
+  /** 主动性（会不会主动搭话） */
+  proactivity: string
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 天机 · 长期记忆 —— 业务表 `memories`，随快照同步（Step 4-2 · C9）
+ *
+ * ⚠️ **只存用户明确保存的内容**：不默认把聊天写进来（spec §C9/C10）。
+ * 第一版检索用关键词 / 类型 / 时间，不引入向量库（无新增运行时依赖是硬约束）。
+ */
+export interface Memory {
+  id: ID
+  /** 记忆正文（一句话事实，如「主人不吃香菜」） */
+  text: string
+  tags: string[]
+  /** 停用后不注入上下文，但数据保留（用户可随时重新启用） */
+  enabled: boolean
+  /** 来源：用户手写 / 天机提议后由用户确认落库 */
+  source: 'user' | 'agent'
   createdAt: string
   updatedAt: string
 }

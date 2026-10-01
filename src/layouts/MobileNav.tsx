@@ -2,10 +2,11 @@
  * MobileWorkspace 导航 —— 顶部状态 + 底部导航（固定 4 格 + 更多）
  * 触控目标 ≥44px；底部标签带编号
  * 视觉：顶栏/底栏/更多抽屉与桌面侧栏同一语言（var(--sidebar)，
- * 浅色黛蓝 / 深色绛红），内容区保持宣纸白，主次分明
+ * 浅色黛蓝 / 深色绛红），内容区保持底纸色（--paper），主次分明
  */
 import { useMemo, useState } from 'react'
-import { Bot, RefreshCw, Search } from 'lucide-react'
+import { Bell, Bot, Search } from 'lucide-react'
+import { Loading } from '../components/ui/Loading'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import {
@@ -20,6 +21,8 @@ import { weekdayCN } from '../utils/id'
 import { playSound } from '../services/sound'
 import { Sheet, useToast } from '../components/ui'
 import { useAIChatStore } from '../components/ai/chat-store'
+import { useNoticeCenterStore } from '../components/notification/notice-center-store'
+import { useUnreadNotices } from '../hooks/useUnreadNotices'
 import { runSync } from '../sync/SyncService'
 import { isConfigured, isSyncConfigured } from '../sync/auto'
 import { cn } from '../utils/cn'
@@ -46,6 +49,9 @@ export function MobileHeader() {
   const syncConfigured = useSettingsStore((s) => isConfigured(s))
   const toast = useToast().toast
   const [syncing, setSyncing] = useState(false)
+  // 通知中心：未读数订阅式（`save()` 一变就重算角标），入口开的是全局弹层
+  const unread = useUnreadNotices()
+  const setNoticeOpen = useNoticeCenterStore((s) => s.setOpen)
 
   /** 顶栏同步入口：未配置直接带去设置，已配置则就地同步并回报结果 */
   const onSync = async () => {
@@ -73,7 +79,7 @@ export function MobileHeader() {
        内容顶到屏幕边缘，顶栏背景要从 y=0 起铺满，但**文字**必须让开状态栏（时间/电量）。
        背景铺满、内容让位 —— 两者靠 padding 区分，不能只做其一。
        左右同理：横屏刘海会压住 px-4 的 16px，故取 max(原值, 安全区)。 */
-    <header className="sticky top-0 z-[var(--z-header)] flex items-center justify-between border-b border-white/10 bg-sidebar/97 pb-2 pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(0.75rem+env(safe-area-inset-top,0px))] backdrop-blur-sm">
+    <header data-pet-reserve-top className="sticky top-0 z-[var(--z-header)] flex items-center justify-between border-b border-white/10 bg-sidebar/97 pb-2 pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(0.75rem+env(safe-area-inset-top,0px))] backdrop-blur-sm">
       <div className="flex items-baseline gap-2">
         <span className="tabular eyebrow text-on-sidebar-muted">{current.index}</span>
         <div>
@@ -88,7 +94,7 @@ export function MobileHeader() {
           title={syncConfigured ? '立即同步' : '未配置同步'}
           onClick={() => void onSync()}
         >
-          <RefreshCw size={16} className={cn(syncing && 'animate-spin')} />
+          <Loading size={16} spinning={syncing} />
           <span
             className={cn(
               'absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full',
@@ -97,6 +103,20 @@ export function MobileHeader() {
           />
         </button>
         <span className="tabular hidden whitespace-nowrap text-sm min-[360px]:inline">{month}月{day}日 · 周{week}</span>
+        <button
+          className="relative flex h-9 w-9 items-center justify-center rounded-tile hover:bg-white/10 hover:text-on-sidebar"
+          aria-label={unread > 0 ? `通知中心（${unread} 条未读）` : '通知中心'}
+          title="通知中心"
+          onClick={() => setNoticeOpen(true)}
+        >
+          <Bell size={17} />
+          {unread > 0 && (
+            /* 字号例外：未读角标 —— 徽标本体只有 16px，字号必须小于正文 */
+            <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-cinnabar px-0.5 text-center text-[10px] font-medium leading-4 text-on-sidebar">
+              {unread > 9 ? '9+' : unread}
+            </span>
+          )}
+        </button>
         <button
           className="touch-target flex items-center justify-center rounded-tile hover:bg-white/10 hover:text-on-sidebar"
           aria-label="搜索"
@@ -147,6 +167,7 @@ export function MobileNav() {
           于是底栏上方凭空多出一条安全区高度的空白。
           写成 calc 后：外框 = 60 + safe，内容区恒为 60，四处预算全部对齐。 */}
       <nav
+        data-pet-reserve-bottom
         className="fixed inset-x-0 bottom-0 z-[var(--z-nav)] border-t border-white/10 bg-sidebar/97 backdrop-blur-sm pb-safe"
         style={{ height: 'calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px))' }}
       >

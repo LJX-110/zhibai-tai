@@ -37,6 +37,46 @@ export function petHeight(width: number): number {
 }
 
 /** 把任意来源的 scale 收敛到合法区间；非有限值退回默认值（1） */
+/**
+ * 桌宠尺寸**档位**（2026-09-30 · Step 5-2C E-2 用户拍板）
+ *
+ * 改前 `petScale` 是 0.8~1.4 的**连续值**（滑杆），"大一点点"没有意义，
+ * 而且用户根本无从判断 1.15 和 1.2 的差别。产品要求"不要无限精度" → 收成三档。
+ *
+ * 存的值仍是 `number`（不换类型、不动持久化结构）：
+ * 写的时候只写档位值，读的时候一律经 `nearestPetScale` 吸附 ——
+ * 于是**老用户的连续值自动落到最近档**，不需要任何迁移写入。
+ */
+export const PET_SCALE_STEPS = [
+  { key: 'small', label: '小', value: 0.85 },
+  { key: 'standard', label: '标准', value: 1 },
+  { key: 'large', label: '大', value: 1.25 },
+] as const
+
+export type PetScaleKey = (typeof PET_SCALE_STEPS)[number]['key']
+
+/** 把任意（可能是历史遗留的连续值）吸附到最近档；非法输入回落默认档 */
+export function nearestPetScale(scale: unknown): number {
+  const v = clampPetScale(scale)
+  // 显式标 number：`as const` 会把档位值收窄成字面量类型
+  let best: number = PET_SCALE_STEPS[1].value
+  let bestDist = Infinity
+  for (const step of PET_SCALE_STEPS) {
+    const d = Math.abs(step.value - v)
+    if (d < bestDist) {
+      bestDist = d
+      best = step.value
+    }
+  }
+  return best
+}
+
+/** 当前值属于哪一档（设置界面用来点亮选中项） */
+export function petScaleKeyOf(scale: unknown): PetScaleKey {
+  const v = nearestPetScale(scale)
+  return (PET_SCALE_STEPS.find((s) => s.value === v) ?? PET_SCALE_STEPS[1]).key
+}
+
 export function clampPetScale(scale: unknown): number {
   if (typeof scale !== 'number' || !Number.isFinite(scale)) return DEFAULT_PET_SCALE
   return Math.min(PET_SCALE_MAX, Math.max(PET_SCALE_MIN, scale))
@@ -51,16 +91,19 @@ export function effectiveSize(baseSize: number, scale: number): number {
  * 宿主矩形 → 桌宠可活动边界（宠物**左上角**的取值区间）。
  *
  * 边界按**宠物整体**（含 16:9 画布）贴边，所以无论如何都跑不出宿主矩形。
- * 宿主矩形由 `PetHost.getViewport()` 提供（本项目只有浏览器宿主 = 视口），
- * 本模块不认识"窗口"是什么东西。
+ * 宿主矩形由 `PetHost.getViewport()` 提供 —— 浏览器里它是"视口扣掉移动底栏 / 顶栏"
+ * 后的**可活动区**，所以 `rect.x / rect.y` **有意义**（2026-09-28 起）：
+ * 移动端要保证宠物不去盖住底部导航与顶部状态栏，只能靠矩形原点表达。
  */
 export function boundsOf(rect: Rect, size: number, margin = PET_MARGIN): PetBounds {
   const h = petHeight(size)
+  const left = rect.x + margin
+  const top = rect.y + margin
   return {
-    left: margin,
-    top: margin,
-    right: Math.max(margin, rect.width - size - margin),
-    bottom: Math.max(margin, rect.height - h - margin),
+    left,
+    top,
+    right: Math.max(left, rect.x + rect.width - size - margin),
+    bottom: Math.max(top, rect.y + rect.height - h - margin),
   }
 }
 
@@ -92,10 +135,11 @@ export function anchorOf(o: {
   size: number
 }): { x: number; y: number } {
   const height = petHeight(o.size)
-  const left = o.marginX
-  const top = o.marginY
-  const right = Math.max(left, o.rect.width - o.size - o.marginX)
-  const bottom = Math.max(top, o.rect.height - height - o.marginY)
+  // 与 boundsOf 同一套语义：坐标系原点在宿主矩形左上角（rect.x / rect.y 参与计算）
+  const left = o.rect.x + o.marginX
+  const top = o.rect.y + o.marginY
+  const right = Math.max(left, o.rect.x + o.rect.width - o.size - o.marginX)
+  const bottom = Math.max(top, o.rect.y + o.rect.height - height - o.marginY)
   switch (o.corner) {
     case 'top-left':
       return { x: left, y: top }

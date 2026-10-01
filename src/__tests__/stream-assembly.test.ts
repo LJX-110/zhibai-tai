@@ -228,3 +228,43 @@ describe('withStreamSink —— 高层能力的流式通路', () => {
     expect(getAiRemoteHealth().state).not.toBe('degraded')
   })
 })
+
+/* ---------------- 连通性检查的回退链（2026-10-01 · Step 5-4B） ---------------- */
+
+describe('testConnection：/models 不可靠时的回退', () => {
+  it('/models 挂起（超时）→ 回退一次对话补全，能连上就算通过', async () => {
+    // 实测背景：Agnes 的 /models 会在其网关上偶发挂起（3 次里 2 次超时），
+    // 而对话路由同时完全正常 —— 所以「该路由超时」不能判成「端点连不上」。
+    const calls: string[] = []
+    const abortErr = new Error('The operation was aborted')
+    abortErr.name = 'AbortError'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        calls.push(String(url))
+        if (String(url).endsWith('/models')) return Promise.reject(abortErr)
+        return Promise.resolve(
+          new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }),
+        )
+      }),
+    )
+    const p = openAICompatibleProvider({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' })
+    await expect(p.testConnection?.()).resolves.toBeUndefined()
+    expect(calls[0]).toContain('/models')
+    expect(calls[1]).toContain('/chat/completions')
+  })
+
+  it('401 是确凿的「不可用」信号 —— 不许被回退掩盖', async () => {
+    const calls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        calls.push(String(url))
+        return Promise.resolve(new Response('bad key', { status: 401 }))
+      }),
+    )
+    const p = openAICompatibleProvider({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' })
+    await expect(p.testConnection?.()).rejects.toThrow(/401/)
+    expect(calls).toHaveLength(1) // 只打了 /models，没有回退
+  })
+})

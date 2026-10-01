@@ -19,6 +19,8 @@
  * 文案风格：**白话短句**（单条 ≤ 14 字），人格细节见 `persona.ts`。
  */
 import { PERSONA as P } from './persona'
+import type { PetVoice } from './voice'
+import type { AgentPhase } from '../agent/status'
 
 /** 该说什么 —— `hash` 为点击后的跳转目标（无则为空串，气泡不可点） */
 export interface Saying {
@@ -48,6 +50,23 @@ export interface SayingContext {
   nextClass: { name: string; minutesLeft: number; room?: string } | null
   /** 连续未打开天数（0 = 每天都来） */
   awayDays: number
+  /**
+   * 语气参数（自称 / 称呼 / 主食 / 尾巴）—— **来自当前人设**。
+   * 不传时用内置默认（`voice.ts` 的 DEFAULT_VOICE），与旧行为逐字一致。
+   */
+  voice?: PetVoice
+}
+
+/** 台词里要用的语气词（缺省回退内置人格） */
+function v(ctx: { voice?: PetVoice }): PetVoice {
+  return (
+    ctx.voice ?? {
+      self: P.self,
+      master: P.master,
+      food: P.food,
+      tail: P.tail,
+    }
+  )
 }
 
 /** 功行档位：按档去抖 —— 数值每变一点就说话会变成骚扰 */
@@ -65,6 +84,7 @@ function meritTier(merit: number): number {
  * 顺序：境界 > 闭关 > 课前 > 逾期 > 久别 > 功行 > 固定未做 > 节气。
  */
 export function pickSaying(ctx: SayingContext): Saying | null {
+  const voice = v(ctx)
   // ① 境界刚提升：最值得说的一件事
   if (ctx.realmJustUp && ctx.realmTitle) {
     return {
@@ -78,7 +98,7 @@ export function pickSaying(ctx: SayingContext): Saying | null {
   if (ctx.justSeclusionMin !== null && ctx.justSeclusionMin > 0) {
     return {
       key: 'seclusion',
-      text: `闭关 ${Math.round(ctx.justSeclusionMin)} 分钟，${P.master}挺能熬`,
+      text: `闭关 ${Math.round(ctx.justSeclusionMin)} 分钟，${voice.master}挺能熬`,
       hash: '#/study',
     }
   }
@@ -98,7 +118,7 @@ export function pickSaying(ctx: SayingContext): Saying | null {
   if (ctx.overdue > 0) {
     return {
       key: `overdue:${ctx.overdue}`,
-      text: `${ctx.overdue} 项逾期了，${P.master}别装没看见`,
+      text: `${ctx.overdue} 项逾期了，${voice.master}别装没看见`,
       hash: '#/action',
     }
   }
@@ -107,7 +127,7 @@ export function pickSaying(ctx: SayingContext): Saying | null {
   if (ctx.awayDays >= 3) {
     return {
       key: 'away',
-      text: `${ctx.awayDays} 天没来了，${P.self}快饿瘦了`,
+      text: `${ctx.awayDays} 天没来了，${voice.self}快饿瘦了`,
       hash: '#/overview',
     }
   }
@@ -137,12 +157,48 @@ export function pickSaying(ctx: SayingContext): Saying | null {
   if (isMealTime(ctx.now)) {
     return {
       key: 'meal',
-      text: `${P.master}，${P.self}想吃${P.food}了`,
+      text: `${voice.master}，${voice.self}想吃${voice.food}了`,
       hash: '',
     }
   }
 
   return null
+}
+
+/**
+ * Agent 状态台词 —— **状态变了就说一句**（Step 4-2 · B6/D3 / Step 4-3 · 八）。
+ *
+ * 与 `pickSaying`（周期性"看见你的状态"）刻意分成两个函数：
+ *  · 这里由**事件**驱动（Agent 阶段跃迁），说完就收；
+ *  · 语气由人格决定（`voice`），**状态本身不由人格决定** —— 人格不能覆盖真实状态。
+ *
+ * ## Step 4-3 收敛：不要写成话痨
+ * 上一版每句都塞"主人 / 哼 / 本鲸"，五句连起来像复读。现在的分配是：
+ *  · `thinking` 只出**一次**自称（接活时的傲娇）；
+ *  · `working` **进入认真模式** —— 去掉语气词与称呼，只留一个短信号（规格 §B6）；
+ *  · `waiting` 用称呼（这时必须叫得动人）；
+ *  · `success` 邀功（"哼…还不是因为主人需要嘛"）；
+ *  · `error` **短促**、只说事实、不撒娇也不卖萌（"唔……这里出问题了。"）——
+ *    失败时用户需要的是定位线索，不是语气词。
+ */
+export function stateSaying(phase: AgentPhase, voice?: PetVoice): Saying | null {
+  const w = voice ?? { self: P.self, master: P.master, food: P.food, tail: P.tail }
+  switch (phase) {
+    case 'thinking':
+      return { key: 'agent:thinking', text: `哼，${w.self}帮你看看～`, hash: '' }
+    case 'working':
+      // 真正执行时语言减少（规格 §B6）：去掉称呼与语气词，就一句
+      return { key: 'agent:working', text: '本鲸在处理。', hash: '' }
+    case 'waiting':
+      return { key: 'agent:waiting', text: `${w.master}～这里要你点一下。`, hash: '' }
+    case 'success':
+      return { key: 'agent:success', text: '哼，还不是因为主人需要嘛～', hash: '' }
+    case 'error':
+      // 短促、只讲事实（规格 §B6）；原因在进度行与故障流水里，气泡不重复一遍
+      return { key: 'agent:error', text: '唔……这里出问题了。', hash: '' }
+    default:
+      return null
+  }
 }
 
 /**

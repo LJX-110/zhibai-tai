@@ -48,9 +48,7 @@ export function TestPreviewDialog({
             <span className="text-sm text-ink">{preview.error.message}</span>
           </div>
           <p className="hidden text-xs leading-relaxed text-ink-faint md:block">
-            失败分类：待配置（没配代理/缺 key）/ 跨域被拦 / 被反爬拦截 / 需认证 / 被限流 /
-            超时 / 解析失败 / 无数据 / HTTP 错误 / 网络不可达。
-            {preview.error.retryable ? '此类失败通常重试或换通道后可以恢复。' : '此类失败重试无用，需要先改配置。'}
+            {preview.error.retryable ? '重试或换通道通常可恢复。' : '重试无用 —— 先改配置。'}
           </p>
           <Button
             variant="secondary"

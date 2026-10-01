@@ -72,12 +72,20 @@ export interface SettingsState {
    */
   notifySources: Partial<Record<NotifySource, boolean>>
 
-  /** AI Core：Provider 配置（Key 加密存储，绝不硬编码） */
+  /** 天机：Provider 配置（Key 加密存储，绝不硬编码） */
   aiProvider: 'local' | 'remote'
   aiBaseUrl: string
   aiModel: string
   aiKey?: string
   aiKeyEnc?: boolean
+  /**
+   * 当前使用的人设 id（Persona 的**选择**）。
+   *
+   * 选择随同步白名单跨设备（用户资产的一部分：换了设备还是同一个人设）；
+   * 人设本身在 `personas` 业务表里，见 `services/persona/*`。
+   * 空 / 指向不存在的 id 时，天机退回"无人设"的中性语气（不报错、不猜一个）。
+   */
+  activePersonaId?: string
 
   /** 情报定时自动抓取（默认开） */
   intelAutoFetch: boolean
@@ -99,11 +107,34 @@ export interface SettingsState {
    */
   petEnabled: boolean
   /**
+   * 桌宠「漫游」：允许它自己走动（**默认关**，Step 4-2 · B2）。
+   *
+   * 关着时位置**只由拖动决定**、刷新保持；开着才启用旧的随机漫游（低优先级闲暇表现）。
+   * 设备级偏好：手机与桌面浏览器适合的默认不同，不进同步白名单。
+   */
+  petWander: boolean
+  /**
    * 桌宠尺寸倍率（`PET_SCALE_MIN` ~ `PET_SCALE_MAX`，即 0.8 ~ 1.4）。
    * 设备级偏好：**刻意不进** `SYNCED_SETTING_KEYS` —— 手机上合适的尺寸在桌面上
    * 未必合适（与 `petEnabled` 同类先例）。本阶段只落数据与接入几何，调节 UI 在下一阶段。
    */
   petScale: number
+  /**
+   * 桌宠**常驻台词**开关（Step 5-2C F 批 · 用户拍板）。
+   *
+   * 与「全局音效」「安静一小时」**刻意分离**：它管的是"它平时说不说话"，
+   * 不影响动画 / 状态 / 点击 / 拖动 / Agent / 好感 —— 所以关掉它不会让宠物变哑巴摆设。
+   * 设备级偏好（与 petEnabled / petScale 同类），**不进 `SYNCED_SETTING_KEYS`**。
+   */
+  petSpeechEnabled: boolean
+  /**
+   * 桌宠**台词由 AI 生成**（Step 5-3E · 用户拍板："台词随机用 AI 生成"）。
+   *
+   * 开（默认）：气泡里的话优先用**鲸鱼娘人设**生成的短台词（未配 AI / 请求失败 →
+   * 静默回退本地台词库）；关：完全走本地台词，零请求。
+   * 设备级偏好（与 petSpeechEnabled 同类），不进同步白名单。
+   */
+  petAiSpeech: boolean
 
   set: (patch: Partial<SettingsState>) => void
 }
@@ -112,7 +143,10 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       profileName: '修者',
-      theme: 'dark',
+      // 品牌默认主题 = **浅色**（Step 5-3 §十九 产品方拍板）：
+      // 知白台"知其白"本身就是纯白/墨/朱砂的调子，默认视觉交给浅色；
+      // Dark 完整保留为第二主题，用户随时可切（不是降级品）。
+      theme: 'light',
       layoutMode: 'auto',
       onboarded: false,
       waterGoalMl: 2000,
@@ -147,12 +181,14 @@ export const useSettingsStore = create<SettingsState>()(
       // 空对象 = 全部开启；只有用户显式关掉某项才会写入键
       notifySources: {},
       aiProvider: 'local',
-      // 默认端点必须是**浏览器能直连**的：Agnes / NVIDIA 等端点不返回 CORS 头，
-      // 在纯前端里必然失败（曾经的默认 Agnes 让新用户一配就撞墙）。DeepSeek 实测可直连。
+      // 默认端点必须是**浏览器能直连**的：NVIDIA 等端点不返回 CORS 头，
+      // 在纯前端里必然失败（曾经的默认 Agnes 让新用户一配就撞墙；Agnes 已于
+      // 2026-10-01 复测确认可直连，只是不该拿它当默认）。DeepSeek 实测可直连。
       aiBaseUrl: 'https://api.deepseek.com/v1',
       aiModel: 'deepseek-chat',
       aiKey: '',
       aiKeyEnc: false,
+      activePersonaId: undefined,
       /** 定时自动抓取默认开启：手机是主要场景，指望用户想起来点按钮并不现实。
        *  未配置转发端点时大部分源会失败，但失败原因是逐源可查的（见情报源卡片）。 */
       intelAutoFetch: true,
@@ -160,7 +196,13 @@ export const useSettingsStore = create<SettingsState>()(
       intelKeepLimit: 500,
       termStartDate: undefined,
       petEnabled: false,
+      // 漫游默认关：位置是用户的设定，桌宠不许自己改（规格 §B2-6）
+      petWander: false,
       petScale: DEFAULT_PET_SCALE,
+      // 默认开：桌宠的"陪伴感"主要来自台词，只有用户明确嫌吵才关
+      petSpeechEnabled: true,
+      // 默认开：无 AI 时自动落回本地台词，开着不会有副作用
+      petAiSpeech: true,
       set: (patch) => set(patch),
     }),
     { name: 'yishu-workbench:settings' },

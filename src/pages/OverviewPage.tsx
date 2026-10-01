@@ -1,6 +1,9 @@
 /**
  * 观 —— 知白台首页（今日炁象 + 今日案台）
- * 打开即知今天：四维状态（非堆数字）→ 今日任务/课程/到期 → 天机入口（简报/问答在天机）
+ * 打开即知今天：四维状态（非堆数字）→ **今日**（课程 + 待办时间轴）→ 天机入口。
+ *
+ * ⚠️ 「今日任务」与「到期提醒」原本是两个区块，同一件今天到期的重点待办会出现两次；
+ * Step 5-1 · E3 合并成一条时间轴（信息一条没少，只是不再重复）。
  *
  * 拆分说明（2026-09-20 路线图第 4 步）：罗盘 / 本周回顾 / 今日轨迹与「全部轨迹」抽屉
  * 各自成文件放在 ./overview/ 下；本文件只留状态、派生数据与区块组合。
@@ -25,7 +28,7 @@ import type { Task } from '../types/entities'
 import { FourSymbolsCompass } from './overview/Compass'
 import { WeekReview } from './overview/WeekReview'
 import { TodayTraceSection, AllTraceSheet } from './overview/Trace'
-import type { QiDim } from './overview/shared'
+import { TIMELINE_GROUPS, buildTodayTimeline, type QiDim } from './overview/shared'
 
 export function OverviewPage() {
   const stats = useTodayStats()
@@ -120,7 +123,24 @@ export function OverviewPage() {
     ).length
   }, [follows, intelItems])
 
-  const urgent = [...stats.todayDue, ...stats.upcoming].slice(0, 5)
+  /**
+   * 今日案台 · **一条时间轴**（Step 5-1 · E3）。
+   *
+   * 改这里的原因：原先「今日任务」渲染 `highPriorityOpen`、「到期提醒」渲染
+   * `todayDue + upcoming`，而一件**今天到期的重点待办会同时落进两处** ——
+   * 同一件事在首屏出现两次，用户得先做一次"这两条是不是同一件"的心算。
+   *
+   * 现在按**到期紧迫度**分三段（逾期 / 今天 / 临近 3 天），每条待办只出现一次；
+   * 原本两块的信息一条都没少（重点仍带 `highlight` 高亮，逾期仍然是逾期）。
+   * 顺序即优先级：越靠上越急。
+   */
+  const timeline = useMemo(
+    () => buildTodayTimeline(stats.todayDue, stats.upcoming, stats.highPriorityOpen, todayISO()),
+    [stats.todayDue, stats.upcoming, stats.highPriorityOpen],
+  )
+
+  /** 重点待办 id：沿用原来的 `highlight` 视觉信号（"这是重点"这条信息不能因为合并而丢） */
+  const focusIds = useMemo(() => new Set(stats.highPriorityOpen.map((t) => t.id)), [stats.highPriorityOpen])
 
   // 下一件事：今天下一节课 / 最近到期任务（打开首页即获行动指令）
   const nextClass = todayClasses.find((c) => c.start > nowHMStr)
@@ -200,97 +220,99 @@ export function OverviewPage() {
         </p>
       </section>
 
-      {/* 今日案台：任务 / 课程 / 到期 */}
-      <div className="mt-2 grid grid-cols-1 gap-x-10 lg:grid-cols-12">
-        <div className="lg:col-span-8">
-          <Section
-            title="今日任务"
-            hint={`${stats.highPriorityOpen.length} 件重点`}
-            action={
-              <Button size="sm" variant="tertiary" onClick={() => setEditorOpen(true)}>
-                <Plus size={14} /> 添加
-              </Button>
-            }
-          >
-            {stats.highPriorityOpen.length > 0 ? (
-              <div>
-                {stats.highPriorityOpen.map((t) => (
-                  <TaskItem
-                    key={t.id}
-                    task={t}
-                    onToggle={taskActions.toggle}
-                    onEdit={(task) => {
-                      setEditing(task)
-                      setEditorOpen(true)
-                    }}
-                    onDelete={taskActions.remove}
-                    highlight
-                  />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={CheckCircle2}
-                title="今日无重点待办"
-                desc="没有重大事项压顶，可从容布局"
-                step="去「行」添加今天的重点"
-                action={
-                  <Button size="sm" variant="secondary" onClick={() => setSection('action')}>
-                    前往「行」
-                  </Button>
-                }
-              />
-            )}
-          </Section>
-        </div>
+      {/* 今日案台 · **一个「今日」**
+          「今日任务」与「今日课程」原本是两块（8/4 分栏）：两者回答的是同一个问题
+          ——"今天要做什么"，却要用户在两处各看一遍，窄屏还要上下滚两次。
+          现合并为一块，内部两个分组（课程 / 待办），**信息一条没少**：
+            · 课程仍按时间排、仍标「上课中」、仍显示教室与教师；
+            · 待办仍是逾期 / 今天 / 临近三段（同一件事只出现一次）。
+          合并后待办区不再分栏，「今日」在桌面占满整宽，窄屏少一层嵌套。
 
-        <div className="lg:col-span-4">
-          <Section title="今日课程" hint={`${todayClasses.length} 节`}>
-            {todayClasses.length > 0 ? (
-              <div>
-                {todayClasses.map((c, i) => (
-                  <div key={i} className="row">
-                    <span className="flex w-16 shrink-0 items-center gap-1">
-                      <span className="tabular text-xs text-ink-faint">{c.start}</span>
-                      {/* 字号例外：这一列是固定 w-16 的「时间 + 状态」同排，
-                          「08:00」已占满大半，用 12px 会把「上课中」顶出固定宽并压到课名上 */}
-                      {c.ongoing && <span className="text-[10px] text-cinnabar">上课中</span>}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-ink">{c.name?.trim() || c.room?.trim() || '课程'}</div>
-                      <div className="truncate text-xs text-ink-faint">
-                        {[c.room, c.teacher].filter(Boolean).join(' · ') || '—'}
-                      </div>
+          ⚠️ 刻意**没有**做成"一条按小时排的时间线"：待办只有**到期日**、没有**具体时刻**，
+          硬排就得给待办编一个时间 —— 那是改业务语义，已记为待拍板事项（执行矩阵 A-1）。 */}
+      <div className="mt-2">
+        <Section
+          title="今日"
+          hint={
+            [todayClasses.length > 0 ? `${todayClasses.length} 节课` : '',
+             timeline.length > 0 ? `${timeline.length} 件待办` : '']
+              .filter(Boolean)
+              .join(' · ') || undefined
+          }
+          action={
+            <Button size="sm" variant="tertiary" onClick={() => setEditorOpen(true)}>
+              <Plus size={14} /> 添加
+            </Button>
+          }
+        >
+          {todayClasses.length > 0 && (
+            <div className="mb-2">
+              <div className="flex items-baseline gap-1.5 px-2 pb-0.5 pt-1">
+                <span className="text-xs text-ink-faint">课程</span>
+                <span className="tabular text-xs text-ink-faint">{todayClasses.length}</span>
+              </div>
+              {todayClasses.map((c, i) => (
+                <div key={`class-${i}`} className="row">
+                  <span className="flex w-16 shrink-0 items-center gap-1">
+                    <span className="tabular text-xs text-ink-faint">{c.start}</span>
+                    {/* 字号例外：这一列是固定 w-16 的「时间 + 状态」同排，
+                        「08:00」已占满大半，用 12px 会把「上课中」顶出固定宽并压到课名上 */}
+                    {c.ongoing && <span className="text-[10px] text-cinnabar">上课中</span>}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-ink">{c.name?.trim() || c.room?.trim() || '课程'}</div>
+                    <div className="truncate text-xs text-ink-faint">
+                      {[c.room, c.teacher].filter(Boolean).join(' · ') || '—'}
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="今日课程已结束" desc="刷新后不再显示已上完的课" />
-            )}
-          </Section>
+                </div>
+              ))}
+            </div>
+          )}
 
-          <Section title="到期提醒" hint="含逾期与未来 3 天">
-            {urgent.length > 0 ? (
-              <div>
-                {urgent.map((t) => (
+          {TIMELINE_GROUPS.map(({ key, label }) => {
+            const rows = timeline.filter((x) => x.bucket === key)
+            if (rows.length === 0) return null
+            return (
+              <div key={key} className="mb-1 last:mb-0">
+                {/* 分组小标题：只报"这一段有几件"，不占版面 */}
+                <div className="flex items-baseline gap-1.5 px-2 pb-0.5 pt-1">
+                  <span className={key === 'overdue' ? 'text-xs text-cinnabar' : 'text-xs text-ink-faint'}>
+                    {label}
+                  </span>
+                  <span className="tabular text-xs text-ink-faint">{rows.length}</span>
+                </div>
+                {rows.map(({ task }) => (
                   <TaskItem
-                    key={t.id}
-                    task={t}
+                    key={task.id}
+                    task={task}
                     onToggle={taskActions.toggle}
-                    onEdit={(task) => {
-                      setEditing(task)
+                    onEdit={(t) => {
+                      setEditing(t)
                       setEditorOpen(true)
                     }}
                     onDelete={taskActions.remove}
+                    highlight={focusIds.has(task.id)}
                   />
                 ))}
               </div>
-            ) : (
-              <EmptyState title="暂无临近事项" desc="近三天没有到期安排" />
-            )}
-          </Section>
-        </div>
+            )
+          })}
+
+          {todayClasses.length === 0 && timeline.length === 0 && (
+            <EmptyState
+              icon={CheckCircle2}
+              title="今天没有课，也没有待办"
+              desc="课表里今天没课；待办也清空了 —— 可从容布局"
+              step="去「行」添加今天的重点"
+              action={
+                <Button size="sm" variant="secondary" onClick={() => setSection('action')}>
+                  前往「行」
+                </Button>
+              }
+            />
+          )}
+        </Section>
       </div>
 
       {/* 本周回顾（数据看板） */}

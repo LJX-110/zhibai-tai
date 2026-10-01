@@ -33,7 +33,8 @@ export interface AIProvider {
   listModels?(): Promise<string[]>
   /**
    * 轻量连通性检查（**可选**）：只验证「端点可达 + Key 有效」。
-   * 优先走 `/models`（不计费），端点不支持时才回退一次极短的补全。
+   * 优先走 `/models`（不计费）；端点不支持该路由、或该路由超时/不可达时，
+   * 回退一次极短的补全（对话路由才是应用真正要用的那条）。
    * 失败时抛出的错误与 `complete` 同形（`AI 请求失败 HTTP …`），
    * 由 `ai-service` 的 `explainConnectFailure` 统一译成人话。
    */
@@ -65,6 +66,11 @@ export const localProvider: AIProvider = {
 const SYSTEM_PROMPT =
   '你是知白台（个人效率系统）的 AI 助手。回答简洁、有条理，使用中文。'
 
+/** 测试连接里给 `/models` 的探测超时（10s）：
+ *  该路由在部分网关上会挂起（实测 Agnes 3 次里 2 次 20s 无响应），
+ *  不能让一次探测拖满整个请求超时（30s）才轮到回退。 */
+const PROBE_TIMEOUT_MS = 10_000
+
 /** OpenAI 兼容 Provider 工厂（Agnes / DeepSeek / Kimi / OpenAI 等） */
 export function openAICompatibleProvider(opts: {
   baseUrl: string
@@ -76,10 +82,10 @@ export function openAICompatibleProvider(opts: {
   const base = opts.baseUrl.replace(/\/+$/, '')
   const timeoutMs = opts.timeoutMs ?? 30000
   /** 拉模型列表：带超时的最小 GET（原先这段裸 fetch 写在设置页组件里，无超时） */
-  const fetchModels = async (): Promise<string[]> => {
+  const fetchModels = async (overrideMs?: number): Promise<string[]> => {
     if (!opts.apiKey) throw new Error('未配置 API Key')
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    const timer = setTimeout(() => ctrl.abort(), overrideMs ?? timeoutMs)
     try {
       const res = await fetch(`${base}/models`, {
         headers: { Authorization: `Bearer ${opts.apiKey}` },
@@ -101,40 +107,45 @@ export function openAICompatibleProvider(opts: {
     available: () => Boolean(opts.apiKey && opts.baseUrl),
     listModels: fetchModels,
     testConnection: async () => {
-      // 优先 /models（不计费、无生成开销）；端点不支持该路由时报 404/405，
-      // 此时才回退一次极短补全 —— 用列表接口的 404 判"连不上"会冤枉能正常对话的端点
+      // 连通性判据：优先 `/models`（不计费、无生成开销）——但它**不是所有端点都可靠**。
+      // 实测（2026-10-01）：Agnes 的 `/models` 在其网关上会偶发挂起（3 次里 2 次超时），
+      // 而同一时刻它的对话路由完全正常（`POST /chat/completions` 稳定响应）。
+      // 所以「/models 不可用」≠「端点不可用」——下列两类都回退到真正要用的那条路做判据：
+      //  · 400/404/405：端点没有该路由；
+      //  · 超时 / 网络类失败（拿不到 HTTP 状态码）：该路由不通，但对话路由可能好着。
+      // 401/402/403/429/5xx 仍原样抛出：那是确凿的「不可用」信号，不许被回退掩盖。
       try {
-        await fetchModels()
+        await fetchModels(PROBE_TIMEOUT_MS)
       } catch (e) {
         const raw = e instanceof Error ? e.message : String(e)
         const status = Number(raw.match(/HTTP (\d{3})/)?.[1] ?? NaN)
-        if (status === 400 || status === 404 || status === 405) {
-          const ctrl = new AbortController()
-          const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-          try {
-            const res = await fetch(`${base}/chat/completions`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${opts.apiKey}`,
-              },
-              body: JSON.stringify({
-                model: opts.model,
-                max_tokens: 1,
-                messages: [{ role: 'user', content: 'hi' }],
-              }),
-              signal: ctrl.signal,
-            })
-            if (!res.ok) {
-              const text = await res.text().catch(() => '')
-              throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
-            }
-          } finally {
-            clearTimeout(timer)
+        const routeMissing = status === 400 || status === 404 || status === 405
+        const routeUnreachable = Number.isNaN(status)
+        if (!routeMissing && !routeUnreachable) throw e
+        // 回退：一次极短补全（max_tokens: 1）——它才是应用真正要用的那条路
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+        try {
+          const res = await fetch(`${base}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${opts.apiKey}`,
+            },
+            body: JSON.stringify({
+              model: opts.model,
+              max_tokens: 1,
+              messages: [{ role: 'user', content: 'hi' }],
+            }),
+            signal: ctrl.signal,
+          })
+          if (!res.ok) {
+            const text = await res.text().catch(() => '')
+            throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
           }
-          return
+        } finally {
+          clearTimeout(timer)
         }
-        throw e
       }
     },
     complete: async (prompt: string) => {

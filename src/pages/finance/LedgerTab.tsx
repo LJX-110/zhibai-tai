@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 财 · LedgerTab（从 FinancePage 拆出，见 docs/编码规范.md 路线图第 4 步）
  */
 /**
@@ -11,14 +11,8 @@
  *  · 统计：分类占比用圆环（Ring）呈现，比柱状更直观、也更省空间
  */
 import { useMemo, useState } from 'react'
-import {
-  Eye,
-  Pencil,
-  Plus,
-  Trash2,
-} from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useFinanceStore, usePurchaseStore } from '../../stores/useFinanceStore'
-import { useInspectorStore } from '../../components/inspector/inspector-store'
 import { useResolvedLayout } from '../../layouts/useResolvedLayout'
 import { FINANCE_CATEGORIES, categoryLabel } from '../../services/finance'
 import { recordActivity } from '../../services/activity'
@@ -29,7 +23,8 @@ import { createId, todayISO, nowISO } from '../../utils/id'
 import { parsePositiveAmount } from '../../utils/validate'
 import { cn } from '../../utils/cn'
 import { FinanceRow, SummaryCell } from './shared'
-import { LEDGER_FILTERS, money, useMonthSummary, type LedgerFilter } from './summary'
+import { LEDGER_FILTERS, useMonthSummary, type LedgerFilter } from './summary'
+import { money } from '../../utils/money'
 
 import {
   Button,
@@ -53,10 +48,9 @@ export function LedgerTab() {
   const [filter, setFilter] = useState<LedgerFilter>('all')
   const [month, setMonth] = useState(todayISO().slice(0, 7))
 
-  const compact = useResolvedLayout() === 'mobile'
-  const pageSize = compact ? 10 : 20
+  // 分页仍按布局：手机 10 条、桌面 20 条（`RowActions` 只管操作区，不管分页）
+  const pageSize = useResolvedLayout() === 'mobile' ? 10 : 20
   const [listLimit, setListLimit] = useState(pageSize)
-  const [actionFor, setActionFor] = useState<FinanceRecord | null>(null)
   const listKey = `${filter}|${month}|${pageSize}`
   const [lastKey, setLastKey] = useState(listKey)
   if (listKey !== lastKey) {
@@ -208,8 +202,6 @@ export function LedgerTab() {
                 <FinanceRow
                   key={r.id}
                   r={r}
-                  compact={compact}
-                  onMore={() => setActionFor(r)}
                   onEdit={openEdit}
                   onDelete={remove}
                 />
@@ -301,49 +293,6 @@ export function LedgerTab() {
         </div>
       </Dialog>
 
-      <Dialog
-        open={actionFor != null}
-        onClose={() => setActionFor(null)}
-        title={actionFor ? actionFor.merchant || categoryLabel(actionFor.category) : ''}
-      >
-        {actionFor && (
-          <div className="space-y-2">
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                const x = actionFor
-                setActionFor(null)
-                useInspectorStore.getState().open('finance', x.id)
-              }}
-            >
-              <Eye size={14} /> 详情
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full"
-              onClick={() => {
-                const x = actionFor
-                setActionFor(null)
-                openEdit(x)
-              }}
-            >
-              <Pencil size={14} /> 编辑
-            </Button>
-            <Button
-              variant="danger"
-              className="w-full"
-              onClick={() => {
-                const x = actionFor
-                setActionFor(null)
-                void remove(x)
-              }}
-            >
-              <Trash2 size={14} /> 删除
-            </Button>
-          </div>
-        )}
-      </Dialog>
     </div>
   )
 }

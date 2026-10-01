@@ -8,11 +8,20 @@ import { cn } from '../../utils/cn'
 import { CapabilityRow } from './CapabilityRow'
 import { WelcomeBoard } from './WelcomeBoard'
 import { ActionConfirmCard } from './action-cards'
+import { ToolConfirmCard, type ToolConfirmState } from './tool-confirm'
 import { stripActionFences } from './action-text'
 import type { AiRemoteHealth } from '../../services/ai/health'
 import type { ChatMessage } from './chat-history'
 import type { TianjiActionPayload } from './action-protocol'
 import type { TianjiCapabilityKey } from './tianji-capability'
+
+/** 待确认的工具提案（挂在最新一条回答之后；只有"需要你确认"的工具会出现） */
+export interface PendingToolProposal {
+  toolName: string
+  /** 工具自己给的一句话"它想做什么" */
+  summary: string
+  state: ToolConfirmState
+}
 
 /** 气泡形制（用户 / AI / 流式三处共用）：
  *  ① 流式增量与定稿必须同宽同字号，否则回答收齐的瞬间会"跳变"；
@@ -34,8 +43,10 @@ export function MessageStream({
   remote,
   onConfirm,
   onSkip,
-  onPick,
   onRunCap,
+  proposal,
+  onConfirmProposal,
+  onCancelProposal,
 }: {
   messages: ChatMessage[]
   /** 每条 AI 消息提议的动作（按消息下标索引） */
@@ -48,8 +59,11 @@ export function MessageStream({
   remote: AiRemoteHealth
   onConfirm: (i: number, j: number, a: TianjiActionPayload) => void
   onSkip: (i: number, j: number) => void
-  onPick: (q: string) => void
   onRunCap: (key: TianjiCapabilityKey) => void
+  /** 待确认的工具提案（没有则为 null） */
+  proposal: PendingToolProposal | null
+  onConfirmProposal: () => void
+  onCancelProposal: () => void
 }) {
   return (
     <>
@@ -61,12 +75,7 @@ export function MessageStream({
       {/* 消息流 —— 轮次之间靠用户气泡的 mt-2 拉开层级：
           全程等距会让"我的问题"和"天机的回答"糊成一片 */}
       {messages.length === 0 ? (
-        <WelcomeBoard
-          stats={stats}
-          remote={remote}
-          onPick={onPick}
-          onRunCap={onRunCap}
-        />
+        <WelcomeBoard stats={stats} remote={remote} onRunCap={onRunCap} />
       ) : (
         messages.map((m, i) => {
           if (m.role === 'user') {
@@ -112,6 +121,22 @@ export function MessageStream({
             </Fragment>
           )
         })
+      )}
+      {/* 需确认的工具提案：紧跟在最新一条回答之后（它就是模型"我建议…，等你点一下"的落点）。
+          与动作卡片不同，确认后**结果会回喂给模型**继续推理（见 services/agent/loop.ts）。 */}
+      {proposal && (
+        <div className="flex justify-start">
+          <div className="w-[92%]">
+            <ToolConfirmCard
+              toolName={proposal.toolName}
+              summary={proposal.summary}
+              state={proposal.state}
+              busy={busy}
+              onConfirm={onConfirmProposal}
+              onCancel={onCancelProposal}
+            />
+          </div>
+        </div>
       )}
       {/* 流式生成中：已有增量就按**与定稿完全相同的样式**先显示（否则生成完会"跳变"），
           还没收到首字节时才显示等待指示 */}

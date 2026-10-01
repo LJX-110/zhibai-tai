@@ -11,10 +11,13 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest'
 import {
   TIANJI_PLUGINS,
   actionDefFor,
+  agentToolById,
+  agentTools,
   buildDetailContext,
   capabilitiesOf,
   capabilityOf,
 } from '../components/ai/plugins'
+import { confirmationTools, executableTools, toolConsistencyError } from '../services/agent/tools'
 import { useFinanceStore } from '../stores/useFinanceStore'
 import { nowISO, todayISO } from '../utils/id'
 
@@ -46,8 +49,15 @@ describe('注册表结构', () => {
   it('插件 id 唯一，且都是合法的板块 id', () => {
     const ids = TIANJI_PLUGINS.map((p) => p.id)
     expect(new Set(ids).size).toBe(ids.length)
-    // 注册顺序 = 明细区注入顺序：学 → 财 → 藏 → 修（沿用改造前的次序）
-    expect(ids).toEqual(['overview', 'action', 'study', 'finance', 'collection', 'cultivate', 'intelligence'])
+    // 注册顺序 = 明细区注入顺序：学 → 财 → 藏 → 修 → 情，核心插件（记忆）在**末尾**（无明细区）
+    expect(ids).toEqual(['overview', 'action', 'study', 'finance', 'collection', 'cultivate', 'intelligence', 'core'])
+  })
+
+  it('核心插件排在末尾，因此明细区注入次序不变', () => {
+    // 有明细区的插件相对次序不变（overview / action 本来就没有明细区，只有一键能力）
+    const withDetail = TIANJI_PLUGINS.filter((p) => p.detail)
+    expect(withDetail.map((p) => p.id)).toEqual(['study', 'finance', 'collection', 'cultivate'])
+    expect(TIANJI_PLUGINS[TIANJI_PLUGINS.length - 1].id).toBe('core')
   })
 
   it('能力 key 唯一、都有名称与图标', () => {
@@ -69,15 +79,53 @@ describe('注册表结构', () => {
 })
 
 describe('动作归属', () => {
-  it('三种动作分别落在行 / 行 / 财 三个板块', () => {
-    expect(actionDefFor('create_task')).toBeTruthy()
-    expect(actionDefFor('create_note')).toBeTruthy()
+  it('金额类动作落在「财」板块（它必须走预览确认）', () => {
     expect(actionDefFor('create_finance')).toBeTruthy()
   })
 
+  it('**建任务 / 建笔记不再是动作** —— 它们已改为可直接执行的工具（Step 4-3 · 二）', () => {
+    // 上一版两条路并存，模型经常选到"请主人自己确认"那条；现在只保留工具这条路
+    expect(actionDefFor('create_task')).toBeUndefined()
+    expect(actionDefFor('create_note')).toBeUndefined()
+  })
+
   it('未注册的动作返回 undefined（落库前就该拒掉，不能猜一个库写进去）', () => {
-    // 动作名现在是开放字符串，不需要 @ts-expect-error —— 这正是 P2 开放化的结果
     expect(actionDefFor('delete_everything')).toBeUndefined()
+  })
+})
+
+describe('工具注册表（Step 4-3 · 一）', () => {
+  it('每个工具都声明齐八项，且 mode 与 requiresConfirmation 不矛盾', () => {
+    const tools = agentTools()
+    expect(tools.length).toBeGreaterThan(5)
+    for (const t of tools) {
+      expect(t.id).toBeTruthy()
+      expect(t.name).toBeTruthy()
+      expect(t.description.length).toBeGreaterThan(10)
+      expect(t.inputSchema).toBeTypeOf('object')
+      expect(toolConsistencyError(t)).toBeNull()
+    }
+  })
+
+  it('read / safe-write 可直接执行；requires-confirmation 只被提议', () => {
+    const tools = agentTools()
+    const auto = executableTools(tools)
+    const need = confirmationTools(tools)
+    expect(auto.length + need.length).toBe(tools.length)
+    expect(auto.every((t) => t.mode === 'read' || t.mode === 'safe-write')).toBe(true)
+    expect(need.map((t) => t.id)).toEqual(['memory.save'])
+  })
+
+  it('第一批可自动写入的只有建待办与记笔记', () => {
+    const writable = executableTools(agentTools())
+      .filter((t) => t.mode === 'safe-write')
+      .map((t) => t.id)
+    expect(writable.sort()).toEqual(['notes.create', 'tasks.create'])
+  })
+
+  it('按 id 找得到（确认卡片执行"那一下"的唯一入口）', () => {
+    expect(agentToolById('memory.save')?.mode).toBe('requires-confirmation')
+    expect(agentToolById('不存在的工具')).toBeUndefined()
   })
 })
 

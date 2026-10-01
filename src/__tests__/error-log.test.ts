@@ -16,6 +16,7 @@ import {
   isIgnorableError,
   listErrors,
   recordError,
+  redactSecrets,
 } from '../services/error-log'
 
 type Listener = (event: unknown) => void
@@ -137,6 +138,45 @@ describe('recordError —— 写入、去重、上限', () => {
     expect(listErrors()).toEqual([])
     // 且还能继续正常写
     expect(recordError({ kind: 'error', message: '恢复' })).not.toBeNull()
+  })
+})
+
+describe('redactSecrets —— 凭据不得进入本机故障流水（Step 5-1 · A3）', () => {
+  it('OpenAI 风格 key 被抹掉', () => {
+    expect(redactSecrets('HTTP 401: Incorrect API key sk-proj-AbCdEf1234567890 provided')).toContain('sk-***')
+    expect(redactSecrets('key=sk-abcdefghijklmn')).not.toContain('abcdefghijklmn')
+  })
+
+  it('GitHub Token 各前缀都被抹掉', () => {
+    for (const p of ['ghp', 'gho', 'ghu', 'ghs', 'ghr']) {
+      const t = `${p}_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`
+      expect(redactSecrets(`Auth ${t} failed`)).not.toContain(t)
+    }
+  })
+
+  it('`Authorization: Bearer <token>` 整段被抹掉（含小写 bearer）', () => {
+    expect(redactSecrets('header authorization: Bearer abcdefghijklmnop')).not.toContain('abcdefghijklmnop')
+    expect(redactSecrets('Bearer abcdefghijklmnop rejected')).toContain('Bearer ***')
+  })
+
+  it('k: v / k=v 写法的凭据被抹掉', () => {
+    expect(redactSecrets('{"token":"abcdefgh12345678"}')).not.toContain('abcdefgh12345678')
+    expect(redactSecrets('password=supersecret123')).not.toContain('supersecret123')
+    expect(redactSecrets('secret: "anothersecret99"')).not.toContain('anothersecret99')
+  })
+
+  it('正常文本不被误伤', () => {
+    const benign = 'GitHub 404: Not Found；偏好设置写入失败；今天的待办有 3 条'
+    expect(redactSecrets(benign)).toBe(benign)
+    expect(redactSecrets('')).toBe('')
+  })
+
+  it('**落盘即脱敏**：recordError 收到的原文带 Token，流水里不留', () => {
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    recordError({ kind: 'rejection', message: `请求失败 Authorization: Bearer ${token}`, detail: `stack ${token}` })
+    const dumped = JSON.stringify(listErrors())
+    expect(dumped).not.toContain(token)
+    expect(dumped).toContain('gh***')
   })
 })
 

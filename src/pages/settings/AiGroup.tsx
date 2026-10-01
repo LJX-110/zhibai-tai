@@ -1,39 +1,53 @@
 /**
- * 设置 · 智能（AI Core + 情报源 / 自建代理）
+ * 设置 · AI 组（2026-10-01 三段收口）
  *
- * 从 SettingsPage 拆出。状态自洽：本文件自己读 store、自己持有输入草稿与模型列表。
+ * 只留三段，按「用户要理解的概念数」收敛：
+ *  · **模型与连接** —— 用哪个服务、端点、Key、模型、测试（**Base URL 并入本段**，不再是单独入口）
+ *  · **AI 人设** —— 它是谁（`TianjiPersonaGroup` 自带段头）
+ *  · **AI 记忆** —— 它记得什么（`TianjiMemoryGroup` 自带段头）
+ * 「抓取与代理」已移入「系统 · 数据」组（与同步、情报数据管理同组）——
+ * AI 页只回答"AI 怎么连、它是谁、记得什么"。
  *
- * ## 分层（2026-09-28 收口）
- * 首屏只留「用得上」的四件事：**Provider / API Key / 模型 / 连接测试**。
- * Base URL 这类开发者概念的输入收进「高级设置」折叠 —— 预设按钮已覆盖大多数选择。
- *
- * ## 为什么把「浏览器能不能直连」写在界面上
- * 纯前端只能直连**返回 CORS 头**的端点（实测：DeepSeek / Kimi 可以，
- * Agnes / NVIDIA 不返回任何 `Access-Control-*`）。不标注的话，用户会照着预设配好
+ * ## 为什么把「浏览器能不能直连」写在预设上
+ * 纯前端只能直连**返回 CORS 头**的端点（实测：DeepSeek / Kimi / Agnes 可以，
+ * NVIDIA 不返回任何 `Access-Control-*`）。不标注的话，用户会照着预设配好
  * 再看到一句"连接失败"，还以为是自己填错了 —— 这是环境限制，不是他的错。
+ * 故不可直连的预设**直接置灰**（title 里写明原因）。
  */
 import { useState } from 'react'
 import { Zap } from 'lucide-react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { encryptor, isWebCryptoAvailable } from '../../sync/encryption/encryption'
-import { ProxyConfig, SourceManager } from '../../components/source/SourceManager'
 import { listAIModels, resolveAIProvider, testAIProvider } from '../../services/ai/ai-service'
-import { Button, Collapse, Input, Section, Select, useToast } from '../../components/ui'
+import { Button, Input, Section, Select, useToast } from '../../components/ui'
+import { TianjiPersonaGroup } from './TianjiPersonaGroup'
+import { TianjiMemoryGroup } from './TianjiMemoryGroup'
 import { cn } from '../../utils/cn'
 
 /**
  * 预设服务。`cors` 是**实测结论**（不是猜测）：
  *  · ok      —— OPTIONS 预检返回 `access-control-allow-origin`，浏览器可直连
- *  · blocked —— 实测不发任何 `Access-Control-*` 头，浏览器里必然连不上
+ *  · blocked —— 不发任何 `Access-Control-*` 头，浏览器里必然连不上
  *  · unknown —— 网络层未能测通，不做结论
+ *
+ * ⚠️ 2026-10-01 复测修正：**Agnes 是可直连的**（预检 204 + `ACAO: *`，
+ * POST 实请求同样带 `ACAO: *`；此前把它标成 blocked 是误判 —— 那次探测多半
+ * 撞上了它的 Cloudflare 风控，裸请求会被挂住）。NVIDIA 复测仍无 ACAO：
+ * 预检 405/200 都不带 `Access-Control-Allow-Origin`，实请求 403 也不带 —— 浏览器确实连不上。
  */
 const AI_PRESETS: { name: string; baseUrl: string; model: string; cors: 'ok' | 'blocked' | 'unknown' }[] = [
   { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', cors: 'ok' },
   { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', cors: 'ok' },
   { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', cors: 'unknown' },
-  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash', cors: 'blocked' },
+  { name: 'Agnes', baseUrl: 'https://apihub.agnes-ai.com/v1', model: 'agnes-2.5-flash', cors: 'ok' },
   { name: 'NVIDIA', baseUrl: 'https://integrate.api.nvidia.com/v1', model: 'deepseek-ai/deepseek-v4.1-flash', cors: 'blocked' },
 ]
+
+/**
+ * AI 组 —— **按"用户要做的事"分条，不按内部模块分**（Step 5-3C 起，2026-10-01 定稿三段）
+ *
+ * ⚠️ **不做成二级页签**：页签只是把"条目多"换个地方堆，用户仍要理解同样多的概念。
+ */
 
 export function AiGroup() {
   const settings = useSettingsStore()
@@ -50,8 +64,14 @@ export function AiGroup() {
   const cryptoOk = isWebCryptoAvailable()
 
   const activePreset = AI_PRESETS.find((p) => p.baseUrl === settings.aiBaseUrl)
-  /** 只有真的选了「浏览器连不上」的服务才提示，未选 / 选了能用的都不打扰 */
-  const blockedNotice = settings.aiProvider === 'remote' && activePreset?.cors === 'blocked'
+  /** 只有真的选了「浏览器连不上」的服务才提示，未选 / 选了能用的都不打扰。
+   *  ⚠️ 类型必须是**字符串或 null**，不能是 boolean：下面用 `??` 兜底，
+   *  boolean 会原样透过 `??`（false / true 都被 React 渲染成空）——
+   *  曾经的写法让状态行只剩一个孤点、文案永远不显示（2026-10-01 修）。 */
+  const blockedNotice =
+    settings.aiProvider === 'remote' && activePreset?.cors === 'blocked'
+      ? '该服务未开放跨域，浏览器无法直连 —— 换个预设，或用「抓取与代理」里的自建转发'
+      : null
   const availableModels = models && models.baseUrl === settings.aiBaseUrl ? models.ids : []
 
   /**
@@ -121,7 +141,7 @@ export function AiGroup() {
 
   return (
     <>
-      <Section title="AI Core" hint="OpenAI 兼容">
+      <Section title="模型与连接" hint="OpenAI 兼容">
         <div className="max-w-xl space-y-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="w-20 shrink-0 text-sm text-ink-muted">Provider</span>
@@ -145,11 +165,6 @@ export function AiGroup() {
                 </button>
               ))}
             </div>
-            {/* 说明独占整行：与 switch 并排时会被压成每行三两个字 */}
-            <span className="w-full text-xs text-ink-faint">远程需 Key（本地加密存储）</span>
-            {settings.aiProvider === 'remote' && !settings.aiKey && (
-              <span className="w-full text-xs text-cinnabar">未配 Key，仍在用本地规则</span>
-            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -160,6 +175,14 @@ export function AiGroup() {
                   key={p.name}
                   size="sm"
                   variant={settings.aiBaseUrl === p.baseUrl ? 'primary' : 'tertiary'}
+                  // 不可直连的预设**直接置灰**（2026-10-01 收口）：此前能选中、选中后才红字报错，
+                  // 属于"先让你踩坑再解释"；现在按钮自己说明原因（title）
+                  disabled={p.cors === 'blocked'}
+                  title={
+                    p.cors === 'blocked'
+                      ? '该服务不返回跨域头，浏览器无法直连；自建转发目前不代传凭据，暂不可用于 AI'
+                      : undefined
+                  }
                   onClick={() => {
                     settings.set({ aiBaseUrl: p.baseUrl, aiModel: p.model })
                     toast(`已切换 ${p.name} 预设，填 Key 后点「测试连接」`, 'info')
@@ -170,11 +193,19 @@ export function AiGroup() {
                 </Button>
               ))}
             </div>
-            {blockedNotice && (
-              <span className="w-full text-xs leading-relaxed text-cinnabar">
-                当前浏览器无法直接连接此服务（服务端未开放跨域）—— 请改用 DeepSeek / Kimi
-              </span>
-            )}
+          </div>
+
+          {/* Base URL 并入本段（2026-10-01 用户拍板）：端点地址与「服务」预设是同一件事，
+              不再单独占一个「高级」入口 —— 换服务后想微调端点，就地就能改 */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="w-20 shrink-0 text-sm text-ink-muted">Base URL</span>
+            <Input
+              value={settings.aiBaseUrl}
+              onChange={(e) => settings.set({ aiBaseUrl: e.target.value })}
+              className="min-w-0 flex-1 basis-full font-mono !text-xs sm:basis-0"
+              placeholder="https://api.deepseek.com/v1"
+              aria-label="Base URL"
+            />
           </div>
 
           <div className="flex items-center gap-3">
@@ -209,7 +240,7 @@ export function AiGroup() {
             <Input
               value={settings.aiModel}
               onChange={(e) => settings.set({ aiModel: e.target.value })}
-              className="min-w-[8rem] flex-1 font-mono !text-xs"
+              className="min-w-0 flex-1 basis-full font-mono !text-xs sm:basis-0"
               placeholder="如 deepseek-chat"
             />
             <Button size="sm" variant="tertiary" onClick={() => void fetchModels()} disabled={modelsLoading}>
@@ -242,41 +273,26 @@ export function AiGroup() {
             <Button variant="tertiary" onClick={() => void runTest()} disabled={testing}>
               <Zap size={13} /> {testing ? '测试中…' : '测试连接'}
             </Button>
-            <span className="text-xs text-ink-faint">
-              {settings.aiKey
-                ? settings.aiKeyEnc
-                  ? 'Key 已加密保存'
-                  : 'Key 已保存（未加密）'
-                : '测试需先保存 Key'}
+          </div>
+
+          {/* 状态行（2026-10-01 收口）：原先散在 Provider 行与「服务」行的两处提示合成一行 */}
+          <div className="flex flex-wrap items-center gap-x-2 text-xs">
+            <span
+              className={cn(
+                'h-1.5 w-1.5 shrink-0 rounded-full',
+                blockedNotice ? 'bg-cinnabar' : settings.aiKey ? 'bg-teal' : 'bg-line-strong',
+              )}
+            />
+            <span className={cn('leading-relaxed', blockedNotice ? 'text-cinnabar' : 'text-ink-faint')}>
+              {blockedNotice ?? (settings.aiKey ? 'Key 已保存 · 点「测试连接」确认可用性' : '未配 Key · 天机走本地规则')}
             </span>
           </div>
         </div>
       </Section>
 
-      {/* Base URL 是开发者概念：预设按钮覆盖了常规选择，手改地址收进折叠 */}
-      <Collapse title="高级设置">
-        <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">Base URL</span>
-          <Input
-            value={settings.aiBaseUrl}
-            onChange={(e) => settings.set({ aiBaseUrl: e.target.value })}
-            className="min-w-[12rem] flex-1 font-mono !text-xs"
-            placeholder="https://api.deepseek.com/v1"
-          />
-        </div>
-        <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-          任意 OpenAI 兼容端点都可填入（以 /v1 结尾）；模型名直接写在上面「模型」一栏。
-          端点需允许浏览器跨域，否则只能换服务 —— 纯前端无法绕过。
-        </p>
-      </Collapse>
-
-      {/* 代理留在首屏：情报页抓取失败会把用户直接指到这里，指着的人不能隔着折叠 */}
-      <ProxyConfig />
-
-      {/* 不写 hint：折叠头已写明「情报源」，再加一句"源列表与抓取"是同义复述 */}
-      <Collapse title="情报源">
-        <SourceManager />
-      </Collapse>
+      {/* 人设与记忆各自成段（2026-10-01）：AI 页 = 模型与连接 / AI 人设 / AI 记忆 三段 */}
+      <TianjiPersonaGroup />
+      <TianjiMemoryGroup />
     </>
   )
 }

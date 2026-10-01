@@ -5,7 +5,9 @@
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useAIChatStore } from '../components/ai/chat-store'
-import { Bot } from 'lucide-react'
+import { useNoticeCenterStore } from '../components/notification/notice-center-store'
+import { useUnreadNotices } from '../hooks/useUnreadNotices'
+import { Bell, Bot } from 'lucide-react'
 import { Taiji } from '../components/ui/Taiji'
 import { NAV_SECTIONS, SYSTEM_SECTION, type SectionId } from '../app/navigation'
 import { playSound } from '../services/sound'
@@ -72,6 +74,9 @@ export function DesktopSidebar() {
   const setSection = useAppStore((s) => s.setSection)
   const lastSyncedAt = useSettingsStore((s) => s.lastSyncedAt)
   const syncStatus = useSettingsStore((s) => s.syncStatus)
+  // 通知中心：与移动端顶栏同一个 store —— 两处入口、一个弹层
+  const unread = useUnreadNotices()
+  const setNoticeOpen = useNoticeCenterStore((s) => s.setOpen)
 
   const go = (id: SectionId) => {
     if (id !== section) playSound('ui-click')
@@ -138,6 +143,23 @@ export function DesktopSidebar() {
           active={section === SYSTEM_SECTION.id}
           onClick={() => go(SYSTEM_SECTION.id)}
         />
+        {/* 通知中心入口（Step 5-3D）：未读条数与顶栏铃铛同源（`useUnreadNotices`） */}
+        <button
+          type="button"
+          onClick={() => setNoticeOpen(true)}
+          aria-label={unread > 0 ? `通知中心（${unread} 条未读）` : '通知中心'}
+          title="通知中心"
+          className="flex w-full items-center gap-2 rounded-control px-3 py-1.5 text-xs text-on-sidebar-muted transition-colors hover:bg-white/10 hover:text-on-sidebar"
+        >
+          <Bell size={13} className="shrink-0" />
+          <span className="flex-1 text-left">通知中心</span>
+          {unread > 0 && (
+            /* 字号例外：侧栏未读角标 —— 与导航文字同排，必须小一档 */
+            <span className="rounded-full bg-cinnabar px-1.5 text-[10px] leading-4 text-on-sidebar">
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </button>
         {/* 同步状态：点击直达系统页（状态前置） */}
         <button
           type="button"

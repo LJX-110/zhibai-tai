@@ -7,10 +7,48 @@
 import { FileText } from 'lucide-react'
 import { aiService } from '../../../services/ai/ai-service'
 import { useIntelligenceStore } from '../../../stores/useIntelligenceStore'
+import { defineTool } from '../../../services/agent/tools'
 import type { TianjiPlugin } from './index'
 
 export const intelligencePlugin: TianjiPlugin = {
   id: 'intelligence',
+
+  /** 工具：看最近情报（只读）—— "最近在关注什么"这类问题走它，而不是靠注入整份流 */
+  tools: [
+    defineTool({
+      id: 'intelligence.recent',
+      name: '看最近情报',
+      description: '列出最近的情报标题（可按关键词过滤，默认取未读优先）。问"最近有什么新情报 / 有没有关于某个话题的"时用它。',
+      inputSchema: { query: '关键词（可留空）', limit: '条数（可选，默认 8，最多 15）' },
+      mode: 'read',
+      riskLevel: 'read',
+      execute: async (args) => {
+        const q = typeof args.query === 'string' ? args.query.trim().toLowerCase() : ''
+        const rawLimit = typeof args.limit === 'number' ? args.limit : 8
+        const limit = Math.max(1, Math.min(15, Math.round(rawLimit)))
+        const all = useIntelligenceStore.getState().items
+        const hit = all
+          .filter(
+            (it) =>
+              !q ||
+              it.title.toLowerCase().includes(q) ||
+              (it.category ?? '').toLowerCase().includes(q) ||
+              it.tags.some((t) => t.toLowerCase().includes(q)),
+          )
+          .sort((a, b) => (b.publishedAt ?? b.createdAt).localeCompare(a.publishedAt ?? a.createdAt))
+        if (hit.length === 0) return { count: 0, text: '没有匹配的情报。' }
+        const unread = hit.filter((it) => !it.read).length
+        const rows = hit.slice(0, limit).map((it) => {
+          const when = (it.publishedAt ?? it.createdAt).slice(0, 10)
+          return `- ${it.title}（${it.source ?? '未标来源'} · ${when}${it.read ? '' : ' · 未读'}）`
+        })
+        return {
+          count: hit.length,
+          text: `命中 ${hit.length} 条（未读 ${unread}），前 ${rows.length} 条：\n${rows.join('\n')}`,
+        }
+      },
+    }),
+  ],
 
   capability: {
     key: 'intel',

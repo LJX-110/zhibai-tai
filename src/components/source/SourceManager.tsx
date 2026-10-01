@@ -4,21 +4,20 @@
  *
  * 拆分说明（2026-09-20 路线图第 4 步）：单行、表单弹窗、测试预览、手机端操作弹层、
  * 定时抓取开关、自建代理各自成文件放在本目录下；本文件只留状态、抓取动作与组合。
- * `ProxyConfig` 仍从本文件导出 —— 「系统 · 智能」首屏按这个路径直接挂载它。
+ * `ProxyConfig` 仍从本文件导出 —— 「系统 · 数据」组按这个路径直接挂载它
+ * （2026-10-01 从 AI 组移入：AI 页只留「模型与连接 / AI 人设 / AI 记忆」三段）。
  */
 import { useState, useMemo } from 'react'
 import { Plus } from 'lucide-react'
 import { useSourceStore } from '../../stores/useSourceStore'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { categoryNames, useCategoryStore } from '../../stores/useCategoryStore'
-import { useResolvedLayout } from '../../layouts/useResolvedLayout'
 import { retrySource, testSource } from '../../services/intelligence/run'
 import { initIntelAutoFetch } from '../../services/intelligence/auto'
 import type { IntelligenceProviderId, IntelligenceSource } from '../../types/entities'
 import { createId, nowISO } from '../../utils/id'
 import { Button, EmptyState, Section, useToast } from '../ui'
 import { AutoFetchBar } from './AutoFetchBar'
-import { MobileActionDialog } from './MobileActionDialog'
 import { SourceFormDialog } from './SourceFormDialog'
 import { SourceRow } from './SourceRow'
 import { TestPreviewDialog, type PreviewState } from './TestPreviewDialog'
@@ -32,10 +31,8 @@ export function SourceManager() {
   const intelMinutes = useSettingsStore((s) => s.intelFetchMinutes)
   const intelCategoryRows = useCategoryStore((s) => s.items)
   const intelCategories = useMemo(() => categoryNames(intelCategoryRows, 'intel'), [intelCategoryRows])
-  const compact = useResolvedLayout() === 'mobile'
   const toast = useToast().toast
   const [open, setOpen] = useState(false)
-  const [actionFor, setActionFor] = useState<IntelligenceSource | null>(null)
   const [editing, setEditing] = useState<IntelligenceSource | null>(null)
   const [form, setForm] = useState<FormState>({ ...EMPTY })
   const [testing, setTesting] = useState<string | null>(null)
@@ -148,7 +145,7 @@ export function SourceManager() {
 
   return (
     <Section
-      // 不写 title：这一块嵌在「系统 · 智能」的折叠层里，折叠头已经写着「情报源」，
+      // 不写 title：这一块嵌在「抓取与代理」折叠层里，折叠头已说明来意，
       // 内层再写一遍就是同屏两行一样的字（用户截图反馈过）
       hint={`${sources.length} 个 · 启停/测试/抓取`}
       action={
@@ -177,14 +174,12 @@ export function SourceManager() {
             <SourceRow
               key={s.id}
               s={s}
-              compact={compact}
               testing={testing === s.id}
               onFetch={() => void fetchNow(s)}
               onTest={() => void test(s)}
               onToggle={() => void toggleEnabled(s)}
               onEdit={() => openEdit(s)}
               onRemove={() => void remove(s)}
-              onMore={() => setActionFor(s)}
             />
           ))}
         </div>
@@ -200,15 +195,7 @@ export function SourceManager() {
       )}
 
       {/* 手机端单源操作：整行按钮摊不开，改为弹层集中承载 */}
-      <MobileActionDialog
-        source={actionFor}
-        onClose={() => setActionFor(null)}
-        onTest={(s) => void test(s)}
-        onToggle={(s) => void toggleEnabled(s)}
-        onEdit={openEdit}
-        onRemove={(s) => void remove(s)}
-      />
-
+      
       <SourceFormDialog
         open={open}
         onClose={() => setOpen(false)}

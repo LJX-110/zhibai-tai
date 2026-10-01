@@ -12,7 +12,7 @@
     <!-- 状态栏 / 标题栏配色。**必须与侧栏同色**，否则深色主题下会出现"顶部没铺满"的色带。
          这里写深色值（应用默认主题）只是占位：下面的预判脚本会**在首次绘制前**按真实主题改写它，
          React 接管后由 ThemeApplier 持续同步（单一事实源见 src/app/theme.ts）。 -->
-    <meta name="theme-color" content="#5c1f1a" />
+    <meta name="theme-color" content="#2e5a8c" />
     <!-- iOS：只靠 manifest 的 display:standalone，旧版安装后会带地址栏打开、不像 App；
          这三个 meta 是 iOS 的对应约定（全屏 / 主屏显示名 / 状态栏样式） -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -29,18 +29,22 @@
     <script>
       /* 启动页主题预判：底色必须在首屏绘制前定下来，否则「先按亮色画一遍、
          再被应用设置改暗」会闪一下白。主题存在 localStorage（zustand persist
-         的 yishu-workbench:settings），此处同步读出即可；读不到（首次访问）
-         时取与应用默认值一致的 dark，保证与主界面不冲突。 */
+         的 yishu-workbench:settings），此处同步读出即可。
+         **读不到（首次访问）时取 light** —— 与 `useSettingsStore` 的品牌默认值一致
+         （Step 5-3 §十九：浅色是品牌默认体验，深色是完整可用的第二主题）。 */
       ;(function () {
         var dark = true
         try {
           var raw = localStorage.getItem('yishu-workbench:settings')
-          var theme = raw ? (JSON.parse(raw).state || {}).theme : 'dark'
+          var theme = raw ? (JSON.parse(raw).state || {}).theme : 'light'
           dark =
             theme === 'dark' ||
             (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
         } catch (e) {
-          dark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          /* 存储读不出来（损坏 / 被清）时**回退到品牌默认 light**，而不是跟随系统偏好：
+             zustand persist 那边解析失败也会回落到默认值 light —— 两边必须同一口径，
+             否则会出现"启动屏黑、进去是白的"这种自相矛盾的闪动（2026-10-01 修）。 */
+          dark = false
         }
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
         /* 状态栏配色必须与 data-theme 同步改写：meta 里写死的那个值只适用于单一主题，
@@ -73,6 +77,11 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
+        /* ⚠️ 与 `tokens.css` 的 `--paper` **同值**（浅色 #ffffff / 深色 #000000）——
+           两者有色差，启动屏切进工作台时会看到一次整体变色。
+           这里必须硬编码：静态启动屏要在 CSS 加载**之前**就画出第一帧，
+           用 `var(--paper)` 会拿到未定义值 → 白屏一闪。
+           2026-10-01 起**全面移除纸白 #F3EDE0**（图标底、启动屏、太极白半圆统一纯白）。 */
         background: #ffffff;
         color: #21262d;
         transition: opacity 420ms cubic-bezier(0.2, 0, 0, 1);
@@ -86,14 +95,22 @@
         pointer-events: none;
       }
 
-      /* 太极统一为「蓝白」：浅色主题黛蓝 + 白，白半圆靠外圈细描边立住边界
-         （纯白画在白底上会消失）；深色主题改用亮阶黛蓝 + 近白，保证黑底上清晰。 */
+      /* 太极统一为「蓝白」：浅色主题黛蓝 + **纯白**（白半圆自带极细描边，见 .bm-b）；
+         深色主题改用亮阶黛蓝 + 近白，保证黑底上清晰。 */
       .boot-mark {
         width: clamp(64px, 17vw, 104px);
         height: clamp(64px, 17vw, 104px);
         --boot-a: #2e5a8c;
+        /* 「白半圆」用**纯白**（2026-09-30 用户拍板，此前是纸白 #F3EDE0）。
+           纯白与启动屏底色 #ffffff 同色 → 靠 `.bm-b` 的**极细黛蓝描边**立住边界
+           （否则太极会只剩一个 D 形；下白点也会消失）。 */
         --boot-b: #ffffff;
         --boot-ring: #2e5a8c;
+        /* 入场只做一次：淡入 + 轻微收拢。
+           ⚠️ 它与旋转**必须分层在两个元素上** —— 并列写在同一元素的 animation
+           列表里时，`transform` 会被后一个接管，实测连 `opacity` 也会卡在首帧
+           （诊断数据：opacity=0 / transform=matrix(0.9,…) 一直不动）。 */
+        animation: boot-mark-in 620ms cubic-bezier(0.2, 0, 0, 1) both;
       }
       html[data-theme='dark'] .boot-mark {
         --boot-a: #4f83bd;
@@ -103,17 +120,30 @@
       .boot-mark svg {
         width: 100%;
         height: 100%;
-        /* 太极常驻旋转：提升为合成层，主线程被数据加载占用时也不掉帧 */
+        /* 旋转与入场分层：本元素**只负责转**（3.6s/圈的匀速率，不做加速、不做脉冲）。
+           「转」是这条品牌线的既定语言（纯白底上一枚缓缓转动的太极），不是 loading 指示器。 */
         will-change: transform;
         transform-origin: 50% 50%;
         animation: boot-spin 3.6s linear infinite;
       }
+      @keyframes boot-mark-in {
+        from { opacity: 0; transform: scale(0.9); }
+        to { opacity: 1; transform: none; }
+      }
       .bm-a { fill: var(--boot-a); }
-      .bm-b { fill: var(--boot-b); }
+      /* 纯白半圆 + 极细描边：白底上保住形状（见 --boot-b 处注释）。
+         `-opacity` 而不是 `opacity`：只淡描边，不淡填充，免得整块发灰。 */
+      .bm-b {
+        fill: var(--boot-b);
+        stroke: var(--boot-a);
+        stroke-width: 0.8;
+        stroke-opacity: 0.6;
+      }
       .bm-ring {
         fill: none;
         stroke: var(--boot-ring);
-        stroke-width: 1.4;
+        /* 细环是"印"感的主要来源（白半圆自身另有 0.8px 描边）—— 保持 1.8 */
+        stroke-width: 1.8;
         opacity: 0.85;
       }
       @keyframes boot-spin {
@@ -122,10 +152,14 @@
 
       .boot-name {
         margin: 22px 0 0;
-        font-family: 'Ma Shan Zheng', serif;
+        /* 与 tokens.css 的 `--font-deco-stack` 同源。只写 `serif` 时，在缺中文字体的
+           环境（无头浏览器、部分 Android）会渲染成**空白** —— 启动屏就只剩一行小字。 */
+        font-family: 'Ma Shan Zheng', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
         font-size: clamp(20px, 5.4vw, 27px);
         letter-spacing: 0.34em;
         text-indent: 0.34em;
+        /* 印记落定之后名字才出现（延 280ms）：顺序即叙事 —— 先看见符号，再读到名字 */
+        animation: boot-rise 520ms cubic-bezier(0.2, 0, 0, 1) 280ms both;
       }
       .boot-poem {
         margin: 10px 0 0;
@@ -133,6 +167,13 @@
         letter-spacing: 0.22em;
         text-indent: 0.22em;
         opacity: 0.5;
+        animation: boot-rise 520ms cubic-bezier(0.2, 0, 0, 1) 420ms both;
+      }
+      /* `to` 里**不写 opacity**：缺失属性按元素自身计算值收尾 ——
+         于是 name（1）与 poem（0.5）能共用同一组关键帧，不必写两份 */
+      @keyframes boot-rise {
+        from { opacity: 0; transform: translateY(6px); }
+        to { transform: none; }
       }
 
       .boot-track {
@@ -181,8 +222,20 @@
         opacity: 0.55;
       }
 
+      /* React 接管后（BootScreen）**不重播入场**：那两段已经在静态屏演过一遍，
+         再演一次会看到"印记又一次淡入、名字又一次浮起"。
+         ⚠️ `svg` 不在这个列表里 —— 旋转是**持续态**，要继续转。 */
+      .boot[data-resumed='true'] .boot-mark,
+      .boot[data-resumed='true'] .boot-name,
+      .boot[data-resumed='true'] .boot-poem {
+        animation: none;
+      }
+
       @media (prefers-reduced-motion: reduce) {
+        .boot-mark,
         .boot-mark svg,
+        .boot-name,
+        .boot-poem,
         .boot-fill {
           animation: none;
         }

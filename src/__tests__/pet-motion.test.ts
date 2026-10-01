@@ -5,13 +5,16 @@
  * 而不是按整个 16:9 视频盒贴边 —— 否则宠物会"漫游出屏"再也看不见，
  * 而这类问题在开发时不容易发现（要点到手滑出去才察觉）。
  *
+ * ⚠️ Step 5-3E 起 `planMove` **只规划水平移动**（不再有 `cy` / `H` / `startYRatio`）——
+ * y 由运行时保持当前值（此前把"身体中心"比例当左上角用，宠物会一路往下漂）。
+ *
  * ⚠️ 角落定位（`anchorOf`）与夹回边界（`clampToBounds`）的用例**已随实现一起
  * 移到 `pet-geometry.test.ts`** —— 它们现在住在 `services/pet/geometry`。
  */
 import { describe, expect, it } from 'vitest'
 import { planMove } from '../services/pet/motion'
 
-const base = { cy: 300, W: 1000, H: 600, minDist: 100, maxDist: 100 }
+const base = { W: 1000, minDist: 100, maxDist: 100 }
 
 describe('planMove：目标越界返回 null', () => {
   it('朝左从最左出发必越界 → null（调用方据此回退为转向）', () => {
@@ -42,5 +45,11 @@ describe('planMove：目标越界返回 null', () => {
     expect(tight).toBeNull()
     expect(loose).not.toBeNull()
     expect(loose!.targetRatio).toBeCloseTo(0.08)
+  })
+
+  it('**只产出水平移动**：结果里没有 y 相关字段（y 由运行时保持当前值）', () => {
+    const r = planMove({ ...base, cx: 500, dir: 1, margin: 20, halfW: 80, sideAllow: 28 })
+    expect(r).not.toBeNull()
+    expect(Object.keys(r!).sort()).toEqual(['startRatio', 'targetRatio', 'totalRatio'])
   })
 })

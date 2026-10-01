@@ -43,10 +43,13 @@ export function Calendar({ month, onMonthChange, marks, onSelectDate, selected }
           {Number(month.slice(5))} 月 · {month.slice(0, 4)}
         </span>
         <div className="flex gap-1">
-          <button className="rounded-control p-1 text-ink-muted hover:bg-nested" onClick={() => shift(-1)} aria-label="上月">
+          {/* 触控目标 44px（Step 5-2）：这两个箭头只有 15px 图标 + 4px 内边距 ≈ 23px，
+              手机上极容易点空或点错月份；它们在页头右侧自成一组、不与任何文字争宽，
+              所以补 `touch-target` 是纯收益（同排没有会被挤压的元素）。 */}
+          <button className="touch-target rounded-control p-1 text-ink-muted hover:bg-nested" onClick={() => shift(-1)} aria-label="上月">
             <ChevronLeft size={15} />
           </button>
-          <button className="rounded-control p-1 text-ink-muted hover:bg-nested" onClick={() => shift(1)} aria-label="下月">
+          <button className="touch-target rounded-control p-1 text-ink-muted hover:bg-nested" onClick={() => shift(1)} aria-label="下月">
             <ChevronRight size={15} />
           </button>
         </div>

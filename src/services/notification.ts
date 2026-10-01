@@ -178,52 +178,213 @@ export function isQuietNow(from: string, to: string, now = new Date()): boolean 
 }
 
 /**
- * 通知历史 —— toast 2.6 秒就消失，错过的提醒此前完全无痕。
- * 每次弹 toast 时顺手记一条；存 localStorage 而不进业务表：
- * 这是本机当下的提醒流水，不是需要跨设备同步的数据。
+ * 通知历史（**应用内通知**的唯一存储）—— toast 2.6 秒就消失，错过的提醒此前完全无痕。
+ * 每次投递顺手记一条；存 localStorage 而不进业务表：
+ * 这是本机当下的通知流水，不是需要跨设备同步的数据。
  *
  * ⚠️ `source` 必填于**投递管线**（`components/notification/deliver.ts`），
  * 操作回执（"待办已保存"）走默认的 `'app'` —— 两类混在一起的话
- * 「最近通知」会退化成操作日志，翻不到真正错过的提醒。
+ * 通知中心会退化成操作日志，翻不到真正错过的提醒。
+ *
+ * ## 与 Toast 的分工（Step 5-3C 定稿）
+ * ```
+ * 事件发生 → Notification Service ┬─ 持久通知（本文件，可查看/已读/追踪）
+ *                                └─ Toast 即时反馈（2.6s 后消失）
+ * ```
+ * 两者**不是**两套业务逻辑：投递管线（`deliver.ts`）是唯一出口，它既落通知也弹 toast。
+ * 不值得留档的即时反馈（"已复制"）只走 toast，不落到这里。
  */
 const HISTORY_KEY = 'zbt:notice-history:v1'
 const HISTORY_MAX = 50
 
+/** 同类合并窗口：同源 + 同文案在此期间内重复出现 → 合并为一条并累加次数 */
+const MERGE_WINDOW_MS = 5 * 60 * 1000
+/** 过期清理：超过这个天数的通知由 `pruneNotices` 移除 */
+const NOTICE_MAX_AGE_DAYS = 30
+
+/** 列表左侧色点用的严重度（与 ToastTone 同义，但这里持久化，故单独命名避免循环依赖） */
+export type NoticeTone = 'info' | 'success' | 'danger'
+
 export interface NoticeRecord {
   id: string
   message: string
-  /** 带跳转目标时一并存下，历史里能直达对应板块 */
+  /** 可选标题（提醒类由投递管线给；回执类只有 message） */
+  title?: string
+  /** 带跳转目标时一并存下，列表里能直达对应板块 */
   hash?: string
   /** 归属（提醒源 / `'app'` 操作回执）；老记录没有这个字段，按 `'app'` 显示 */
   source?: NoticeSourceKey
   at: string
+  /** 是否已读。⚠️ 老记录（v1）没有这个字段 —— 迁移时**按已读**处理 */
+  read: boolean
+  /** 严重度 → 色点；老记录按 `info` */
+  tone?: NoticeTone
+  /** 同源同文案合并时的累计次数（≥2 时列表显示 ×N） */
+  count?: number
 }
 
+/**
+ * 老记录字段补齐 —— **必须把缺 `read` 的当成已读**：
+ * 通知一旦引入"未读"概念，历史里那几十条旧提醒若默认未读，
+ * 用户升级后第一次打开就会看到一个爆炸的未读角标，而它们早就过去了。
+ */
+function normalize(list: NoticeRecord[]): NoticeRecord[] {
+  return list.map((n) => ({
+    ...n,
+    read: typeof n.read === 'boolean' ? n.read : true,
+    tone: n.tone ?? 'info',
+    count: typeof n.count === 'number' && n.count > 0 ? n.count : 1,
+  }))
+}
+
+function save(list: NoticeRecord[]): void {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, HISTORY_MAX)))
+  } catch {
+    /* 存储满 / 隐私模式写不进去时放弃记账，不影响提醒本身 */
+  }
+  // `save` 是**唯一写入口**（记录 / 已读 / 删除 / 清理都经它）——
+  // 订阅的触发点因此只在这一处：不会漏（新通知不亮角标）也不会重复
+  emit()
+}
+
+/**
+ * 变更订阅（Step 5-3D）：未读角标要跨组件更新，而通知此前只有"读一次"的 API。
+ * 订阅者拿到的是"列表变了"这一事实，值本身仍走 `unreadNoticeCountCached`。
+ */
+const listeners = new Set<() => void>()
+/** 未读数缓存：`useSyncExternalStore` 需要 getSnapshot 在未变化时返回同值 */
+let unreadCache: number | null = null
+
+function emit(): void {
+  unreadCache = null
+  for (const fn of listeners) fn()
+}
+
+export function subscribeNotices(fn: () => void): () => void {
+  listeners.add(fn)
+  return () => {
+    listeners.delete(fn)
+  }
+}
+
+/** 未读数（带缓存）—— 供 `useSyncExternalStore` 与任何非 React 消费者使用 */
+export function unreadNoticeCountCached(): number {
+  if (unreadCache === null) unreadCache = unreadNoticeCount()
+  return unreadCache
+}
+
+/** 全部通知，**最新在前** */
 export function listNoticeHistory(): NoticeRecord[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
     const parsed = raw ? JSON.parse(raw) : null
-    if (Array.isArray(parsed)) return parsed as NoticeRecord[]
+    if (Array.isArray(parsed)) return normalize(parsed as NoticeRecord[])
   } catch {
     /* 存档损坏按空历史处理 */
   }
   return []
 }
 
+/** 未读数（纯函数，可传已取到的列表避免重复读盘） */
+export function unreadNoticeCount(list: NoticeRecord[] = listNoticeHistory()): number {
+  return list.reduce((sum, n) => sum + (n.read ? 0 : 1), 0)
+}
+
+export interface RecordNoticeOptions {
+  /** 提醒类的标题（回执类不用） */
+  title?: string
+  /** 严重度 → 色点 */
+  tone?: NoticeTone
+  /** 跳过去重合并，强制新增一条 */
+  noMerge?: boolean
+}
+
+/**
+ * 记一条通知。
+ *
+ * **去重合并**（继承 B2 的 Toast 思路）：同一个源 + 同一句文案在 5 分钟内反复出现，
+ * 不再堆一条新的，而是把原条**提到最前**、刷新时间、累加次数、重置为未读。
+ * 否则"同步失败"连发四次就会把通知中心刷成同一句话的四行。
+ */
 export function recordNotice(
   message: string,
   hash?: string,
   source: NoticeSourceKey = 'app',
+  options: RecordNoticeOptions = {},
 ): void {
-  try {
-    const next: NoticeRecord[] = [
-      { id: createId(), message, hash, source, at: new Date().toISOString() },
-      ...listNoticeHistory(),
-    ].slice(0, HISTORY_MAX)
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
-  } catch {
-    /* 存储满 / 隐私模式写不进去时放弃记账，不影响提醒本身 */
+  const list = listNoticeHistory()
+  const at = new Date().toISOString()
+  if (!options.noMerge) {
+    const now = Date.now()
+    const idx = list.findIndex(
+      (n) =>
+        n.message === message &&
+        (n.source ?? 'app') === source &&
+        now - new Date(n.at).getTime() <= MERGE_WINDOW_MS,
+    )
+    if (idx >= 0) {
+      const hit = list[idx]
+      const merged: NoticeRecord = {
+        ...hit,
+        at,
+        read: false,
+        count: (hit.count ?? 1) + 1,
+        hash: hash ?? hit.hash,
+        title: options.title ?? hit.title,
+        tone: options.tone ?? hit.tone,
+      }
+      save([merged, ...list.filter((_, i) => i !== idx)])
+      return
+    }
   }
+  const rec: NoticeRecord = {
+    id: createId(),
+    message,
+    title: options.title,
+    hash,
+    source,
+    at,
+    read: false,
+    tone: options.tone ?? 'info',
+    count: 1,
+  }
+  save([rec, ...list])
+}
+
+/** 单条标记已读 */
+export function markNoticeRead(id: string): void {
+  const list = listNoticeHistory()
+  if (!list.some((n) => n.id === id && !n.read)) return
+  save(list.map((n) => (n.id === id ? { ...n, read: true } : n)))
+}
+
+/** 全部标记已读 */
+export function markAllNoticesRead(): void {
+  const list = listNoticeHistory()
+  if (!list.some((n) => !n.read)) return
+  save(list.map((n) => ({ ...n, read: true })))
+}
+
+/** 删掉单条（回执类常见：看过了就不必留） */
+export function dismissNotice(id: string): void {
+  save(listNoticeHistory().filter((n) => n.id !== id))
+}
+
+/**
+ * 清理过期通知（默认 30 天）。返回清掉的条数。
+ * 容量上限（50 条）是"防爆"，这里是"按时间退役" —— 两者互补。
+ */
+export function pruneNotices(now = Date.now(), maxAgeDays = NOTICE_MAX_AGE_DAYS): number {
+  const list = listNoticeHistory()
+  const cutoff = now - maxAgeDays * 864e5
+  const kept = list.filter((n) => {
+    const t = new Date(n.at).getTime()
+    return Number.isFinite(t) ? t >= cutoff : false
+  })
+  const removed = list.length - kept.length
+  if (removed > 0) save(kept)
+  return removed
 }
 
 export function clearNoticeHistory(): void {
@@ -232,4 +393,5 @@ export function clearNoticeHistory(): void {
   } catch {
     /* 同上：清不掉也不影响使用 */
   }
+  emit()
 }

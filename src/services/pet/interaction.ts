@@ -11,9 +11,14 @@
  *  · **点击**：按下后几乎没动就抬起 → 播点击回应
  *  · **长按**：按下后**原地**停够 500ms → 唤起菜单（移动端没有右键）
  *  · **拖拽**：按下后移动超过阈值 → 取消长按，跟手拖动
+ *
+ * ## Step 4-2：松手后**不再甩抛**
+ * 旧版松手会按最近位移把宠物扔出去（重力 + 反弹 + 摩擦，最终必然落到底部）。
+ * 规格 §B2 要求"位置是用户设定的，桌宠不能自己改"，所以现在三种结局
+ * （点击 / 系统取消 / 真拖拽）**动作完全相同：就地停下**。差别只剩一处 ——
+ * 真拖拽要抑制随后浏览器补发的那次 click（`isDragSession`）。
+ * `throwVelocity` / `integrate` / `resolveDragEnd` 已随重力一起移除，见 `备份/2026-09-Step4/`。
  */
-import { throwVelocity } from './physics'
-
 /** 判定"这是一次拖拽而不是点击"的位移阈值（px） */
 export const DRAG_THRESHOLD = 4
 /** 长按多久算"唤起菜单" */
@@ -35,31 +40,7 @@ export function shouldCancelLongPress(
   return Math.abs(to.x - from.x) + Math.abs(to.y - from.y) > LONG_PRESS_SLOP
 }
 
-/** 一次指针会话的收尾结果 */
-export type DragEndOutcome =
-  /** 没超过阈值 → 当作点击：**绝不产生甩动** */
-  | { kind: 'click' }
-  /** 被系统取消（来电 / 手势中断）→ 原地停下，交还状态机 */
-  | { kind: 'cancel' }
-  /** 真拖拽松手 → 按最近位移甩出去 */
-  | { kind: 'throw'; vx: number; vy: number }
-
-/**
- * 松手时该做什么 —— **只有真拖拽才计算并执行甩抛**。
- *
- * ⚠️ 曾经的写法是不论 `moved` 一律算速度再抛：指针抖动 1px / 16ms ≈ 62px/s，
- * 远超静止阈值（12px/s），于是**轻点一下宠物它就滑走一小段**。
- * 用户不会认为那是"惯性"，只会觉得"它自己乱动"。
- */
-export function resolveDragEnd(o: {
-  moved: boolean
-  cancelled: boolean
-  samples: readonly { t: number; x: number; y: number }[]
-  now: number
-  throwPower: number
-}): DragEndOutcome {
-  if (o.cancelled) return { kind: 'cancel' }
-  if (!o.moved) return { kind: 'click' }
-  const { vx, vy } = throwVelocity(o.samples, o.now, o.throwPower)
-  return { kind: 'throw', vx, vy }
+/** 一次指针会话的收尾：**三种结局动作相同**（都是"就地停下"），只有是否抑制 click 不同 */
+export function isDragSession(moved: boolean, cancelled: boolean): boolean {
+  return moved && !cancelled
 }

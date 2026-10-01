@@ -3,9 +3,9 @@
  * 每个源分别给出「坏在哪一步」+ 单源重试入口。
  * 只报「N 个源失败」等于把用户留在原地 —— 他能做的判断只有「再点一次」。
  */
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle } from 'lucide-react'
 import { KIND_LABEL } from '../../services/intelligence/errors'
-import { cn } from '../../utils/cn'
+import { Loading } from '../../components/ui/Loading'
 import type { FetchReport } from './shared'
 
 export function FetchReportPanel({
@@ -53,7 +53,7 @@ export function FetchReportPanel({
                 disabled={retryingId === f.sourceId}
                 className="ml-auto shrink-0 rounded-control px-1.5 py-0.5 text-xs text-teal transition-colors hover:bg-teal/10 disabled:text-ink-faint"
               >
-                <RefreshCw size={11} className={cn('mr-0.5 inline', retryingId === f.sourceId && 'animate-spin')} />
+                <Loading size={11} spinning={retryingId === f.sourceId} className="mr-0.5 inline" />
                 {retryingId === f.sourceId ? '重试中' : '重试'}
               </button>
             )}
@@ -71,7 +71,7 @@ export function FetchReportPanel({
       )}
       {report.failures.some((f) => f.kind === 'config' || f.kind === 'cors') && (
         <p className="mt-2 border-t border-cinnabar/20 pt-1.5 text-xs leading-relaxed text-bronze">
-          其中的中文源不放 CORS 头，浏览器无法直连：在「系统 · 情报源 · 自建代理」填入转发地址即可
+          其中的中文源不放 CORS 头，浏览器无法直连：在「系统 · 数据 · 抓取与代理」填入转发地址即可
           （部署说明见仓库 proxy/）
         </p>
       )}

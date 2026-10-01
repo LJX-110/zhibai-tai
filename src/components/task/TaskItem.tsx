@@ -84,6 +84,8 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
               )}
             >
               {friendlyDate(task.dueDate)}
+              {/* 时刻（可选）：填了才显示 —— 让"有坐标"的待办与课程在同一时间轴上可读 */}
+              {task.dueTime ? ` ${task.dueTime}` : ''}
               {overdue && '（逾期）'}
             </span>
           )}
@@ -151,7 +153,7 @@ export function TaskItem({ task, onToggle, onEdit, onDelete, highlight }: TaskIt
       {stamp && (
         <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <span className="seal-stamp flex items-center gap-2 rounded-tile bg-paper/85 px-3 py-1.5 shadow-float">
-            <Seal size={22} char="异" tone="cinnabar" />
+            <Seal size={20} char="异" tone="cinnabar" />
             <span className="scribal text-sm text-cinnabar">事毕</span>
           </span>
         </span>

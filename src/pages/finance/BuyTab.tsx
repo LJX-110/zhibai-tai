@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 财 · BuyTab（从 FinancePage 拆出，见 docs/编码规范.md 路线图第 4 步）
  */
 /**
@@ -31,7 +31,7 @@ import { Seal } from '../../components/ui/Seal'
 import { parseAmountAllowZero } from '../../utils/validate'
 import { cn } from '../../utils/cn'
 import { SummaryCell } from './shared'
-import { money } from './summary'
+import { money } from '../../utils/money'
 
 import {
   Badge,

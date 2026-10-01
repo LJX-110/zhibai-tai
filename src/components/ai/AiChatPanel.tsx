@@ -5,56 +5,35 @@
  * 项目摘要 / 总结情报 / 解卦）收编为「快捷能力」，既可直接自由对话，也可一键
  * 点能力卡片，由天机自动携带本机数据（任务 / 课程 / 情报 / 收支）生成结果。
  *
- * 远程未就绪时回退本地规则概述（不假装智能）；远程就绪则完整问答。
+ * ## 本文件只管"怎么画"
+ * 会话怎么进行（发问 / 工具确认 / 续跑 / 落库 / 换新）全在 `use-tianji-chat.ts`；
+ * 这里留下的是**面板自己的事**：开关与 Esc、滚动跟随、区块组合。
+ * 这样分家的直接原因：Step 4-3 给会话加了确认门之后，两者合在一起会顶破
+ * 单文件 400 行的上限，而它们本来就不是同一种职责。
  *
- * 拆分说明（2026-09-20 路线图第 4 步）：本文件只保留「组件状态 + 副作用 +
- * 会话动作 + 区块组合」。协议、提问链路、快捷能力、历史存档、开关 store、
- * 头部 / 消息流 / 输入区各在 ./ 下自成文件（见各文件头部注释）。
+ * 远程未就绪时回退本地规则概述（不假装智能）；远程就绪则完整问答。
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { getAiRemoteHealth, subscribeAiRemoteHealth } from '../../services/ai/health'
 import { useSettingsStore } from '../../stores/useSettingsStore'
-import { withStreamSink } from '../../services/ai/stream-sink'
-import { createStreamAssembler } from '../../services/ai/stream-assembly'
-import { playSound } from '../../services/sound'
-import { useTodayStats } from '../../hooks/useTodayStats'
-import { createId } from '../../utils/id'
 import { cn } from '../../utils/cn'
 import { hasActiveOverlay } from '../ui/overlay'
-import { useToastStore } from '../ui/toast-store'
 import { useAIChatStore } from './chat-store'
-import { actionSpecs } from './plugins'
-import { loadHistory, saveHistory, type ChatMessage } from './chat-history'
-import { ask } from './tianji-ask'
-import { TIANJI_CAPABILITIES, runTianjiCapability, type TianjiCapabilityKey } from './tianji-capability'
-import { parseTianjiActions, type TianjiActionPayload } from './action-protocol'
-import { applyTianjiAction } from './action-runner'
-import { actionTitle } from './action-text'
+import { useTianjiChat } from './use-tianji-chat'
 import { ChatHeader } from './ChatHeader'
 import { MessageStream } from './MessageStream'
 import { ChatInput } from './ChatInput'
+import { AgentProgress } from './AgentProgress'
 
 export function AiChatPanel() {
   const open = useAIChatStore((s) => s.open)
   const setOpen = useAIChatStore((s) => s.setOpen)
-  // 天机 = 内置小 agent：打开即恢复上次会话（本地存档），不再每次清空
-  const [messages, setMessages] = useState<ChatMessage[]>(loadHistory)
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  /** 正在流式生成的文本（边收边显示；完成时并入 messages） */
-  const [streamText, setStreamText] = useState('')
-  /** 每条 AI 消息提议的动作（按消息下标索引；只在回答收齐后写入，刷新后不恢复） */
-  const [pendingActions, setPendingActions] = useState<Record<number, TianjiActionPayload[]>>({})
-  /** 已处理的动作：`done`=已确认落库，`skip`=已忽略（隐藏卡片，避免重复写入） */
-  const [resolved, setResolved] = useState<Record<string, 'done' | 'skip'>>({})
-  const abortRef = useRef<AbortController | null>(null)
-  const flushRef = useRef<number | undefined>(undefined)
+  const chat = useTianjiChat()
   const listRef = useRef<HTMLDivElement>(null)
   /** 是否"贴着底部"：流式增量不断把气泡撑长，只有本来就在底部才跟随滚动，
    *  用户上滑回看前文时不抢滚动位置（否则长回答会被一直拽回结尾） */
   const stickToBottom = useRef(true)
-  const stats = useTodayStats()
 
   useEffect(() => {
     if (!open) return
@@ -65,31 +44,19 @@ export function AiChatPanel() {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, setOpen])
 
-  // 消息变化即持久化（多轮上下文 + 跨打开保留的依据）
-  useEffect(() => {
-    saveHistory(messages)
-  }, [messages])
-
   useEffect(() => {
     // 空会话时消息区放的是看板，从头读起；此时贴底会把看板顶出视野
-    if (messages.length === 0) return
+    if (chat.messages.length === 0) return
     // 主动发言/收到回答后必然想看最新一条，重新贴底（之后由用户滚动决定是否继续跟随）
     stickToBottom.current = true
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [messages])
-
-  /** 记录用户是否滚到底部（供流式跟随判断） */
-  const onListScroll = () => {
-    const el = listRef.current
-    if (!el) return
-    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
-  }
+  }, [chat.messages])
 
   useEffect(() => {
-    if (!streamText || !stickToBottom.current) return
+    if (!chat.streamText || !stickToBottom.current) return
     const el = listRef.current
     el?.scrollTo({ top: el.scrollHeight })
-  }, [streamText])
+  }, [chat.streamText])
 
   /**
    * 远程状态 —— 三态而非布尔（未配置 / 就绪 / **降级**）。
@@ -100,141 +67,11 @@ export function AiChatPanel() {
   /** 当前远程模型：订阅式取值，设置页改了模型后头部显示同步更新 */
   const aiModel = useSettingsStore((s) => s.aiModel)
 
-  const send = async (text?: string) => {
-    const q = (text ?? input).trim()
-    if (!q || busy) return
-    if (!text) setInput('')
-    setMessages((m) => [...m, { id: createId(), role: 'user', content: q }])
-    setBusy(true)
-    setStreamText('')
-    // 装配器：预览与最终结果共用同一个累加器，一致性是构造出来的（见 stream-assembly.ts）
-    const asm = createStreamAssembler()
-    const ctrl = new AbortController()
-    abortRef.current = ctrl
-    let truncated = false
-    try {
-      const answer = await ask(q, messages, {
-        signal: ctrl.signal,
-        onToken: (delta) => {
-          asm.push(delta)
-          // 节流 60ms：长回答逐 token setState 会触发数百次渲染
-          if (flushRef.current === undefined) {
-            flushRef.current = window.setTimeout(() => {
-              flushRef.current = undefined
-              setStreamText(asm.text())
-            }, 60)
-          }
-        },
-        onFinish: (info) => {
-          truncated = info.reason === 'length'
-        },
-      })
-      // 回答收齐后再解析动作：流式过程中的增量 JSON 不完整、不可校验，绝不中途解析
-      // 规格表来自插件注册表 —— 协议本身不认识任何具体动作
-      const proposed = parseTianjiActions(answer, actionSpecs())
-      if (proposed.length > 0) {
-        const aiIndex = messages.length + 1
-        setPendingActions((p) => ({ ...p, [aiIndex]: proposed }))
-      }
-      // 被截断必须说出来，否则用户会把"写到一半就停"当成回答自然结束
-      const content = truncated ? `${answer}\n\n（回答超出长度上限被截断，可让我"接着说"）` : answer
-      setMessages((m) => [...m, { id: createId(), role: 'ai', content }])
-      // 回答到货提示一声：长回答要等十几秒，人往往已经切去别的板块，
-      // 没有声音就只能一直盯着 —— 这是 tap 族"轻通知"的标准场景
-      playSound('notification')
-    } catch {
-      setMessages((m) => [
-        ...m,
-        {
-          id: createId(),
-          role: 'ai',
-          content: ctrl.signal.aborted ? '（已中止）' : '天机暂时没有回应，请稍后再试。',
-        },
-      ])
-    } finally {
-      window.clearTimeout(flushRef.current)
-      flushRef.current = undefined
-      abortRef.current = null
-      setStreamText('')
-      setBusy(false)
-    }
-  }
-
-  /** 新对话：清空当前会话（连同本地存档），回到看板 */
-  const newChat = () => {
-    saveHistory([])
-    setMessages([])
-    setInput('')
-    setPendingActions({})
-    setResolved({})
-  }
-
-  /** 用户点「确认」才真正落库；成功后置为 done 显示已加入，失败则由 store 内部已提示错误 */
-  const confirmAction = async (i: number, j: number, a: TianjiActionPayload) => {
-    const ok = await applyTianjiAction(a)
-    setResolved((r) => ({ ...r, [`${i}-${j}`]: ok ? 'done' : 'skip' }))
-    if (ok) {
-      const label = a.action === 'create_task' ? '待办' : a.action === 'create_note' ? '笔记' : '收支'
-      useToastStore.getState().push(`已加入${label}：${actionTitle(a)}`, 'success')
-    }
-  }
-
-  /** 用户点「忽略」：丢弃该提议，不写入任何数据 */
-  const skipAction = (i: number, j: number) => {
-    setResolved((r) => ({ ...r, [`${i}-${j}`]: 'skip' }))
-  }
-
-  /**
-   * 快捷能力：以「能力名 + 结果」的对话形式入流。
-   *
-   * 与自由问答共用同一条流式通道（withStreamSink + 同一个装配器 + 同一个预览区），
-   * 所以能力卡片现在也是边生成边显示 —— 这是此前"点了等一次性出"的四张卡片。
-   * 增量与最终值同源（stream-assembly.ts），不存在"预览与定稿不一致"的可能。
-   */
-  const runCap = async (key: TianjiCapabilityKey) => {
-    if (busy) return
-    const cap = TIANJI_CAPABILITIES.find((c) => c.key === key)
-    if (!cap) return
-    setMessages((m) => [...m, { id: createId(), role: 'user', content: `${cap.label}（天机一键运行）` }])
-    setBusy(true)
-    setStreamText('')
-    const asm = createStreamAssembler()
-    const ctrl = new AbortController()
-    abortRef.current = ctrl
-    let flush: number | undefined
-    try {
-      const { title, body } = await withStreamSink(
-        {
-          onDelta: (delta) => {
-            asm.push(delta)
-            if (flush === undefined) {
-              flush = window.setTimeout(() => {
-                flush = undefined
-                setStreamText(asm.text())
-              }, 60)
-            }
-          },
-          signal: ctrl.signal,
-        },
-        () => runTianjiCapability(key, stats),
-      )
-      setMessages((m) => [...m, { id: createId(), role: 'ai', content: `【${title}】\n\n${body}` }])
-      playSound('notification')
-    } catch {
-      setMessages((m) => [
-        ...m,
-        {
-          id: createId(),
-          role: 'ai',
-          content: ctrl.signal.aborted ? '（已中止）' : `${cap.label} 生成失败，请检查远程 AI 配置后重试。`,
-        },
-      ])
-    } finally {
-      window.clearTimeout(flush)
-      abortRef.current = null
-      setStreamText('')
-      setBusy(false)
-    }
+  /** 记录用户是否滚到底部（供流式跟随判断） */
+  const onListScroll = () => {
+    const el = listRef.current
+    if (!el) return
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
   }
 
   if (!open) return null
@@ -252,12 +89,7 @@ export function AiChatPanel() {
           'md:my-auto md:mx-auto md:h-[min(72vh,640px)] md:max-w-xl md:rounded-sheet md:border md:border-line',
         )}
       >
-        <ChatHeader
-          remote={remote}
-          model={aiModel}
-          onNewChat={newChat}
-          onClose={() => setOpen(false)}
-        />
+        <ChatHeader remote={remote} model={aiModel} onNewChat={chat.newChat} onClose={() => setOpen(false)} />
 
         {/* 消息流 —— space-y-2.5 管段内节奏，轮次之间靠用户气泡的 mt-2 拉开层级：
             全程等距会让"我的问题"和"天机的回答"糊成一片 */}
@@ -267,29 +99,31 @@ export function AiChatPanel() {
           className="flex-1 space-y-2.5 overscroll-contain overflow-y-auto px-4 py-3"
         >
           <MessageStream
-            messages={messages}
-            pendingActions={pendingActions}
-            resolved={resolved}
-            streamText={streamText}
-            busy={busy}
-            stats={stats}
+            messages={chat.messages}
+            pendingActions={chat.pendingActions}
+            resolved={chat.resolved}
+            streamText={chat.streamText}
+            busy={chat.busy}
+            stats={chat.stats}
             remote={remote}
-            onConfirm={(i, j, a) => void confirmAction(i, j, a)}
-            onSkip={skipAction}
-            onPick={(q) => {
-              setInput(q)
-              void send(q)
-            }}
-            onRunCap={(key) => void runCap(key)}
+            onConfirm={chat.confirmAction}
+            onSkip={chat.skipAction}
+            onRunCap={chat.runCap}
+            proposal={chat.proposal}
+            onConfirmProposal={chat.confirmProposal}
+            onCancelProposal={chat.cancelProposal}
           />
         </div>
 
+        {/* 真实的 Agent 进度（理解任务 → 查待办 → 完成；默认只显示当前一步） */}
+        <AgentProgress />
+
         <ChatInput
-          input={input}
-          onInput={setInput}
-          onSend={() => void send()}
-          onStop={() => abortRef.current?.abort()}
-          busy={busy}
+          input={chat.input}
+          onInput={chat.setInput}
+          onSend={() => chat.send()}
+          onStop={chat.stop}
+          busy={chat.busy}
           remote={remote}
         />
       </div>

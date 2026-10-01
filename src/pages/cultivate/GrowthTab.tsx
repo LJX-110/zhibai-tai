@@ -17,24 +17,15 @@
  * 闭关 = 认领一件实事的专注（复用番茄钟），完成才结算额外功行。
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { seclusionReward, type CultivationGrade } from '../../services/cultivation'
+import { seclusionReward } from '../../services/cultivation'
 import { REALM_STEPS } from '../../services/merit'
 import { useCultivation } from '../../hooks/useCultivation'
 import { usePomodoroTimerStore } from '../../stores/usePomodoroTimerStore'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { playSound } from '../../services/sound'
-import { Button, Ring, Section, Select, useToast } from '../../components/ui'
-import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
+import { Button, Input, Ring, Section, useToast } from '../../components/ui'
+import { effectiveDone, liveFixedTasks } from '../../utils/id'
 import { cn } from '../../utils/cn'
-
-/** 今日炁象的阶位取色（罗盘用，与境界无关） */
-const GRADE_CLASS: Record<CultivationGrade['tone'], string> = {
-  plain: 'border-ink-muted text-ink-muted',
-  qing: 'border-skill-qing text-skill-qing',
-  teal: 'border-teal text-teal',
-  bronze: 'border-bronze text-bronze',
-  cinnabar: 'border-cinnabar text-cinnabar',
-}
 
 /**
  * 境界铭牌取色：按阶次递进（越上越重）。
@@ -59,7 +50,7 @@ function countdown(sec: number): string {
 }
 
 export function GrowthTab() {
-  const { result, grade, merit, realm, progress, today, seclusionCount } = useCultivation()
+  const { result, merit, realm, progress, today, seclusionCount } = useCultivation()
   const tasks = useTaskStore((s) => s.items)
   const toast = useToast().toast
 
@@ -68,21 +59,34 @@ export function GrowthTab() {
   const assocId = usePomodoroTimerStore((s) => s.assocId)
   const seconds = usePomodoroTimerStore((s) => s.seconds)
   const running = usePomodoroTimerStore((s) => s.running)
-  const setAssoc = usePomodoroTimerStore((s) => s.setAssoc)
   const setMode = usePomodoroTimerStore((s) => s.setMode)
   const startTimer = usePomodoroTimerStore((s) => s.start)
   const resetTimer = usePomodoroTimerStore((s) => s.reset)
+  /** 闭关内容改成**自由输入**（Step 5-3C）：不再只能从待办里认领 */
+  const setAssocLabel = usePomodoroTimerStore((s) => s.setAssocLabel)
+  const assocLabel = usePomodoroTimerStore((s) => s.assocLabel)
 
-  const [pickId, setPickId] = useState('')
-  const inSeclusion = running && assoc === 'task'
-  /** 可认领的实事：本期未完成的待办（含今日到期），最多取 20 条免得下拉过长。
-   *  先取在世记录再按「本期」判完成 —— 否则昨天做完的每日固定今天认领不了，
-   *  已隐藏的历史副本也会混进下拉。 */
+  /** 本地草稿：**入关那一刻**才写进 timer store —— 打字途中就写会让"正在闭关的内容"跟着改 */
+  const [content, setContent] = useState('')
+  // 判据含 `assocLabel`（已入关的自由输入内容）：自由输入的一次专注同样算闭关
+  const inSeclusion = running && (assoc === 'task' || !!assocLabel)
+  /** 待办候选：只作输入框的**建议**（datalist），不限定能写什么 */
   const candidates = useMemo(
     () => liveFixedTasks(tasks).filter((t) => !effectiveDone(t)).slice(0, 20),
     [tasks],
   )
   const liveTask = tasks.find((t) => t.id === assocId)
+  /** 闭关中显示什么：自由输入优先，其次才回落到关联待办的标题 */
+  const seclusionText = assocLabel || liveTask?.title || '未命名'
+
+  const startSeclusion = () => {
+    const text = content.trim()
+    if (!text) return
+    setAssocLabel(text)
+    setMode('focus')
+    startTimer()
+    toast('已入关 · 专注完成即结算功行', 'success')
+  }
 
   // 升阶反馈：境界升阶是最值得庆祝的（持续累积的成果）
   const prevRealmRef = useRef<string | null>(null)
@@ -155,10 +159,9 @@ export function GrowthTab() {
             </span>
           ))}
         </div>
-        {/* 纯说明，移动端不占首屏 */}
+        {/* 只留"限制"这一类信息（Microcopy 规范 §10：状态 / 代价 / 来源 / 限制） */}
         <p className="mt-2 hidden text-xs text-ink-faint md:block">
-          九板块里任何一件有意义的动作都会记功行；每板块每日上限 8 功，避免重复刷分。
-          观是汇总视图，不单独记功。
+          每板块每日上限 8 功；观不记功。
         </p>
       </Section>
 
@@ -168,7 +171,7 @@ export function GrowthTab() {
           <div className="flex items-center gap-3">
             <span className="tabular text-2xl font-semibold text-ink">{countdown(seconds)}</span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-ink">闭关中 · {liveTask?.title ?? '未命名'}</p>
+              <p className="truncate text-sm text-ink">闭关中 · {seclusionText}</p>
               <p className="text-xs text-ink-faint">完成即结算 {seclusionReward(seconds / 60)} 功行</p>
             </div>
             <Button size="sm" variant="tertiary" onClick={resetTimer}>
@@ -178,36 +181,30 @@ export function GrowthTab() {
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={pickId}
-                onChange={(e) => setPickId(e.target.value)}
-                className="!w-auto !py-1.5 text-sm"
-                aria-label="认领实事"
-              >
-                <option value="">认领一件今日实事…</option>
-                {candidates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.dueDate === todayISO() ? '今日 · ' : ''}
-                    {t.title}
-                  </option>
-                ))}
-              </Select>
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={!pickId}
-                onClick={() => {
-                  setMode('focus')
-                  setAssoc('task', pickId)
-                  startTimer()
-                  toast('已入关，专注完成即结算功行', 'success')
+              {/* 自由输入：闭关是"我要做成什么事"，不是从别人给的清单里挑一件。
+                  待办标题只作 datalist 建议 —— 写"练两小时 Python"这种没有待办的事也可以。 */}
+              <Input
+                list="seclusion-candidates"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="本次闭关要完成的事"
+                className="min-w-[12rem] flex-1"
+                aria-label="闭关内容"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') startSeclusion()
                 }}
-              >
+              />
+              <datalist id="seclusion-candidates">
+                {candidates.map((t) => (
+                  <option key={t.id} value={t.title} />
+                ))}
+              </datalist>
+              <Button size="sm" variant="primary" disabled={!content.trim()} onClick={startSeclusion}>
                 入关
               </Button>
             </div>
             <p className="mt-1.5 hidden text-xs text-ink-faint md:block">
-              时长取番茄钟的专注设置；完成后额外得 20 + 每 10 分钟 5 功行 —— 这是提升境界最快的路。
+              时长取番茄钟「专注」设置 · 结算 20 功 + 每 10 分钟 5 功行
             </p>
           </>
         )}
@@ -240,14 +237,11 @@ export function GrowthTab() {
             </div>
           ))}
         </div>
-        <p className="mt-1.5 text-xs text-ink-faint">
-          <span className={cn('mr-1 rounded-control border px-1.5 py-0.5', GRADE_CLASS[grade.tone])}>
-            {grade.title}
-          </span>
-          <span className="hidden md:inline">
-            今日的五维快照，明天重新计、不累积；它是首页罗盘的视觉输入，
-            <strong className="text-ink-muted">不参与境界判定</strong>。
-          </span>
+        {/* 「知常」那枚阶位小字已去掉（2026-09-29）：它只是五维快照的名字，
+            放在这里既与「境界」争夺注意力、又对行动没有任何指示作用。
+            五维的分数本身已经说明了今天怎么样。 */}
+        <p className="mt-1.5 hidden text-xs text-ink-faint md:block">
+          当天快照、不累积；<strong className="text-ink-muted">不参与境界判定</strong>。
         </p>
       </Section>
     </div>

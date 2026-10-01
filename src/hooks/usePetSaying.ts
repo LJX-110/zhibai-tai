@@ -18,7 +18,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { pickSaying, type Saying, type SayingContext } from '../services/pet/sayings'
 import { canSay, markSaid } from '../services/pet/saying-throttle'
+import { peekPetLine, prefetchPetLine } from '../services/pet/ai-speech'
+import { getAiRemoteHealth } from '../services/ai/health'
 import { useCultivation } from './useCultivation'
+import { usePetVoice } from './usePetVoice'
 import { useTaskStore } from '../stores/useTaskStore'
 import { usePomodoroStore } from '../stores/usePomodoroStore'
 import { useCourseStore, useCourseCancellationStore, useCourseRescheduleStore } from '../stores/useStudyStore'
@@ -64,6 +67,20 @@ function awayDays(now: Date): number {
   return days > 0 ? days : 0
 }
 
+/**
+ * 「AI 台词」的**场景提示**（Step 5-3E）：把当前上下文压成一句话喂给模型 ——
+ * 它是"该说什么"的依据，比扔一堆结构化数据更省 token、也更像人话。
+ */
+function sceneOf(ctx: SayingContext): string {
+  if (ctx.justSeclusionMin != null) return '刚陪主人完成一段专注'
+  if (ctx.realmJustUp) return '主人境界刚提升，想夸一句'
+  if (ctx.nextClass) return `主人 ${ctx.nextClass.minutesLeft} 分钟后有课（${ctx.nextClass.name}）`
+  if (ctx.overdue > 0) return `主人有 ${ctx.overdue} 件逾期的事`
+  if (ctx.fixedUndone > 0) return `今天还有 ${ctx.fixedUndone} 件固定的事没做`
+  if (ctx.awayDays >= 2) return `主人 ${ctx.awayDays} 天没来了`
+  return '日常陪在主人身边，随便说一句'
+}
+
 export interface UsePetSaying {
   /** 当前要显示的气泡（null = 没有） */
   bubble: Saying | null
@@ -91,6 +108,10 @@ export function usePetSaying(): UsePetSaying {
   const reschedules = useCourseRescheduleStore((s) => s.items)
   const termStartDate = useSettingsStore((s) => s.termStartDate)
   const petEnabled = useSettingsStore((s) => s.petEnabled)
+  /** 「AI 台词」开关（Step 5-3E）：开且远程已配 → 优先用 AI 生成的那句 */
+  const aiSpeech = useSettingsStore((s) => s.petAiSpeech)
+  /** 语气参数来自当前人设（自称 / 称呼 / 主食）—— 人格决定"怎么说"，见 voice.ts */
+  const voice = usePetVoice()
 
   /** 组装"现在的状态" —— 纯读，不产生副作用 */
   const buildContext = useCallback((): SayingContext => {
@@ -142,22 +163,38 @@ export function usePetSaying(): UsePetSaying {
       overdue,
       nextClass,
       awayDays: awayDays(now),
+      // 语气参数（自称 / 称呼 / 主食）随人设走；缺省时 pickSaying 内部回退内置人格
+      voice,
     }
-  }, [cultivation, tasks, pomos, courses, cancellations, reschedules, termStartDate])
+  }, [cultivation, tasks, pomos, courses, cancellations, reschedules, termStartDate, voice])
 
-  /** 检查一次：判"说什么" → 裁决"能不能说" → 显示 */
+  /** 检查一次：判"说什么" → 裁决"能不能说" →（可选）换成 AI 台词 → 显示 */
   const check = useCallback(() => {
     if (!petEnabled) return
     const now = new Date()
-    const saying = pickSaying(buildContext())
+    const context = buildContext()
+    const saying = pickSaying(context)
     writeLastSeen(now)
     if (!saying) return
     if (!canSay(saying.key, now)) return
     markSaid(saying.key, now)
-    setBubble(saying)
+    /**
+     * AI 台词（Step 5-3E）：**取"上一轮预取好的"那句**，没有就用本地台词 ——
+     * 气泡不能为一个网络请求干等（8 秒后才冒泡是坏体验）。
+     * 取走后立刻在后台备下一条（页面可见 + 远程已配时才发请求）。
+     */
+    const aiOn = aiSpeech && getAiRemoteHealth().state !== 'unconfigured'
+    const aiLine = aiOn ? peekPetLine() : null
+    setBubble(aiLine ? { ...saying, text: aiLine } : saying)
+    if (aiOn && document.visibilityState === 'visible') {
+      prefetchPetLine({
+        voice: { self: voice.self, master: voice.master, food: voice.food },
+        scene: sceneOf(context),
+      })
+    }
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
     timerRef.current = window.setTimeout(() => setBubble(null), BUBBLE_MS)
-  }, [buildContext, petEnabled])
+  }, [aiSpeech, buildContext, petEnabled, voice])
 
   useEffect(() => {
     // 与动画循环同一条纪律：**最新的一次检查放进 ref**。

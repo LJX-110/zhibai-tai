@@ -1,5 +1,5 @@
 /**
- * 设置 · 通知（总开关 / 每源开关 / 免打扰 / 能力诊断 / 最近通知）
+ * 设置 · 通知（总开关 / 免打扰 / 每源开关 / 能力诊断 / 最近通知）
  *
  * ## 为什么从 `AppearanceGroup` 搬出来
  * 通知**不是外观**。此前它和主题、圆角、音效挤在一个「外观」分组里，
@@ -8,8 +8,9 @@
  *
  * ## 三层控制（用户的心智是分层的，界面也照这个分层）
  * 1. **总开关** `notifyEnabled` —— 所有提醒的总闸；
- * 2. **每源开关** `notifySources` —— 一类一类地关（"上课要提醒、喝水别烦我"）；
- * 3. **免打扰时段** —— 按时段关，而不是按内容关。
+ * 2. **免打扰时段** —— 按时段关（"先定什么时候别吵我"）；
+ * 3. **每源开关** `notifySources` —— 再一类一类地关（"上课要提醒、喝水别烦我"）。
+ * （2/3 的顺序是 Step 5-3E 用户拍板调整的：时段 → 分类。）
  * 投递时三者由 `components/notification/deliver.ts` 统一裁决，**记住历史永远不省** ——
  * 被静音/免打扰的提醒照样能在「最近通知」里回看，否则用户只会以为"昨天什么都没提醒"。
  *
@@ -26,12 +27,9 @@ import { Button, Input, Switch, useToast } from '../../components/ui'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import {
   browserNotify,
-  clearNoticeHistory,
   getNotifyCapability,
-  listNoticeHistory,
   requestNotifyPermission,
   sendTestNotification,
-  type NoticeRecord,
   type NotifyCapability,
   type NotifyPermission,
 } from '../../services/notification'
@@ -54,8 +52,6 @@ export function NotifyGroup() {
   const set = useSettingsStore((s) => s.set)
   const toast = useToast().toast
   const [cap, setCap] = useState<NotifyCapability | null>(null)
-  const [history, setHistory] = useState<NoticeRecord[]>([])
-  const [historyOpen, setHistoryOpen] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(false)
 
   // 打开设置页时体检一次：把"卡在哪一步"提前摆出来（权限 / 运行模式 / Service Worker）
@@ -140,53 +136,34 @@ export function NotifyGroup() {
         </div>
       )}
 
-      {/* 通知历史：toast 2.6 秒就消失，错过时能从这里回看 */}
-      <div className="row">
-        <button
-          onClick={() => {
-            // 展开时现读，避免显示的是上次打开时的旧记录
-            setHistory(listNoticeHistory())
-            setHistoryOpen((v) => !v)
-          }}
-          className="flex w-full items-center gap-2 text-xs text-ink-muted transition-colors hover:text-ink"
-          aria-expanded={historyOpen}
-        >
-          最近通知 · {history.length}
-          <span className="ml-auto text-ink-faint">{historyOpen ? '收起' : '展开'}</span>
-        </button>
+      {/* 免打扰时段（Step 5-3E：移到"分类提醒"之前 —— 先定"什么时候别吵我"，
+          再定"哪些类别吵我"，顺序与用户的心智一致）：该时段内只记历史，不弹提示、不发系统通知 */}
+      <div className="row flex-wrap">
+        <span className="flex-1 text-sm text-ink">免打扰时段</span>
+        <Switch
+          checked={settings.quietEnabled}
+          onChange={() => set({ quietEnabled: !settings.quietEnabled })}
+          label="免打扰时段"
+        />
       </div>
-      {historyOpen && (
-        <div className="space-y-1 px-2 pb-2">
-          {history.length === 0 ? (
-            <p className="py-1 text-xs text-ink-faint">还没有通知记录</p>
-          ) : (
-            <>
-              {history.map((n) => (
-                <p key={n.id} className="truncate text-xs text-ink-muted" title={n.message}>
-                  {/* 来源标记：`app` 是操作回执（"已保存"），其余才是真提醒 ——
-                      不区分的话这份历史会退化成操作日志，翻不到错过的提醒 */}
-                  <span className="mr-1 text-ink-faint">
-                    {n.source && n.source !== 'app'
-                      ? NOTIFY_SOURCES.find((s) => s.key === n.source)?.label ?? '提醒'
-                      : '回执'}
-                  </span>
-                  {n.message}
-                </p>
-              ))}
-              <Button
-                size="sm"
-                variant="tertiary"
-                onClick={() => {
-                  clearNoticeHistory()
-                  setHistory([])
-                }}
-              >
-                清空记录
-              </Button>
-            </>
-          )}
+      {settings.quietEnabled ? (
+        <div className="row flex-wrap">
+          <Input
+            type="time"
+            value={settings.quietFrom}
+            onChange={(e) => set({ quietFrom: e.target.value })}
+            aria-label="免打扰开始时间"
+          />
+          <span className="text-ink-faint">至</span>
+          <Input
+            type="time"
+            value={settings.quietTo}
+            onChange={(e) => set({ quietTo: e.target.value })}
+            aria-label="免打扰结束时间"
+          />
+          <span className="text-xs text-ink-faint">该时段不打扰，提醒仍记入历史</span>
         </div>
-      )}
+      ) : null}
 
       {/* 每源开关：想关一类就关一类，不必把全部提醒一起关掉 */}
       <div className="row">
@@ -228,34 +205,6 @@ export function NotifyGroup() {
           </p>
         </div>
       )}
-
-      {/* 免打扰时段：该时段内提醒只记入历史，不弹提示、不发系统通知 */}
-      <div className="row flex-wrap">
-        <span className="flex-1 text-sm text-ink">免打扰时段</span>
-        <Switch
-          checked={settings.quietEnabled}
-          onChange={() => set({ quietEnabled: !settings.quietEnabled })}
-          label="免打扰时段"
-        />
-      </div>
-      {settings.quietEnabled ? (
-        <div className="row flex-wrap">
-          <Input
-            type="time"
-            value={settings.quietFrom}
-            onChange={(e) => set({ quietFrom: e.target.value })}
-            aria-label="免打扰开始时间"
-          />
-          <span className="text-ink-faint">至</span>
-          <Input
-            type="time"
-            value={settings.quietTo}
-            onChange={(e) => set({ quietTo: e.target.value })}
-            aria-label="免打扰结束时间"
-          />
-          <span className="text-xs text-ink-faint">该时段不打扰，提醒仍记入历史</span>
-        </div>
-      ) : null}
     </>
   )
 }

@@ -4,8 +4,8 @@
  * 从 SettingsPage 拆出。状态自洽：草稿、同步动作、冲突列表都在本文件内。
  * 说明小字按「只留核心信息」精简（用户反馈该板块小字冗长）。
  */
+import { Loading } from '../../components/ui/Loading'
 import { useState, useSyncExternalStore } from 'react'
-import { RefreshCw } from 'lucide-react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import type { SyncInterval } from '../../stores/useSettingsStore'
 import { useConflictStore } from '../../stores/useConflictStore'
@@ -73,7 +73,7 @@ export function SyncGroup() {
       hint={settings.lastSyncedAt ? `上次同步 ${settings.lastSyncedAt}` : '尚未同步'}
       action={
         <Button size="sm" variant="secondary" onClick={doSync} disabled={syncing || !connected}>
-          <RefreshCw size={13} className={cn(syncing && 'animate-spin')} />
+          <Loading size={13} spinning={syncing} />
           {syncing ? '同步中…' : '立即同步'}
         </Button>
       }
@@ -101,9 +101,10 @@ export function SyncGroup() {
         私有仓库 + 加密快照
       </p>
 
-      {/* 首次同步三步引导：仓库为空时最需要，配齐后自动收起 */}
+      {/* 首次同步三步引导（2026-10-01 收口）：改回**折叠**（用户："没必要展开的可以不展开"）——
+          标题即说明，首屏不再被三步占满一屏；仓库配好后整块消失 */}
       {!settings.githubRepo?.trim() && (
-        <Collapse title="第一次同步？三步开启" hint="建仓库 · 拿 Token · 填回这里" className="mb-3">
+        <Collapse title="第一次同步？三步开启" hint="建仓库 · 拿 Token · 填回这里" className="!pb-0 mb-3">
           <ol className="space-y-2.5 text-sm leading-relaxed text-ink-soft">
             <li className="flex gap-2">
               <span className="display flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-xs text-on-teal">1</span>
@@ -140,7 +141,7 @@ export function SyncGroup() {
             placeholder="owner/repo"
             value={settings.githubRepo ?? ''}
             onChange={(e) => settings.set({ githubRepo: e.target.value })}
-            className="min-w-[10rem] flex-1"
+            className="min-w-0 flex-1 basis-full sm:basis-0"
           />
         </div>
         <div className="row flex-wrap">
@@ -148,7 +149,7 @@ export function SyncGroup() {
           <Input
             value={settings.githubBranch ?? 'main'}
             onChange={(e) => settings.set({ githubBranch: e.target.value })}
-            className="min-w-[10rem] flex-1"
+            className="min-w-0 flex-1 basis-full sm:basis-0"
           />
         </div>
         <div className="row flex-wrap">
@@ -158,7 +159,7 @@ export function SyncGroup() {
             placeholder="GitHub Token"
             value={tokenDraft}
             onChange={(e) => setTokenDraft(e.target.value)}
-            className="min-w-[10rem] flex-1"
+            className="min-w-0 flex-1 basis-full sm:basis-0"
           />
           <Button size="sm" variant="secondary" onClick={saveToken} disabled={!tokenDraft.trim()}>
             加密保存
@@ -175,7 +176,7 @@ export function SyncGroup() {
             placeholder="同步密码"
             value={passwordDraft}
             onChange={(e) => setPasswordDraft(e.target.value)}
-            className="min-w-[10rem] flex-1"
+            className="min-w-0 flex-1 basis-full sm:basis-0"
           />
           <Button size="sm" variant="secondary" onClick={savePassword} disabled={passwordDraft.length < 6}>
             加密保存
@@ -190,7 +191,7 @@ export function SyncGroup() {
         </p>
         <p className="flex items-start gap-1.5 text-xs leading-relaxed text-bronze">
           <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-bronze" />
-          国内直连常超时；同步失败请在「智能 · 自建代理」填转发地址。
+          国内直连常超时；失败时在下方「抓取与代理」填转发地址。
         </p>
         </div>
 

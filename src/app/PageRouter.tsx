@@ -2,6 +2,7 @@
  * 页面路由 —— 按一级导航渲染页面
  * 使用 React.lazy 按页分割，减小首屏体积
  */
+import { Loading } from '../components/ui/Loading'
 import { lazy, Suspense } from 'react'
 import { ErrorBoundary } from './ErrorBoundary'
 import type { SectionId } from './navigation'
@@ -50,14 +51,9 @@ const PAGE_MAP: Record<SectionId, React.LazyExoticComponent<() => React.ReactNod
   system: SettingsPage,
 }
 
-/** 页面加载占位 */
+/** 页面加载占位 —— 走全站统一的 `Loading`（Step 5-3 §十五：页面级加载只有一种形态） */
 function PageFallback() {
-  return (
-    <div className="flex items-center gap-2 py-16 text-sm text-ink-faint">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-bronze" />
-      展开卷轴…
-    </div>
-  )
+  return <Loading variant="page" />
 }
 
 export function PageRouter({ section }: { section: SectionId }) {

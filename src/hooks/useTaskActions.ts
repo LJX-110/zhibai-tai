@@ -8,8 +8,9 @@
 import type { Task } from '../types/entities'
 import { useTaskStore } from '../stores/useTaskStore'
 import { recordActivity } from '../services/activity'
-import { playSound } from '../services/sound'
+import { emitCompletion } from '../services/completion'
 import { createId, fixedDoneThisPeriod, isFixedSchedule } from '../utils/id'
+import { nowISO } from '../utils/id'
 import { useToast } from '../components/ui/toast-store'
 
 /** 按重复周期推算下一次到期日（以原到期日为基准，逾期完成则顺延追赶） */
@@ -85,9 +86,20 @@ export function useTaskActions() {
   const toggle = async (task: Task) => {
     const { done, createdNext } = await toggleTaskCore(task)
     if (done) {
-      playSound('task-done')
-      // 重复任务：完成后自动生成下一周期
-      toast(createdNext ? '完成待办 · 已生成下一次' : '完成待办 · 功行有进', 'success')
+      // 完成反馈统一走策略（Step 5-2C · D 批）：档位 = 来源 + 优先级，
+      // 由 `decideFeedback` 决定"落印 / 发声 / 弹条"，这里不再硬写。
+      emitCompletion(
+        {
+          source: 'task',
+          entityType: 'tasks',
+          entityId: task.id,
+          completedAt: nowISO(),
+          weight: task.priority,
+        },
+        toast,
+      )
+      // 重复任务自动生成下一周期是**业务结果**，不是"完成反馈"——不受档位约束，单独说
+      if (createdNext) toast('完成待办 · 已生成下一次', 'success')
     }
   }
 

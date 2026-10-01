@@ -34,7 +34,9 @@ import type { CourseCancellation,
   Homework,
   IntelligenceItem,
   IntelligenceSource,
+  Memory,
   Note,
+  Persona,
   PomodoroSession,
   CultivationState,
   PetState,
@@ -113,6 +115,10 @@ export class WorkbenchDB extends Dexie {
   courseCancellations!: Table<CourseCancellation, string>
   /** 单次调课记录（索引口径与停课一致：按 courseId + date 取） */
   courseReschedules!: Table<CourseReschedule, string>
+  /** 天机人设（业务表：用户资产，随快照同步） */
+  personas!: Table<Persona, string>
+  /** 天机长期记忆（业务表：用户明确保存的内容才进来） */
+  memories!: Table<Memory, string>
 
   constructor() {
     super(DB_NAME)
@@ -222,6 +228,14 @@ export class WorkbenchDB extends Dexie {
     this.version(14).stores({
       coursePlans: 'id, kind, status',
       coursePlanMeta: 'id',
+    })
+    /* 新增「天机人设」与「天机长期记忆」两张表（仅新增，不动既有结构）。
+     * Step 4-2 让天机从"聊天框"变成 Agent：人设（她是谁、怎么说话）与
+     * 长期记忆（用户明确保存的事实）是**用户资产** —— 只存 localStorage 换设备即丢，
+     * 故注册进 BUSINESS_TABLES 走快照同步（瞬时状态如 streaming / 当前步骤绝不进表）。 */
+    this.version(15).stores({
+      personas: 'id',
+      memories: 'id, createdAt',
     })
   }
 }

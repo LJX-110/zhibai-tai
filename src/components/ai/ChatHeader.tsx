@@ -28,7 +28,7 @@ const PRESENTATION: Record<
   unconfigured: {
     tone: 'plain',
     label: '本地规则',
-    title: '未配置远程 AI：当前回答来自本地规则概览，可在「系统 · AI Core」接入',
+    title: '未配置远程 AI：当前回答来自本地规则概览，可在「系统 · AI · 模型与连接」接入',
   },
 }
 
@@ -48,7 +48,7 @@ export function ChatHeader({
   // 降级时把具体原因摊开说：用户据此才知道该改 Key、查额度还是查网络
   const title =
     remote.state === 'degraded'
-      ? `远程 AI 调用失败，已退回本地规则结果${remote.reason ? `：${remote.reason}` : ''}\n再问一次可重试；持续失败请检查「系统 · AI Core」的 Key、额度与 Base URL`
+      ? `远程 AI 调用失败，已退回本地规则结果${remote.reason ? `：${remote.reason}` : ''}\n再问一次可重试；持续失败请检查「系统 · AI · 模型与连接」的 Key、额度与 Base URL`
       : p.title
 
   return (

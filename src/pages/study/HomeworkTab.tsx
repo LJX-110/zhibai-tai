@@ -20,7 +20,7 @@ import {
 } from '../../components/ui'
 import { Seal } from '../../components/ui/Seal'
 import { SealCheckbox } from '../../components/ui/SealCheckbox'
-import { playSound } from '../../services/sound'
+import { emitCompletion } from '../../services/completion'
 import { createId, friendlyDate, nowISO } from '../../utils/id'
 
 import type { Homework } from '../../types/entities'
@@ -72,8 +72,15 @@ export function HomeworkTab() {
     await useHomeworkStore.getState().update(h.id, { done: willDone })
     // 只在「未交 → 已交」这一瞬间落印；取消勾选不落印
     if (!willDone) return
+    // 本地那套 720ms 落印动画保留（它是这一行自己的表现），
+    // 但"发不发声"改由完成策略统一决定（Step 5-2C · D 批）。
     setStampId(h.id)
-    playSound('seal')
+    emitCompletion({
+      source: 'homework',
+      entityType: 'homeworks',
+      entityId: h.id,
+      completedAt: nowISO(),
+    })
     // 先清掉上一次可能未触发的定时器（连点/切换作业时），再起新的，避免 stray setState
     if (stampTimerRef.current) window.clearTimeout(stampTimerRef.current)
     stampTimerRef.current = window.setTimeout(() => setStampId(null), 720)
@@ -108,7 +115,7 @@ export function HomeworkTab() {
       {stampId === h.id && (
         <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <span className="seal-stamp flex items-center gap-2 rounded-tile bg-paper/85 px-3 py-1.5 shadow-float">
-            <Seal size={22} char="毕" tone="cinnabar" />
+            <Seal size={20} char="毕" tone="cinnabar" />
             <span className="scribal text-sm text-cinnabar">交毕</span>
           </span>
         </span>

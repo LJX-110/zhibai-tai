@@ -24,6 +24,7 @@ const EMPTY = {
   description: '',
   priority: 'mid' as Priority,
   dueDate: '',
+  dueTime: '',
   repeat: 'none' as Repeat,
   monthlyDay: null as number | null,
   weeklyDay: null as number | null,
@@ -49,6 +50,7 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
       description: task?.description ?? '',
       priority: task?.priority ?? 'mid',
       dueDate: task?.dueDate ?? '',
+      dueTime: task?.dueTime ?? '',
       repeat: task?.repeat ?? 'none',
       monthlyDay: task?.monthlyDay ?? null,
       weeklyDay: task?.weeklyDay ?? null,
@@ -81,6 +83,7 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
       done: task?.done ?? false,
       priority: form.priority,
       dueDate: form.dueDate || null,
+      dueTime: form.dueTime || null,
       tags,
       repeat: form.repeat,
       monthlyDay,
@@ -195,10 +198,19 @@ export function TaskEditor({ open, onClose, task, onSave }: TaskEditorProps) {
               type="date"
               min={todayISO()}
               value={form.dueDate}
-              onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+              onChange={(e) => setForm({ ...form, dueDate: e.target.value, dueTime: e.target.value ? form.dueTime : '' })}
               aria-label="截止日期"
             />
           )}
+          {/* 时刻（可选）：填了才能进「今日」的同一条时间轴与课程并排。
+              清掉日期时顺手清掉时刻（孤立的时刻没有意义）。 */}
+          <Input
+            type="time"
+            value={form.dueTime}
+            disabled={!form.dueDate}
+            onChange={(e) => setForm({ ...form, dueTime: e.target.value })}
+            aria-label="截止时刻"
+          />
           <Input
             placeholder="#标签"
             value={form.tagsText}

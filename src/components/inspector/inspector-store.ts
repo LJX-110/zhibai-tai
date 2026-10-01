@@ -11,6 +11,7 @@ export type InspectorType =
   | 'project'
   | 'intelligence'
   | 'course'
+  | 'coursePlan'
   | 'finance'
   | 'ai'
   | 'divination'

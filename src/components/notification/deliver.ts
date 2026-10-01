@@ -78,11 +78,11 @@ export function deliverNotice(input: NoticeInput): DeliveryOutcome {
   const quiet = !muted && st.quietEnabled && isQuietNow(st.quietFrom, st.quietTo)
 
   if (muted) {
-    recordNotice(input.text, input.hash, input.source)
+    recordNotice(input.text, input.hash, input.source, { title: input.title, tone: input.tone })
     return 'muted'
   }
   if (quiet) {
-    recordNotice(input.text, input.hash, input.source)
+    recordNotice(input.text, input.hash, input.source, { title: input.title, tone: input.tone })
     return 'quiet'
   }
 

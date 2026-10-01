@@ -1,7 +1,8 @@
 /**
  * 情报源 · 单行（桌面显示 5 个操作图标，手机只留「抓取」+「⋯」）
  */
-import { Download, MoreHorizontal, Pencil, Power, Trash2, Zap } from 'lucide-react'
+import { RowActions } from '../ui/RowActions'
+import { Download, Pencil, Power, Trash2, Zap } from 'lucide-react'
 import type { IntelligenceSource } from '../../types/entities'
 import { Badge, Button } from '../ui'
 import { cn } from '../../utils/cn'
@@ -9,25 +10,20 @@ import { PROVIDER_LABEL } from './shared'
 
 export function SourceRow({
   s,
-  compact,
   testing,
   onFetch,
   onTest,
   onToggle,
   onEdit,
   onRemove,
-  onMore,
 }: {
   s: IntelligenceSource
-  /** 手机端：一行 5 个图标必然挤成一团，只留「抓取」，其余收进 ⋯ */
-  compact: boolean
   testing: boolean
   onFetch: () => void
   onTest: () => void
   onToggle: () => void
   onEdit: () => void
   onRemove: () => void
-  onMore: () => void
 }) {
   return (
     <div className="row group">
@@ -80,43 +76,23 @@ export function SourceRow({
           )}
         </div>
       </div>
-      {compact ? (
-        /* 手机端：一行 5 个图标必然挤成一团，只留「抓取」，其余收进 ⋯ */
-        <>
-          <Button size="sm" variant="tertiary" onClick={onFetch} disabled={testing} className="!px-2">
-            <Download size={13} /> {testing ? '抓取中' : s.lastError ? '重试' : '抓取'}
-          </Button>
-          <button
-            onClick={onMore}
-            className="touch-target flex items-center justify-center rounded-control text-ink-muted hover:bg-raised"
-            aria-label="更多操作"
-          >
-            <MoreHorizontal size={16} />
-          </button>
-        </>
-      ) : (
-        <>
-          <Button size="sm" variant="tertiary" onClick={onFetch} disabled={testing} className="!px-2">
-            <Download size={13} /> {testing ? '抓取中' : s.lastError ? '重试' : '抓取'}
-          </Button>
-          <Button size="sm" variant="tertiary" onClick={onTest} disabled={testing} className="!px-2">
-            <Zap size={13} /> 测试
-          </Button>
-          <button
-            onClick={onToggle}
-            className={cn('rounded-control p-1.5 transition-colors', s.enabled ? 'text-teal' : 'text-ink-faint hover:text-teal')}
-            aria-label={s.enabled ? '停用' : '启用'}
-          >
-            <Power size={14} />
-          </button>
-          <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised" onClick={onEdit} aria-label="编辑">
-            <Pencil size={14} />
-          </button>
-          <button className="rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar" onClick={onRemove} aria-label="删除">
-            <Trash2 size={14} />
-          </button>
-        </>
-      )}
+      {/* 「抓取」是这一行最高频的动作，**始终直接可见**（主操作不进菜单）；
+          其余四个（测试 / 启停 / 编辑 / 删除）走共用 `RowActions`：
+          窄屏收进一个「更多」，宽屏直显。
+          改前这里分两套写法各写一遍（窄屏 = 抓取 + ⋯，宽屏 = 5 个图标一排），
+          而另一处（财的流水行）又写了第三套 —— 现统一为同一个组件。 */}
+      <Button size="sm" variant="tertiary" onClick={onFetch} disabled={testing} className="!px-2">
+        <Download size={13} /> {testing ? '抓取中' : s.lastError ? '重试' : '抓取'}
+      </Button>
+      <RowActions
+        moreTitle={s.name}
+        actions={[
+          { key: 'test', label: '测试连接', icon: Zap, onClick: onTest },
+          { key: 'toggle', label: s.enabled ? '停用该源' : '启用该源', icon: Power, onClick: onToggle },
+          { key: 'edit', label: '编辑配置', icon: Pencil, onClick: onEdit },
+          { key: 'remove', label: '删除该源', icon: Trash2, onClick: onRemove, danger: true },
+        ]}
+      />
     </div>
   )
 }

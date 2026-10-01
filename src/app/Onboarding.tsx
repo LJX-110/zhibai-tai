@@ -81,15 +81,18 @@ export function Onboarding() {
         <div className="text-center">
           {step === 0 && (
             <div className="anim-enter">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-ink">
-                <Taiji size={36} />
+              {/* 品牌印记：**不用实底方块**（那是通用 SaaS 向导的样子）。
+                  改为「细线圆环 + 太极」—— 与系统 Splash / 启动屏同一个符号，
+                  让「系统启动 → 知白台启动 → 入台 → 工作台」四段是同一段视觉。 */}
+              <div className="mx-auto mb-5 flex h-[68px] w-[68px] items-center justify-center rounded-full border border-line-strong">
+                <Taiji size={38} className="text-teal" />
               </div>
-              <h1 className="display text-2xl font-semibold text-ink">
-                个人异术工作台
+              <h1 className="display text-2xl font-semibold tracking-[0.12em] text-ink">
+                知白台
               </h1>
               <p className="mx-auto mt-3 max-w-[300px] text-sm leading-relaxed text-ink-muted">
-                一座现代的「Personal OS」，以东方异术的视觉语言，安放你的日常。
-                数据全部保存在本机，离线可用，随时打开。
+                知其白，守其黑 —— 一座安放日常的个人工作台。
+                数据只存本机，离线可用。
               </p>
             </div>
           )}
@@ -166,7 +169,6 @@ export function Onboarding() {
                 <Droplet size={24} className="text-teal" />
               </div>
               <h2 className="display text-xl font-semibold text-ink">每日喝水目标</h2>
-              <p className="mt-2 text-sm text-ink-muted">给自己定一个可达成的量</p>
               <div className="mx-auto mt-5 flex max-w-[200px] items-center gap-2">
                 <Input
                   type="number"

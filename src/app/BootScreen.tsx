@@ -7,7 +7,11 @@
  *
  * 就绪后不立即卸载：先淡出，让下层工作台自然露出来，避免硬切。
  * 品牌字刻意用系统衬线栈 —— 书法字体全字集 woff2 有数 MB，
- * 启动期 font-display:swap 换字会触发重排，连带旋转动画掉帧。
+ * 启动期 font-display:swap 换字会触发重排，连带入场动画掉帧。
+ *
+ * Step 5-3C：太极**不再常驻旋转**，改为「圆形印记淡入 + 轻微收拢」，
+ * 名字与题跋依次浮起 —— 三段动画只在静态屏播一次，本组件用 `data-resumed`
+ * 关掉重播（否则会看到"印记又一次淡入"）。
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useBootStore } from './boot-store'
@@ -47,6 +51,9 @@ export function BootScreen() {
     <div
       className="boot"
       data-leaving={ready ? 'true' : undefined}
+      // 入场动画（印记淡入 / 名字浮起）已在 index.html 的静态屏演过一遍，
+      // 这里用 data-resumed 关掉重播，否则会看到"印记又一次淡入"（见 index.html 的规则）
+      data-resumed="true"
       role="status"
       aria-live="polite"
     >

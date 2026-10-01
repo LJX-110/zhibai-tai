@@ -16,6 +16,14 @@
 import type { SyncFile } from '../SyncService'
 import type { SyncProvider } from '../types'
 
+/**
+ * ⚠️ 2026-09-29 删掉三处**已确认零调用**的遗留实现：
+ *   · `ping()` —— 全库无调用点（本来也没进 `SyncProvider` 接口）；
+ *   · `push()` / `pull()` —— 记录级同步的占位。`SyncProvider` 接口**已简化为
+ *     只剩 `readSyncFile` / `writeSyncFile`**（见 `../types.ts`），于是这两个占位
+ *     连"符合抽象"这个理由都不成立了。
+ * 同步自改为**全量加密快照**之后，逐条变更的记录级通道就没有消费者了。
+ */
 export class GitHubSnapshotProvider implements SyncProvider {
   id = 'github'
   name = 'GitHub 私有仓库'
@@ -164,21 +172,4 @@ export class GitHubSnapshotProvider implements SyncProvider {
       throw e
     }
   }
-
-  /** 连通性检查：验证 token 与仓库 */
-  async ping(): Promise<boolean> {
-    if (!this.repo || !this.token) return false
-    try {
-      const res = await fetch(`https://api.github.com/repos/${this.repo}`, {
-        headers: this.headers(),
-      })
-      return res.ok
-    } catch {
-      return false
-    }
-  }
-
-  // 记录级接口（本实现用快照）——保留占位以符合 SyncProvider 抽象
-  push = async () => ({ ok: false, pushed: 0, pulled: 0, message: '使用快照同步' })
-  pull = async (since: number) => ({ records: [], since })
 }

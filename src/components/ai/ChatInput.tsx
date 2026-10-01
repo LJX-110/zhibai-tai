@@ -23,7 +23,7 @@ export function ChatInput({
   // 降级的提示语要和"未配置"区分开：一个该去改配置，一个只需再试一次
   const placeholder =
     remote.state === 'ready'
-      ? '输入问题，回车发送…'
+      ? '问天机……'
       : remote.state === 'degraded'
         ? '远程暂时不可用，可再问一次重试…'
         : '输入问题…'

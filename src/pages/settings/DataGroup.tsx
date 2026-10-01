@@ -19,6 +19,7 @@ import {
   KEEP_LIMIT_OPTIONS,
 } from '../../services/intelligence/retention'
 import { APP_VERSION } from '../../app/version'
+import { ErrorLogPanel } from './ErrorLogPanel'
 import { useTaskStore } from '../../stores/useTaskStore'
 import { cleanupDuplicateFixedTasks, previewDuplicateFixedTasks } from '../../services/task-repair'
 import { toISODate } from '../../utils/id'
@@ -128,8 +129,61 @@ export function DataGroup() {
 
   return (
     <>
-      <Section title="情报数据">
-        {/* 没有上限 + 没有删除入口 = 同步快照必然越滚越大，最后表现为同步莫名失败 */}
+      <Section
+        title="数据"
+        action={
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={exportData}>
+              <Download size={13} /> 导出备份
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => importInputRef.current?.click()}>
+              <Upload size={13} /> 导入恢复
+            </Button>
+          </div>
+        }
+      >
+        {/* 备份 / 恢复 / 情报 / 修复 / 诊断 合成一段（Step 5-3D · 用户拍板"该合并的合并"）：
+            它们都是"我的数据"的不同面，拆成三个 Section 只会把首屏拉长。
+            顺序：备份是最高频的事 → 情报（上限 + 清理）→ 修复 → 诊断（排查用） */}
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void onImportFile(file)
+            e.target.value = ''
+          }}
+        />
+        {/* 导入确认：展示各表行数，明确覆盖语义 */}
+        <Dialog
+          open={pendingImport !== null}
+          onClose={() => setPendingImport(null)}
+          title="导入恢复"
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => setPendingImport(null)}>取消</Button>
+              <Button variant="primary" onClick={confirmImport}>确认恢复</Button>
+            </>
+          }
+        >
+          <p className="mb-3 text-sm text-ink-muted">
+            恢复将<strong className="text-cinnabar">覆盖</strong>下列各表现有数据；确认前会自动导出当前数据作为安全备份。
+          </p>
+          <div className="max-h-56 overflow-y-auto rounded-tile border border-line p-2">
+            {pendingImport?.summary.map((s) => (
+              <div key={s.key} className="flex items-center justify-between px-1 py-0.5 text-sm">
+                <span className="text-ink">{s.label}</span>
+                <span className="tabular text-ink-muted">
+                  {s.count >= 0 ? `${s.count} 条` : '备份中无此表'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Dialog>
+
+        {/* 情报数据（原来单开一段） */}
         <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">保留上限</span>
           <Select
@@ -172,77 +226,9 @@ export function DataGroup() {
           </Button>
           <span className="text-xs text-ink-faint">当前 {intelTotal} 条</span>
         </div>
-      </Section>
 
-      {/* hint 原先写「Local-first · 存于本机 IndexedDB」：与下方正文首句逐字重复，
-          而正文还多给了「多端同步走 GitHub 快照」的指路，留正文、去标题行 */}
-      <Section
-        title="数据"
-        action={
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={exportData}>
-              <Download size={13} /> 导出备份
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => importInputRef.current?.click()}>
-              <Upload size={13} /> 导入恢复
-            </Button>
-          </div>
-        }
-      >
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".json,application/json"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) void onImportFile(file)
-            e.target.value = ''
-          }}
-        />
-        {/* 导入确认：展示各表行数，明确覆盖语义 */}
-        <Dialog
-          open={pendingImport !== null}
-          onClose={() => setPendingImport(null)}
-          title="导入恢复"
-          footer={
-            <>
-              <Button variant="tertiary" onClick={() => setPendingImport(null)}>取消</Button>
-              <Button variant="primary" onClick={confirmImport}>确认恢复</Button>
-            </>
-          }
-        >
-          <p className="mb-3 text-sm text-ink-muted">
-            恢复将<strong className="text-cinnabar">覆盖</strong>下列各表现有数据；确认前会自动导出当前数据作为安全备份。
-          </p>
-          <div className="max-h-56 overflow-y-auto rounded-tile border border-line p-2">
-            {pendingImport?.summary.map((s) => (
-              <div key={s.key} className="flex items-center justify-between px-1 py-0.5 text-sm">
-                <span className="text-ink">{s.label}</span>
-                <span className="tabular text-ink-muted">
-                  {s.count >= 0 ? `${s.count} 条` : '备份中无此表'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Dialog>
-        <p className="mt-2 text-xs text-ink-faint">
-          数据存本机；多端同步走 GitHub 快照。
-        </p>
-        <div className="row">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">诊断</span>
-          <Button size="sm" variant="tertiary" onClick={() => void copyDiagnostics()}>
-            复制诊断信息
-          </Button>
-          <span className="flex-1 text-xs text-ink-faint">
-            版本 / 浏览器 / 同步状态 / 数据量
-          </span>
-        </div>
-      </Section>
-
-      {/* 数据修复：不是破坏性操作（只删重复的历史副本），但会让「已完成」少几条旧记录，
-          所以仍走一层确认，并把将删的条目数与前因后果写清楚 */}
-      <Section title="数据修复">
+        {/* 数据修复（原来单开一段）：不是破坏性操作（只删重复的历史副本），
+            但会让「已完成」少几条旧记录，所以仍走一层确认 */}
         <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">重复任务</span>
           <Button
@@ -259,11 +245,6 @@ export function DataGroup() {
               : '没有需要清理的重复'}
           </span>
         </div>
-        {/* 说明性小字只在桌面显示（项目移动端约定第 4 条）；上面的"残留 N 条"是实时信息，移动端保留 */}
-        <p className="mt-1 hidden text-xs text-ink-faint md:block">
-          旧版完成「每日/每周/每月固定」任务时会多生成一条副本，导致同一件事在固定区反复出现。
-          生成逻辑已修，启动时也会自动清理；这里保留按钮是为了能先看清将要删掉什么再动手。
-        </p>
         <Dialog
           open={dupOpen}
           onClose={() => setDupOpen(false)}
@@ -305,10 +286,22 @@ export function DataGroup() {
             </div>
           )}
         </Dialog>
+
+        {/* 诊断（原来在「数据」段里，保持位置：排查用，最低频） */}
+        <div className="row">
+          <span className="w-20 shrink-0 text-sm text-ink-muted">诊断</span>
+          <Button size="sm" variant="tertiary" onClick={() => void copyDiagnostics()}>
+            复制诊断信息
+          </Button>
+          <span className="flex-1 text-xs text-ink-faint">
+            版本 / 浏览器 / 同步状态 / 数据量
+          </span>
+        </div>
       </Section>
 
-      {/* 破坏性操作移出首屏：既让首屏变干净，也把「不可恢复」这件事藏在一层确认之后 */}
-      <Collapse title="危险操作" hint="不可恢复">
+      {/* 危险操作 + 故障记录**合成一个条目且不嵌套**（Step 5-3E 用户拍板：
+          "不要一环套一环"）—— 折叠里平铺"清空数据"行与故障列表，两层折叠被拆平 */}
+      <Collapse title="清空与故障" hint="不可恢复">
         <div className="row flex-wrap">
           <span className="w-20 shrink-0 text-sm text-ink-muted">清空</span>
           <Button size="sm" variant="danger" onClick={() => setClearOpen(true)}>
@@ -318,6 +311,8 @@ export function DataGroup() {
             删除本机全部记录，不可恢复
           </span>
         </div>
+        {/* 故障流水（本机）：渲染异常 / 事件回调 / 未处理的异步错误 */}
+        <ErrorLogPanel />
       </Collapse>
 
       <Dialog open={clearOpen} onClose={() => setClearOpen(false)} title="清空全部数据？">

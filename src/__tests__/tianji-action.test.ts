@@ -112,21 +112,13 @@ describe('引擎层：字段规格语义', () => {
 describe('接线层：真实插件注册表申报的动作能被解析', () => {
   const specs = actionSpecs()
 
-  it('三个动作都在规格表里（缺失即"加了动作但没生效"）', () => {
-    expect(Object.keys(specs).sort()).toEqual(['create_finance', 'create_note', 'create_task'])
+  it('规格表里只剩金额类动作（建任务 / 建笔记已改为可直接执行的工具）', () => {
+    expect(Object.keys(specs).sort()).toEqual(['create_finance'])
   })
 
-  it('create_task：priority 非法回退 mid、dueDate 非法回退 null', () => {
-    const out = parseTianjiActions(
-      fence({ action: 'create_task', title: '写周报', priority: 'urgent', dueDate: '2026-13-01' }),
-      specs,
-    )
-    expect(out[0].fields).toEqual({ title: '写周报', priority: 'mid', dueDate: null })
-  })
-
-  it('create_note：tags 非数组 → 空数组', () => {
-    const out = parseTianjiActions(fence({ action: 'create_note', title: '随记', tags: '不是数组' }), specs)
-    expect(out[0].fields.tags).toEqual([])
+  it('**已改走工具路径的动作不再被解析**（留在回答里的旧 JSON 会被静默跳过，不会重复落库）', () => {
+    expect(parseTianjiActions(fence({ action: 'create_task', title: '写周报' }), specs)).toEqual([])
+    expect(parseTianjiActions(fence({ action: 'create_note', title: '随记' }), specs)).toEqual([])
   })
 
   it('create_finance：kind 缺失即丢弃（收支不明不能建行）', () => {

@@ -4,6 +4,12 @@
  * 纯前端应用在浏览器里直接抓 RSS / JSON / B 站接口时会被 CORS 拦下，
  * 公共代理（allorigins 等）时好时坏，因此需要一个自建转发端点。
  *
+ * ## 安全底线（Step 5-1 · B 阶段收口，两条都不能回退）
+ *  1. **`ALLOWED_HOSTS` 必填**：空列表一律 503 拒绝转发 ——
+ *     否则部署出来就是一台对全互联网开放的转发跳板（B1）；
+ *  2. **不透传任何凭据**：只带 `Accept` / `Range` / `Content-Type` / `User-Agent` / `Referer`，
+ *     `Cookie` 与 `Authorization` 一律剥掉（B2）。
+ *
  * 为什么把逻辑单独放在这里：同一个代理要能以三种形态部署（Cloudflare Worker /
  * Cloudflare Pages Functions / Netlify Functions）——三者的国内可达性差异极大，
  * 多形态是可用性要求，不是冗余。抽成一份与运行时无关的 handleProxy 后，
@@ -107,6 +113,9 @@ export async function handleProxy(request, env = {}) {
 
   if (!raw) {
     if (isEntryPath(reqUrl.pathname)) {
+      // 自检信息：一眼看出白名单配没配、配了几个（不列出具体主机名 —— 那可能泄漏私有源）
+      const hosts = parseList(env?.ALLOWED_HOSTS)
+      const origins = parseList(env?.ALLOWED_ORIGINS)
       return json(
         {
           ok: true,
@@ -114,6 +123,8 @@ export async function handleProxy(request, env = {}) {
             '/?url=<encodeURIComponent(target)>',
             '/proxy?url=<encodeURIComponent(target)>',
           ],
+          allowedHosts: hosts.length > 0 ? `已配置 ${hosts.length} 个` : '未配置 —— 转发会被拒绝（503）',
+          allowedOrigins: origins.length > 0 ? `已配置 ${origins.length} 个` : '未配置 —— 回显任意来源（建议配置）',
         },
         200,
         cors,
@@ -132,16 +143,34 @@ export async function handleProxy(request, env = {}) {
     return json({ error: '仅支持 http/https 目标' }, 400, cors)
   }
 
-  // 主机白名单：配置后只转发列内主机，防止代理被当成公开跳板
+  // 主机白名单：**必填**（Step 5-1 · B1）。
+  // 此前空列表 = 不限主机 —— 按 README 部署出来就是一台对全互联网开放的转发跳板
+  // （任何人都能用它转发任意 http(s) 目标，流量记在你账上、也可被用来刷第三方站点）。
+  // 现在空列表一律**明确拒绝**，并在响应里写清该配什么：失败得清楚，比悄悄放开好得多。
   const allowHosts = parseList(env?.ALLOWED_HOSTS)
-  if (allowHosts.length > 0 && !allowHosts.includes(target.hostname)) {
+  if (allowHosts.length === 0) {
+    return json(
+      {
+        error: '代理未配置主机白名单，已拒绝转发',
+        hint:
+          '请在部署环境里设置 ALLOWED_HOSTS（逗号分隔的目标主机名）。' +
+          '用 B 站源时必须包含 api.bilibili.com；只抓 RSS 时填那些 RSS 站的域名即可。' +
+          '这是**必填项**：没有它，这台代理就能被任何人用来转发任意目标。',
+        example: 'ALLOWED_HOSTS=api.bilibili.com,www.qbitai.com,www.ithome.com',
+      },
+      503,
+      cors,
+    )
+  }
+  if (!allowHosts.includes(target.hostname)) {
     return json({ error: `目标主机不在白名单: ${target.hostname}` }, 403, cors)
   }
 
-  // 只带抓取必需的几个头。浏览器会自动附带 Cookie / Authorization，
-  // 原样转发等于把用户凭据交给任意第三方站点 —— 仅对白名单内的授权主机转发。
-  // 当前用途：Gist 同步需要带 Authorization 打到 api.github.com（ALLOWED_HOSTS 里
-  // 若能命中且主机以 github 相关域结尾时放行），其余一律剥掉。
+  // 只带抓取必需的几个头。**不再透传 Authorization**（Step 5-1 · B2）：
+  // 那段逻辑存在的唯一理由是"Gist 同步要带 Authorization 打到 api.github.com"，
+  // 而 Gist 同步已下线（见 src/pages/settings/SyncGroup.tsx 与 src/sync/auto.ts），
+  // 客户端也从不向代理发 Authorization（`proxyFetch` 固定传空 init）。
+  // 删掉它之后，本代理**不存在任何凭据透传面** —— Cookie / Authorization 一律剥掉。
   const headers = new Headers()
   for (const name of ['Accept', 'Range', 'Content-Type']) {
     const value = request.headers.get(name)
@@ -149,13 +178,6 @@ export async function handleProxy(request, env = {}) {
   }
   headers.set('User-Agent', request.headers.get('User-Agent') || DEFAULT_USER_AGENT)
   headers.set('Referer', REFERER_OVERRIDES[target.hostname] ?? target.origin)
-
-  const auth = request.headers.get('Authorization')
-  const authHostAllowed =
-    allowHosts.length === 0
-      ? target.hostname === 'api.github.com' || target.hostname === 'gist.github.com'
-      : allowHosts.includes(target.hostname)
-  if (auth && authHostAllowed) headers.set('Authorization', auth)
 
   // body 透传（GET/HEAD 天然无 body；PATCH/POST 同步场景需要）
   let body

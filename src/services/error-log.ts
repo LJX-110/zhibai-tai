@@ -117,6 +117,46 @@ function truncate(text: string): string {
 }
 
 /* ------------------------------------------------------------------ *
+ * 脱敏（Step 5-1 · A3）
+ * ------------------------------------------------------------------ */
+
+/**
+ * 落盘前必须剥掉的凭据形态。
+ *
+ * ## 为什么放在**记录入口**而不是各个调用方
+ * 本模块是"所有异常最终汇流的那一个口子"（`recordError` 是全库唯一写盘点）。
+ * 只要在这里脱敏一次，**将来新增的调用方自动受保护** —— 让每个 catch 各自记得
+ * 先清洗，就是"一处漏了、凭据就落盘"的老问题（工程纪律 #8）。
+ *
+ * ## 覆盖的形态（保守：宁可多抹，不可漏抹）
+ *  · OpenAI 风格 `sk-…`（含 `sk-proj-…`）
+ *  · GitHub 各种 Token：`ghp_` / `gho_` / `ghu_` / `ghs_` / `ghr_`
+ *  · `Authorization: Bearer <token>` 整段（含 `bearer` 小写）
+ *  · `key/token/secret/password/authorization` 后面直接跟值的 `k: v` / `k=v` 写法
+ *
+ * ⚠️ 这不是"防注入"，也不是加密 —— 只是防止**凭据原文进入本机故障流水**。
+ * 它抹掉的是"看起来像凭据的串"，不保证覆盖所有自定义格式；所以**更根本的约定是：
+ * 不要把请求对象 / header dump 整个塞进错误消息**（见 `coding` 规范与 A3 验收项）。
+ */
+const SECRET_PATTERNS: readonly [RegExp, string][] = [
+  [/gh[pousr]_[A-Za-z0-9_]{16,}/g, 'gh***'],
+  [/sk-[A-Za-z0-9_-]{12,}/g, 'sk-***'],
+  [/(bearer)\s+[A-Za-z0-9._\-+/=]{12,}/gi, '$1 ***'],
+  [
+    /((?:authorization|api[-_]?key|access[-_]?token|refresh[-_]?token|token|secret|password|passphrase)\s*["']?\s*[:=]\s*["']?)([^\s"',;]{8,})/gi,
+    '$1***',
+  ],
+]
+
+/** 把疑似凭据替换成占位（纯函数，可单测）。空串原样返回。 */
+export function redactSecrets(text: string): string {
+  if (!text) return text
+  let out = text
+  for (const [re, to] of SECRET_PATTERNS) out = out.replace(re, to)
+  return out
+}
+
+/* ------------------------------------------------------------------ *
  * 滤噪
  * ------------------------------------------------------------------ */
 
@@ -149,7 +189,14 @@ const keyOf = (input: NewErrorInput) => `${input.kind}\u0000${input.message}`
  */
 export function recordError(input: NewErrorInput): ErrorRecord | null {
   try {
-    const key = keyOf(input)
+    // 脱敏必须在**去重与落盘之前**：否则同一个故障第二次带着凭据进来还会被写进去
+    const safe: NewErrorInput = {
+      kind: input.kind,
+      message: redactSecrets(input.message),
+      where: input.where,
+      detail: input.detail ? redactSecrets(input.detail) : undefined,
+    }
+    const key = keyOf(safe)
     const now = Date.now()
     if (key === lastKey && now - lastAt < DEDUPE_WINDOW_MS) return null
     lastKey = key
@@ -158,10 +205,10 @@ export function recordError(input: NewErrorInput): ErrorRecord | null {
     const record: ErrorRecord = {
       id: createId(),
       at: nowISO(),
-      kind: input.kind,
-      message: input.message,
-      where: input.where,
-      detail: input.detail ? truncate(input.detail) : undefined,
+      kind: safe.kind,
+      message: safe.message,
+      where: safe.where,
+      detail: safe.detail ? truncate(safe.detail) : undefined,
     }
 
     const next = [record, ...listErrors()].slice(0, LOG_MAX)

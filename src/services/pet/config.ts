@@ -8,6 +8,7 @@
  *     抛出去由上层 `recordError` 记进故障流水 + 停掉桌宠，问题立刻可见（见 `编码规范.md` 第 8 节）。
  */
 import type { Category, PetConfig, Weights } from './types'
+import { PET_STATES } from './state'
 
 /** 配置路径：走相对路径，GitHub Pages 子路径部署下同样可用（仅本文件用） */
 const PET_CONFIG_URL = `${import.meta.env.BASE_URL}pet/config.json`
@@ -56,6 +57,37 @@ function needCategories(v: unknown): Category[] {
   })
 }
 
+/**
+ * 语义状态池：**8 个核心状态一个都不能少**。
+ *
+ * 缺一个的后果不是"某个状态没动画"，而是"那时宠物凭空消失"——
+ * 这是桌宠最坏的一类失败（不报错、不动、看起来像坏了），所以按硬错误处理。
+ */
+function needStates(v: unknown): Record<string, string[]> {
+  if (!v || typeof v !== 'object') throw new ConfigError('animations.states 缺失')
+  const o = v as Record<string, unknown>
+  const out: Record<string, string[]> = {}
+  for (const [k, pool] of Object.entries(o)) {
+    out[k] = needStringArray(pool, `animations.states.${k}`)
+  }
+  for (const s of PET_STATES) {
+    if (!out[s]) throw new ConfigError(`animations.states.${s} 缺失（每个语义状态都必须有动画池）`)
+  }
+  return out
+}
+
+/** 备用素材登记表：可选；键是素材名、值是"留着它干什么"的说明 */
+function needReserve(v: unknown): Record<string, string> | undefined {
+  if (v === undefined) return undefined
+  if (!v || typeof v !== 'object') throw new ConfigError('reserve 必须是对象')
+  const out: Record<string, string> = {}
+  for (const [k, note] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof note !== 'string' || !note.trim()) throw new ConfigError(`reserve.${k} 的说明不能为空`)
+    out[k] = note
+  }
+  return out
+}
+
 /** 校验并规范化原始配置（纯函数；非法即抛，不返回"修好的"配置） */
 export function validatePetConfig(raw: unknown): PetConfig {
   if (!raw || typeof raw !== 'object') throw new ConfigError('根节点不是对象')
@@ -97,8 +129,8 @@ export function validatePetConfig(raw: unknown): PetConfig {
       })
     : []
 
-  const phys = (r.physics ?? {}) as Record<string, unknown>
-
+  // 旧配置里的 `physics` 段（重力 / 抛掷）**直接忽略**：那两个行为已在 Step 4-2 移除，
+  // 多出来的字段本来就不参与校验（只读已知键）。
   return {
     name: r.name,
     size,
@@ -115,14 +147,10 @@ export function validatePetConfig(raw: unknown): PetConfig {
       moves: { default: (movesRaw.default ?? {}) as Record<string, number>, actions: moveActions },
       categories: needCategories(anim.categories),
       events: eventsNorm,
+      states: needStates(anim.states),
     },
     weights: needWeights(r.weights),
-    physics: {
-      gravity: needNumber(phys.gravity, 'physics.gravity'),
-      restitution: needNumber(phys.restitution, 'physics.restitution'),
-      groundFriction: needNumber(phys.groundFriction, 'physics.groundFriction'),
-      throwPower: needNumber(phys.throwPower, 'physics.throwPower'),
-    },
+    reserve: needReserve(r.reserve),
   }
 }
 

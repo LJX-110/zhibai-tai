@@ -1,5 +1,5 @@
 /**
- * 财 · **非组件的共享件**：金额格式化 / 台账筛选 / 月度汇总
+ * 财 · **非组件的共享件**：台账筛选 / 月度汇总
  *
  * ## 为什么单独成文件
  * ① 与 `shared.tsx`（纯组件）分家：组件与非组件同文件会让 Fast Refresh 失去完整性；
@@ -10,14 +10,14 @@
  *    别的文件里那份同名局部定义正好替死导出"续了命"。
  *    于是"改一处忘另一处"是必然的：某天改了分组口径，三个页签里会有一个不跟着变。
  *    收敛到这里之后，全仓只有一份。
+ *
+ * ## 金额格式化已再上一层（2026-09-28）
+ * `money` 移到了 `utils/money.ts`（全站唯一实现）—— 因为「观 · 本周回顾」的本月结余
+ * 也显示同一语义的金额，它不该为了一个 formatter 反向 import 财页。
  */
 import { useMemo } from 'react'
 import { useBudgetStore, useFinanceStore } from '../../stores/useFinanceStore'
 import { todayISO } from '../../utils/id'
-
-/** 金额显示：千分位 + 两位小数（全站财页唯一实现） */
-export const money = (n: number) =>
-  n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export type LedgerFilter = 'all' | 'expense' | 'income'
 

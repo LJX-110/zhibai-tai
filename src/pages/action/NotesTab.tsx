@@ -90,7 +90,7 @@ export function NotesTab() {
     >
       {/* 搜索 + 类型筛选：此前只有筛选，笔记一多就找不回来 */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[160px] flex-1">
+        <div className="relative min-w-0 flex-1 basis-full sm:basis-0">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint" />
           <Input
             placeholder="搜索标题、正文、标签"

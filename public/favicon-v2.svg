@@ -1,19 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- 知白台图标 · 瓦当"知"（V2 统一蓝色定稿，与 pwa-192/512 同构） -->
-  <!-- 黛蓝底 -->
-  <rect width="64" height="64" rx="14" fill="#2E5A8C"/>
-  <!-- 瓦当外轮 -->
-  <circle cx="32" cy="32" r="27.5" fill="none" stroke="#FFFFFF" stroke-width="3"/>
-  <!-- 弦纹 -->
-  <circle cx="32" cy="32" r="23.5" fill="none" stroke="#FFFFFF" stroke-width="0.9" opacity="0.6"/>
-  <!-- 四向箭头纹（鎏金，贴外轮内侧） -->
-  <g fill="#E3C25C">
-    <path d="M30.6 5.4 L33.4 5.4 L32 10.2 Z"/>
-    <path d="M30.6 58.6 L33.4 58.6 L32 53.8 Z"/>
-    <path d="M5.4 30.6 L5.4 33.4 L10.2 32 Z"/>
-    <path d="M58.6 30.6 L58.6 33.4 L53.8 32 Z"/>
-  </g>
-  <!-- 楷体白文「知」（本地无楷体时回退衬线，仍为白字可辨） -->
-  <text x="32" y="32" fill="#FFFFFF" font-family="KaiTi, STKaiti, '楷体', serif"
-        font-size="30" text-anchor="middle" dominant-baseline="central">知</text>
+  <!-- 知白台图标 V4 · **圆形**（Step 5-3C）
+       V3 是方形纸白底；用户要求整条链路（favicon / manifest / splash / 应用入口）
+       统一为圆形品牌印记 —— 方形与圆形混用会被看成两套标识。
+       圆底取满 viewBox（半径 32），四角透明：这样"圆"本身就是图标轮廓。
+       构图与 .boot-mark / scripts/generate_maskable_icon.py 完全同源。 -->
+  <circle cx="32" cy="32" r="32" fill="#ffffff"/>
+  <!-- 整圆铺白 → 右半黛蓝 → 两笔鱼头生成 S 形分界（与 .boot-mark 同一构图） -->
+  <circle cx="32" cy="32" r="26" fill="#FFFFFF"/>
+  <path d="M32 6 A26 26 0 0 1 32 58 A13 13 0 0 1 32 32 A13 13 0 0 0 32 6 Z" fill="#2E5A8C"/>
+  <circle cx="32" cy="19" r="4.7" fill="#2E5A8C"/>
+  <circle cx="32" cy="45" r="4.7" fill="#FFFFFF"/>
+  <circle cx="32" cy="32" r="25.6" fill="none" stroke="#2E5A8C" stroke-width="1.3"/>
 </svg>

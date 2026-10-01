@@ -46,6 +46,35 @@ function proxyCandidates(selfProxyUrl?: string): ProxyCandidate[] {
 export const NEEDS_PROXY_MESSAGE =
   '跨域抓取需要自建代理（公共代理在国内已全部不可用）。部署见仓库 proxy/ 或 cloudflare-worker/README.md，约 2 分钟'
 
+/**
+ * 校验并规整用户填的代理地址（Step 5-1 · B3）。
+ *
+ * 返回规范化后的**基址**（去掉结尾 `/`），非法返回 `null`。
+ *
+ * 为什么要在这里校验而不是等 `fetch` 报错：用户填错时（少写 `https://`、
+ * 直接粘了带 `?url=…` 的完整地址、填成 `ftp://`）现在的表现是"抓取失败"，
+ * 而失败原因会被归到"跨域/网络"那一类 —— 用户会去反复检查网络，
+ * 而真正的问题在输入框里。在**输入那一刻**明确说"地址不合法"，比事后猜便宜得多。
+ *
+ * 三条判据：
+ *  · 必须是 `http:` / `https:`；
+ *  · 不能自带 query / hash —— 请求参数由本模块统一拼（`?url=`），自带说明填错了；
+ *  · 结尾斜杠一律去掉（两种形态 `${base}/?url=` 与 `${base}/proxy?url=` 共用基址）。
+ */
+export function normalizeProxyUrl(raw: string): string | null {
+  const s = raw.trim()
+  if (!s) return null
+  let u: URL
+  try {
+    u = new URL(s)
+  } catch {
+    return null
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+  if (u.search || u.hash) return null
+  return `${u.origin}${u.pathname.replace(/\/+$/, '')}`
+}
+
 /** 目标自带 CORS 头时无需代理 —— 命中这些主机就直接连，省一次转发 */
 const DIRECT_HOSTS = [
   'api.github.com',

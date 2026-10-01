@@ -1,6 +1,16 @@
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  /**
+   * ⚠️ 必须与 `vite.config.ts` 的 `define` 对齐。
+   *
+   * 构建期由 Vite 注入 `__APP_VERSION__`，而**测试环境不会自动注入** ——
+   * 结果是任何 import 到 `app/version.ts` 的模块在测试里一调用就抛
+   * `ReferenceError: __APP_VERSION__ is not defined`。
+   * 这正是 `services/data-admin.ts`（导出/导入/清空）此前**一条测试都没有**的原因：
+   * 不是没人写，而是写不出来。Step 5-1 补齐密钥隔离测试时踩到它，顺手对齐。
+   */
+  define: { __APP_VERSION__: JSON.stringify('0.0.0-test') },
   test: {
     environment: 'node',
     // .tsx 页面冒烟测试（ui-smoke）走 jsdom（文件内 @vitest-environment jsdom 覆盖）

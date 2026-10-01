@@ -51,6 +51,54 @@ export interface TianjiActionSpec {
   fields: Record<string, FieldSpec>
 }
 
+/**
+ * 协议说明文本 —— **由规格表生成**（Step 4-2 · C5）。
+ *
+ * 此前这段文字**硬编码在** `tianji-ask.ts`（三个动作的 JSON 示例写死），
+ * 于是"加一种动作只改插件"并不成立：还得回来改协议文本。
+ * 现在从 `actionSpecs()` 反推示例 —— 加动作真的只改归属插件。
+ *
+ * 生成规则（与 `FieldSpec` 一一对应）：
+ *  · text → `"字符串"`（required 时标「必填」）
+ *  · amount → `123.45`（正数，自动规整到分）
+ *  · date → `"yyyy-mm-dd"`
+ *  · choice → `"a|b|c"`（无 fallback 的标「必填」）
+ *  · textList → `["a","b"]`
+ */
+export function describeActionProtocol(specs: Record<string, TianjiActionSpec>): string {
+  const names = Object.keys(specs)
+  if (names.length === 0) return ''
+  const examples = names.map((name) => {
+    const fields: Record<string, unknown> = { action: name }
+    for (const [key, spec] of Object.entries(specs[name].fields)) {
+      switch (spec.kind) {
+        case 'text':
+          fields[key] = spec.required ? '必填文本' : '文本（可选）'
+          break
+        case 'amount':
+          fields[key] = 123.45
+          break
+        case 'date':
+          fields[key] = 'yyyy-mm-dd'
+          break
+        case 'choice':
+          fields[key] = spec.values.join('|')
+          break
+        case 'textList':
+          fields[key] = ['标签1', '标签2']
+          break
+      }
+    }
+    return JSON.stringify(fields)
+  })
+  return [
+    '【动作协议（写入类事情必须走这里）】',
+    '要**创建 / 改动**真实数据时，不要在回答里假装已经做了，而是在回答末尾附一个 ```json 代码块``` 提议动作，由主人点「确认」后才落库：',
+    ...examples,
+    '注意：一张回答最多提议一个动作；信息不全就先问清楚；删除与批量修改不在此列（只有主人能在界面里做）。',
+  ].join('\n')
+}
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function isObj(v: unknown): v is Record<string, unknown> {

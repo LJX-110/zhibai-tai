@@ -13,7 +13,7 @@ import { useBootStore } from './boot-store'
 import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import { useSourceStore } from '../stores/useSourceStore'
-import { defaultSources, duplicateSourceIds, migrateBilibiliSources, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
+import { defaultSources, duplicateSourceIds, migrateBilibiliSources, retireUnreliableDefaults, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
 import { resolveAIProvider } from '../services/ai/ai-service'
 import { initIntelAutoFetch } from '../services/intelligence/auto'
 import { useAIResourceStore } from '../stores/useAIStore'
@@ -22,6 +22,7 @@ import { AI_TYPE_LEGACY_LABEL, type AIResourceType } from '../types/entities'
 import { initAutoSync } from '../sync/auto'
 import { initSyncedSettings } from '../services/settings-sync'
 import { seedAllCategories } from '../stores/useCategoryStore'
+import { ensureDefaultPersona } from '../stores/usePersonaStore'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { COLLECTION_MEDIUM_LEGACY_LABEL } from '../services/categories'
 import { cleanupDuplicateFixedTasks, migrateFixedTaskSeries } from '../services/task-repair'
@@ -65,6 +66,14 @@ async function migrateCollectionMediums(): Promise<void> {
 }
 
 /**
+ * 内置人设播种（幂等）：库里没有默认行才写一次 ——
+ * 用户改过 / 重置过都不覆盖（改内容属于用户资产，启动不能碰）。
+ */
+async function seedDefaultPersona(): Promise<void> {
+  await ensureDefaultPersona()
+}
+
+/**
  * 固定任务整理：**先补系列标识（存量迁移），再清历史副本**。
  *
  * 两步必须按序 —— 先让副本链共用一个 `seriesId`，清理才能准确认出"谁是谁的副本"
@@ -85,7 +94,8 @@ async function tidyFixedTasks(): Promise<void> {
  *  用户反馈过「加载动画不明显、一闪而过」。 */
 const MIN_BOOT_MS = 900
 
-/** 情报源：修复历史重复（按 name 去重）+ 幂等播种默认源 + 补启用历史停用的默认源 */
+/** 情报源：修复历史重复（按 name 去重）+ 幂等播种默认源 + 补启用历史停用的默认源
+ *  + 降级实测不可靠的候选源（Step 5-1 · C1） */
 async function seedSources(): Promise<void> {
   if (sourcesSeeded) return
   sourcesSeeded = true
@@ -108,6 +118,9 @@ async function seedSources(): Promise<void> {
     await useSourceStore.getState().remove(id)
   }
   if (removed.length > 0) await useSourceStore.getState().load()
+  // 候选源降级：默认不再启用实测不可靠的源（只动"从未成功抓取过"的存量）
+  const retired = await retireUnreliableDefaults(useSourceStore.getState().items)
+  if (retired.length > 0) await useSourceStore.getState().load()
   // B 站源改写：老的 rsshub.app 地址国内必然拉不到，就地换成本地签名 provider
   const migrated = await migrateBilibiliSources(useSourceStore.getState().items)
   if (migrated.length > 0) await useSourceStore.getState().load()
@@ -129,6 +142,7 @@ export function Bootstrap() {
       ['载入冲突记录', () => useConflictStore.getState().load()],
       ['整理情报源', seedSources],
       ['整理分类', () => seedAllCategories()],
+      ['整理人设', seedDefaultPersona],
       ['整理固定任务', tidyFixedTasks],
       ['迁移术类型', migrateAiResourceTypes],
       ['迁移藏品介质', migrateCollectionMediums],

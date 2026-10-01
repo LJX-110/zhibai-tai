@@ -52,6 +52,8 @@ export interface PetMovement {
   stop: () => void
   /** 首次落位：本机存档 → 旧字段（legacy 迁移）→ 配置角落，三选一；并落一次本机存档 */
   placeInitial: (cfg: PetConfig, size: number) => Promise<void>
+  /** 恢复默认位置（忽略本机存档，强制角落锚点） */
+  resetPosition: (cfg: PetConfig, size: number) => void
   /** 落地对齐（拖拽 / 抛掷结束时用）：写 posRef + DOM + 本机存档 */
   settleAt: (x: number, y: number) => void
   /** 把宠物夹回宿主矩形内（resize / 尺寸变化时调；内部先 settle 再夹） */
@@ -175,5 +177,27 @@ export function usePetMovement(host: PetHost): PetMovement {
     [host, settle, paint],
   )
 
-  return { posRef, spriteRef, paint, settle, start, stop, placeInitial, settleAt, clampInto }
+  /**
+   * **恢复默认位置**（Step 5-2C F 批）：强制回到 `cfg.position.corner` 的角落锚点，
+   * **忽略本机存档与旧字段** —— 这正是它与 `placeInitial` 的区别（后者优先用存档）。
+   * 之后仍走 `clampToBounds`，保证落在合法活动区域内；并写一次本机存档（**不进同步**）。
+   */
+  const resetPosition = useCallback(
+    (cfg: PetConfig, size: number) => {
+      const vp = host.getViewport()
+      const anchor = anchorOf({
+        rect: vp,
+        corner: cfg.position.corner,
+        marginX: cfg.position.marginX,
+        marginY: cfg.position.marginY,
+        size,
+      })
+      posRef.current = clampToBounds(anchor, boundsOf(vp, size))
+      paint(posRef.current.x, posRef.current.y)
+      host.persistLocalPosition(posRef.current)
+    },
+    [host, paint],
+  )
+
+  return { posRef, spriteRef, paint, settle, start, stop, placeInitial, resetPosition, settleAt, clampInto }
 }

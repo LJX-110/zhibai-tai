@@ -2,6 +2,7 @@
  * NoteItem —— 笔记/灵感条目
  * 整卡可点开详情：移动端此前除悬停按钮外没有任何入口，笔记只能看不能改。
  */
+import { RowActions } from '../ui/RowActions'
 import { Pencil, Pin, Trash2 } from 'lucide-react'
 import type { Note } from '../../types/entities'
 import { cn } from '../../utils/cn'
@@ -69,21 +70,24 @@ export function NoteItem({ note, onOpen, onEdit, onDelete, onTogglePin }: NoteIt
             </span>
           </div>
         </div>
-        {/* hover-reveal：仅鼠标设备悬停显现，触屏常显；点按钮不触发整卡打开 */}
+        {/* 操作区走共用的 `RowActions`（2026-09-29 · 批 B）：
+            窄屏收进一个「更多」，宽屏直显三个图标。
+            改前是三个 ~26×26 的图标按钮挤在一排 —— Step 5-2B 实测触控不足，
+            且一排补到 44px 会把卡片正文挤没（touch-target 会真实改布局）。
+            hover-reveal 仍保留：鼠标悬停才显现，触屏常显（触屏没有 hover）。 */}
         <div
           className="hover-reveal flex shrink-0 items-center gap-0.5"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          <button className="rounded-control border border-line bg-raised p-1.5 text-ink-muted hover:border-bronze/50 hover:text-bronze" onClick={() => onTogglePin(note)} aria-label="置顶">
-            <Pin size={13} />
-          </button>
-          <button className="rounded-control border border-line bg-raised p-1.5 text-ink-muted hover:border-teal/50 hover:text-teal" onClick={() => onEdit(note)} aria-label="编辑">
-            <Pencil size={13} />
-          </button>
-          <button className="rounded-control border border-line bg-raised p-1.5 text-ink-muted hover:border-cinnabar/50 hover:text-cinnabar" onClick={() => onDelete(note)} aria-label="删除">
-            <Trash2 size={13} />
-          </button>
+          <RowActions
+            moreTitle="笔记"
+            actions={[
+              { key: 'pin', label: note.pinned ? '取消置顶' : '置顶', icon: Pin, onClick: () => onTogglePin(note) },
+              { key: 'edit', label: '编辑', icon: Pencil, onClick: () => onEdit(note) },
+              { key: 'remove', label: '删除', icon: Trash2, onClick: () => onDelete(note), danger: true },
+            ]}
+          />
         </div>
       </div>
       {/* 卡片是 overflow-hidden，长 URL / 长英文词若不断词会被裁掉，故加 break-words */}

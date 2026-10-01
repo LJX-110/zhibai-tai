@@ -16,6 +16,7 @@ import { InstallPrompt } from '../components/pwa/InstallPrompt'
 import { AmbientSound } from '../components/sound/AmbientSound'
 import { PomodoroTicker } from '../components/pomodoro/PomodoroTicker'
 import { AiChatPanel } from '../components/ai/AiChatPanel'
+import { NoticeCenterHost } from '../components/notification/NoticeCenterHost'
 import { PetStage } from '../components/pet/PetStage'
 import { useAppStore } from '../stores/useAppStore'
 import { useSettingsStore } from '../stores/useSettingsStore'
@@ -43,6 +44,8 @@ export function App() {
         <PomodoroTicker />
         <ReminderEngine />
         <AiChatPanel />
+        {/* 通知中心：顶栏铃铛 / 桌面侧栏两处入口共用的全局弹层（Step 5-3D） */}
+        <NoticeCenterHost />
         {/* 桌宠：petEnabled 为 false 时返回 null（零 DOM、零定时器、零素材请求） */}
         <PetStage />
         {onboarded ? (

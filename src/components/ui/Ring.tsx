@@ -40,11 +40,11 @@ export function Ring({ percent, size = 88, stroke = 6, className, children }: Ri
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c - (c * pct) / 100}
-          style={{
-            transition: 'stroke-dashoffset 600ms var(--ease-standard)',
-          }}
         />
       </svg>
+      {/* 进度环不做补间动画：`stroke-dashoffset` 是绘制属性动画（同 width 一类），
+          不满足「动画只动 transform / opacity」的硬规则（2026-09-28）。
+          数值变化直接落定；值只在数据变化时改，不会自己跑。 */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {children}
       </div>

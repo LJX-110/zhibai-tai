@@ -1,5 +1,8 @@
 /**
- * 术 —— 我的 AI 工具箱（登记即用，可启停/编辑/删除）
+ * 术 · 器用 —— AI 工具与资源（登记即用，可启停/编辑/删除）
+ *
+ * ⚠️ 页头格式与其余八块统一为「名 · 二字断语」（2026-09-29）；此前是「我的 AI 工具箱」，
+ * 是九个板块里唯一不带板块名的页头。
  * AI 任务（简报/计划/摘要）已收编入「天机」，这里只做资源的登记与管理。
  *
  * 类型**完全数据化**：内置 7 类（模型/工具/技能/智能体/插件/提示词/工作流）
@@ -167,7 +170,7 @@ export function AIPage() {
   return (
     <div className="relative mx-auto max-w-[var(--content-max-w)]">
       <PageHeader
-        title="我的 AI 工具箱"
+        title="术 · 器用"
         poem="工欲善其事，必先利其器"
         action={
           <div className="flex items-center gap-2">

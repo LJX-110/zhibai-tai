@@ -246,12 +246,19 @@ const PATTERNS: Record<SoundEvent, (c: AudioContext, v: number) => void> = {
   chime: (c, v) => qingSeq(c, v, [PENTA.jue[1], PENTA.yu[1]]),
 
   /* ---- 钟族：提醒、落印、起盘 ---- */
-  // 落印：全站最"实"的一声，故音量高于族内其余音（是刻意的强弱极，不是漏改）
+  // 落印：全站最"实"的一声，音量高于族内其余音（刻意的强弱极，不是漏改）。
+  // ⚠️ 基音取 `PENTA.gong[0]`(261.63) 而**不是裸 150Hz** —— 150Hz 低于手机与笔记本
+  // 扬声器的有效重放区间，实测表现为"增益最大却听不见"（Step 5-3C 修复）。
   seal: (c, v) => {
-    zhong(c, v, 150, { dur: 0.1, decay: 0.16, vol: 0.34 })
-    grain(c, v, 0.06, 0.14)
+    zhong(c, v, PENTA.gong[0], { dur: 0.12, decay: 0.2, vol: 0.3 })
+    grain(c, v, 0.06, 0.16)
   },
-  paper: (c, v) => grain(c, v, 0.1, 0.2),
+  // 纸：木鱼一击 + 纸面摩擦。此前只有一段 0.1 秒、低增益的低通噪声，
+  // 试听时几乎等于没声音（同为 Step 5-3C 修复）。
+  paper: (c, v) => {
+    muyu(c, v, PENTA.shang[1], { vol: 0.24 })
+    grain(c, v, 0.07, 0.12)
+  },
   compass: (c, v) => {
     zhong(c, v, PENTA.zhi[0], { dur: 0.26, decay: 0.32, vol: 0.14 })
     zhong(c, v, PENTA.yu[0], { dur: 0.2, decay: 0.24, vol: 0.09, delay: 0.08 })

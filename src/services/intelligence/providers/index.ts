@@ -2,7 +2,7 @@
  * 情报 Provider 抽象 —— 统一数据模型（源驱动）
  *
  * 每个 IntelligenceSource 是一个可配置的来源（GitHub / RSS / Web / 自定义 等）。
- * 新增来源只需在「系统 · 情报源」配置，不改 UI 与页面代码。
+ * 新增来源只需在「系统 · 数据 · 抓取与代理」配置，不改 UI 与页面代码。
  */
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
 

@@ -8,7 +8,8 @@
  * 依赖一律**显式传参**，不再依赖组件内的闭包 —— 这正是上一轮"抽子组件"失败的原因。
  */
 import { useMemo, useState } from 'react'
-import { RefreshCw, Rss } from 'lucide-react'
+import { Rss } from 'lucide-react'
+import { Loading } from '../components/ui/Loading'
 import { useIntelligenceStore } from '../stores/useIntelligenceStore'
 import { useSourceStore } from '../stores/useSourceStore'
 import { addCategory, categoryNames, removeCategory, resetCategories, useCategoryStore } from '../stores/useCategoryStore'
@@ -19,7 +20,6 @@ import { useInspectorStore } from '../components/inspector/inspector-store'
 import { IntelTidy } from '../components/intelligence/IntelTidy'
 import type { IntelligenceItem, SourceType } from '../types/entities'
 import { diffDays } from '../utils/id'
-import { cn } from '../utils/cn'
 import { Button, EmptyState, PageHeader, useToast } from '../components/ui'
 import { FeedMediaRow, FeedRow } from './intelligence/Feed'
 import { FetchReportPanel } from './intelligence/FetchReportPanel'
@@ -230,7 +230,7 @@ export function IntelligencePage() {
           <div className="flex items-center gap-2">
             <IntelTidy />
             <Button variant="primary" size="sm" onClick={fetchIntelligence} disabled={loading}>
-              <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
+              <Loading size={13} spinning={loading} />
               {loading ? '拉取中…' : '拉取情报'}
             </Button>
           </div>
@@ -322,7 +322,7 @@ export function IntelligencePage() {
             action={
               items.length === 0 ? (
                 <Button variant="primary" onClick={fetchIntelligence} disabled={loading}>
-                  <RefreshCw size={13} className={cn(loading && 'animate-spin')} /> 拉取情报
+                  <Loading size={13} spinning={loading} /> 拉取情报
                 </Button>
               ) : undefined
             }

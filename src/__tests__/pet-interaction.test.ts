@@ -9,9 +9,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   DRAG_THRESHOLD,
+  LONG_PRESS_MS,
   LONG_PRESS_SLOP,
   exceedsDragThreshold,
-  resolveDragEnd,
+  isDragSession,
   shouldCancelLongPress,
 } from '../services/pet/interaction'
 
@@ -53,36 +54,29 @@ describe('shouldCancelLongPress：长按该不该被取消', () => {
   })
 })
 
-describe('resolveDragEnd：松手之后做什么', () => {
-  const samples = [
-    { t: 0, x: 0, y: 0 },
-    { t: 100, x: 100, y: 0 },
-  ]
-  const base = { moved: true, cancelled: false, samples, now: 100, throwPower: 1 }
-
-  it('**没超过阈值 → 当作点击，绝不产生甩动**（否则轻点一下它就滑走一小段）', () => {
-    expect(resolveDragEnd({ ...base, moved: false })).toEqual({ kind: 'click' })
+describe('isDragSession：松手之后唯一还要区分的事', () => {
+  it('**没超过阈值 → 不算拖拽**（点击：不改变位置、也不抑制 click）', () => {
+    expect(isDragSession(false, false)).toBe(false)
   })
 
-  it('被系统取消 → 原地停下（不甩），且优先于 moved 判定', () => {
-    expect(resolveDragEnd({ ...base, cancelled: true })).toEqual({ kind: 'cancel' })
-    expect(resolveDragEnd({ ...base, moved: false, cancelled: true })).toEqual({ kind: 'cancel' })
+  it('被系统取消 → 不算拖拽（原地停下，交还状态机）', () => {
+    expect(isDragSession(true, true)).toBe(false)
   })
 
-  it('真拖拽松手 → 按最近位移甩出去', () => {
-    const r = resolveDragEnd(base)
-    expect(r.kind).toBe('throw')
-    if (r.kind === 'throw') {
-      expect(r.vx).toBeCloseTo(1000, 5)
-      expect(r.vy).toBeCloseTo(0, 5)
-    }
+  it('真拖拽 → 抑制随后那次 click（否则松手会被当成点它一下）', () => {
+    expect(isDragSession(true, false)).toBe(true)
   })
 
-  it('真拖拽但速度估不出来（单点采样）→ 甩速为 0，不会算出 Infinity', () => {
-    expect(resolveDragEnd({ ...base, samples: [{ t: 0, x: 0, y: 0 }] })).toEqual({
-      kind: 'throw',
-      vx: 0,
-      vy: 0,
-    })
+  it('Step 4-2 起"松手即停"：模块里不再有速度判定（甩抛已被移除）', async () => {
+    // 防回归：若有人把甩抛加回来，会先在这里失败，再要求他同步改本文件的说明
+    const mod: Record<string, unknown> = await import('../services/pet/interaction')
+    expect('resolveDragEnd' in mod).toBe(false)
+    expect('throwVelocity' in mod).toBe(false)
+  })
+})
+
+describe('长按阈值本身（移动端唤起菜单）', () => {
+  it('500ms：短于它不算长按（避免误触菜单）', () => {
+    expect(LONG_PRESS_MS).toBe(500)
   })
 })

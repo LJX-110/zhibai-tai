@@ -23,7 +23,8 @@ import { Ring } from '../../components/ui/Ring'
 import { parsePositiveAmount } from '../../utils/validate'
 
 import { SummaryCell } from './shared'
-import { money, useMonthSummary } from './summary'
+import { money } from '../../utils/money'
+import { useMonthSummary } from './summary'
 
 import {
   Button,
@@ -124,8 +125,9 @@ export function StatsTab() {
             {expenseTotal > 0 ? (
               <div className="flex items-center gap-5">
                 <Ring percent={income > 0 ? Math.min(100, (expenseTotal / income) * 100) : 0} size={120} stroke={10}>
-                  <span className="tabular text-lg font-semibold text-ink">¥{expenseTotal.toLocaleString()}</span>
-                  {/* 同上：⌀100px 内圈，「共支出」3 字在 12px 下约 36px，远未触到圆边 */}
+                  <span className="tabular text-base font-semibold text-ink">¥{money(expenseTotal)}</span>
+                  {/* 同上：⌀100px 内圈，「共支出」3 字在 12px 下约 36px，远未触到圆边。
+                      金额走 money（两位小数）后位数变长，字号从 18px 收到 16px —— 仍在圈内 */}
                   <span className="text-xs text-ink-faint">共支出</span>
                 </Ring>
                 <div className="flex-1 space-y-1.5">

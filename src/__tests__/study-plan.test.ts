@@ -8,7 +8,8 @@
  *  · **非法 credit 不计入**：一个 NaN 能把整页进度算废，且页面上看不出来。
  */
 import { describe, expect, it } from 'vitest'
-import { planProgress, publicGroupsOf } from '../services/study'
+import { planProgress, publicGroupsOf } from '../services/study-plan'
+import { KIND_ORDER, KIND_SEAL, STATUS_LABEL, STATUS_SEAL } from '../pages/study/plan-shared'
 import type { CoursePlan } from '../types/entities'
 
 /** 造条目：只写关心的字段，其余给安全默认 */
@@ -151,5 +152,51 @@ describe('publicGroupsOf：公选分组', () => {
   it('没填分组的**不进分组**（由调用方另行平铺，本函数不替用户决定归到哪一组）', () => {
     const items = [plan({ id: 'a', kind: 'public' }), plan({ id: 'b', kind: 'public', group: '  ' })]
     expect(publicGroupsOf(items)).toEqual([])
+  })
+})
+
+describe('状态印章（A3 形制）：三个状态各有一枚可区分的圆印', () => {
+  it('三个状态都有印章，单字互不相同', () => {
+    const seals = Object.values(STATUS_SEAL)
+    expect(seals).toHaveLength(3)
+    expect(new Set(seals.map((s) => s.char)).size).toBe(3)
+    for (const s of seals) expect(s.char).toHaveLength(1)
+  })
+
+  it('印章与状态字典一一对应（新增状态时漏配印章会在这里失败）', () => {
+    expect(Object.keys(STATUS_SEAL).sort()).toEqual(Object.keys(STATUS_LABEL).sort())
+  })
+
+  it('低面积交给体系符箓保证：tone 取自 Seal 的闭集，且三态**颜色各不相同**', () => {
+    const tones = Object.values(STATUS_SEAL).map((s) => s.tone)
+    for (const t of tones) expect(['cinnabar', 'bronze', 'plain', 'teal']).toContain(t)
+    // 三态同色 = "一眼看出状态"就没了（改回铺色块也不行 —— 那会抢标题焦点）
+    expect(new Set(tones).size).toBe(3)
+    // 最轻的一档留给"不可选"：它本该退到背景里
+    expect(STATUS_SEAL.unavailable.tone).toBe('plain')
+  })
+
+  it('方向印章：三个方向齐备、单字、且**一律中性色**（颜色语义留给状态）', () => {
+    expect(Object.keys(KIND_SEAL).sort()).toEqual([...KIND_ORDER].sort())
+    for (const s of Object.values(KIND_SEAL)) {
+      expect(s.char).toHaveLength(1)
+      expect(s.tone).toBe('plain')
+    }
+  })
+
+  it('**结构性守卫**：课程行必须用体系符箓，不得再手搓圆（防回退成楷体圆）', () => {
+    const mods = import.meta.glob('../pages/study/CoursePlanRow.tsx', {
+      query: '?raw',
+      import: 'default',
+      eager: true,
+    }) as Record<string, string>
+    const raw = Object.values(mods)[0] ?? ''
+    const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    // 两枚印都得走 Seal
+    expect(code).toContain('<Seal')
+    expect(code).toContain('STATUS_SEAL')
+    expect(code).toContain('KIND_SEAL')
+    // 手搓圆（rounded-full + border 的 span）是上一版的实现，禁止回退
+    expect(code).not.toMatch(/rounded-full/)
   })
 })
