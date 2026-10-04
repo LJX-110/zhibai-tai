@@ -1,30 +1,42 @@
 /**
- * 学 · 学分 · 选课（2026-09-28 重做：从"多个小板块"变成"一页三层"）
+ * 学 · 学分 · 选课（2026-09-28 重做；2026-10-02 分类 / 搜索 / 排序改版）
  *
- * ## 页面只回答三个问题（规格 §A4）
+ * ## 页面回答的问题
  *  ① **我的选课目标是什么** —— 首屏三段紧凑摘要（限选 / 公选 / 体育：已完成 / 目标 / 差额）
- *  ② **我已经选了什么** —— 统一课程列表（方向 · 状态印章 · 课程名 · 学分 · 教师 · 备注）
- *  ③ **我还可以考虑什么** —— 同一张列表用轻量筛选切到「候选 / 不可选」
+ *  ② **我已经选了什么 / 还想选什么** —— 统一课程列表，可按**一级分类（方向）**、
+ *     状态、关键词（含标签）筛选找课
+ *  ③ **我还差多少、下一步选什么** —— 目标差额 + 「AI 建议」（把进度预填给天机）
  *
- * ## 与上一版的区别（为什么重做）
- * 旧版按方向与状态摊成六个区块：同一门课在两处出现、状态是方块记号 + 文字标签，
- * 读起来像后台页面。现在**一行一课、只此一处**；状态收成一枚圆形异术印章（`STATUS_SEAL`），
- * 视觉等级明显低于课程标题；配置类操作（目标 / 新增 / 编辑）全部在 Dialog 里，不占版面。
+ * ## 2026-10-02 改版（用户："分类应该是限选/公选/体育，现在不方便找"）
+ *  · **一级分类筛选行**：全部 / 限选 n / 公选 n / 体育 n（带计数）；
+ *  · **搜索框**：课名 / 教师 / 二级分类 / 标签 / 备注，跨方向找课；
+ *  · **标签**：行内小字可点 → 填入搜索；二级分类对全部方向可用（数据仍是自由文本）；
+ *  · **手动排序**：Section 头部「排序」进入排序模式（清掉状态筛选与搜索 —— 被筛掉的
+ *    邻居会让 ↑↓ 看起来乱跳），行右侧换成 ↑↓，只在**同方向内**换位；
+ *  · 排序口径与纯函数都在 `services/study-plan.ts`（comparePlanItems / movePlanItem）。
  *
  * ## 数据口径（保持不变）
  * 全部来自 `CoursePlan`（条目）与 `CoursePlanMeta`（目标 / 事项）两张业务表，
  * 与 `Course`（正式课表）**互不依赖**；学分进度口径在 `services/study-plan.ts` 的 `planProgress`
  * （只数 `selected`、**超额不倒扣**、目标 0 = 未设目标）。
- * 公选分类（`group`）仍是自由文本，**只影响列表里的排序与行内显示**，不再是独立区块。
  */
 import { useState } from 'react'
-import { ChevronLeft, Plus, Settings2, Trash2 } from 'lucide-react'
+import { ArrowUpDown, ChevronLeft, Plus, Settings2, Sparkles, Trash2 } from 'lucide-react'
 import { useCoursePlanMetaStore, useCoursePlanStore } from '../../stores/useCoursePlanStore'
-import { planProgress, publicGroupsOf } from '../../services/study-plan'
+import {
+  comparePlanItems,
+  groupSuggestions,
+  matchesQuery,
+  movePlanItem,
+  normalizeTags,
+  planProgress,
+  publicGroupsOf,
+} from '../../services/study-plan'
 import type { CoursePlan, CoursePlanKind, CoursePlanStatus } from '../../types/entities'
 import { Button, Chip, Collapse, Dialog, EmptyState, Input, ScrollRow, Section, useToast } from '../../components/ui'
 import { cn } from '../../utils/cn'
 import { createId, nowISO } from '../../utils/id'
+import { useAIChatStore } from '../../components/ai/chat-store'
 import { PlanDialog } from './CoursePlanDialog'
 import { useInspectorStore } from '../../components/inspector/inspector-store'
 import { PlanRow } from './CoursePlanRow'
@@ -37,33 +49,43 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
   const items = useCoursePlanStore((s) => s.items)
   const removeItem = useCoursePlanStore((s) => s.remove)
   const saveItem = useCoursePlanStore((s) => s.save)
+  const saveMany = useCoursePlanStore((s) => s.saveMany)
   const { goals, notes, setGoal, setNotes } = useCoursePlanMetaStore()
   const toast = useToast().toast
 
   const progress = planProgress(items, goals)
   /** 公选分类的官方顺序 = 首次出现的顺序（`publicGroupsOf` 不排序，那是用户录入的顺序） */
   const groupOrder = new Map(publicGroupsOf(items).map((g, i) => [g.group, i]))
+  /** 列表排序口径（与 `movePlanItem` 共用同一个上下文，避免"看到的顺序"和"换位的顺序"不一致） */
+  const sortCtx = { kindOrder: KIND_ORDER, groupOrder }
+  /** 一级分类的计数（筛选药丸上直接给数，先看规模再点进去） */
+  const counts: Record<CoursePlanKind, number> = { limited: 0, public: 0, pe: 0 }
+  for (const c of items) counts[c.kind] += 1
 
   const [draft, setDraft] = useState<PlanDraft | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [goalOpen, setGoalOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
   const [filter, setFilter] = useState<CoursePlanStatus | 'all'>('all')
+  const [kindFilter, setKindFilter] = useState<CoursePlanKind | 'all'>('all')
+  const [query, setQuery] = useState('')
+  const [sortMode, setSortMode] = useState(false)
 
-  /**
-   * 统一列表的排序：方向（限选→公选→体育）→ 公选内按官方分类 → 状态（已选→候选→不可选）→ 课程名。
-   * 同分类的课相邻，分类顺序仍是学校的顺序，不必再靠"分组区块"表达。
-   */
-  const statusRank: Record<CoursePlanStatus, number> = { selected: 0, candidate: 1, unavailable: 2 }
+  /** 当前可见列表：一级分类 → 状态 → 关键词，最后按统一排序口径排（派生数据在组件体内算，勿进 selector） */
   const list = items
+    .filter((c) => kindFilter === 'all' || c.kind === kindFilter)
     .filter((c) => filter === 'all' || c.status === filter)
-    .sort(
-      (a, b) =>
-        KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
-        (a.kind === 'public' ? (groupOrder.get(a.group ?? '') ?? 999) - (groupOrder.get(b.group ?? '') ?? 999) : 0) ||
-        statusRank[a.status] - statusRank[b.status] ||
-        a.title.localeCompare(b.title, 'zh-Hans-CN'),
-    )
+    .filter((c) => matchesQuery(c, query))
+    .sort((a, b) => comparePlanItems(a, b, sortCtx))
+
+  /** 排序模式下的 ↑↓ 边界：同方向内是否还有上一条 / 下一条（按当前可见列表算） */
+  const moveBounds = new Map<string, { up: boolean; down: boolean }>()
+  if (sortMode) {
+    for (const kind of KIND_ORDER) {
+      const arr = list.filter((c) => c.kind === kind)
+      arr.forEach((c, i) => moveBounds.set(c.id, { up: i > 0, down: i < arr.length - 1 }))
+    }
+  }
 
   const openNew = (kind: CoursePlanKind) => {
     setEditingId(null)
@@ -80,6 +102,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
       teacher: c.teacher ?? '',
       status: c.status,
       note: c.note ?? '',
+      tags: (c.tags ?? []).join(' '),
     })
   }
 
@@ -92,6 +115,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
     const now = nowISO()
     const prev = editingId ? items.find((c) => c.id === editingId) : undefined
     const credit = Number(draft.credit)
+    const tags = normalizeTags(draft.tags)
     await saveItem({
       id: editingId ?? createId(),
       kind: draft.kind,
@@ -102,10 +126,47 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
       teacher: draft.teacher.trim() || undefined,
       status: draft.status,
       note: draft.note.trim() || undefined,
+      tags: tags.length > 0 ? tags : undefined,
+      // 手动顺序只在"同一方向"内有意义：改了方向就丢弃（旧序号会和新方向里的序号打架）
+      order: prev && prev.kind === draft.kind ? prev.order : undefined,
       createdAt: prev?.createdAt ?? now,
       updatedAt: now,
     })
     setDraft(null)
+  }
+
+  /** 进入 / 退出排序模式：进入时清掉状态筛选与搜索（见文件头） */
+  const toggleSort = () => {
+    if (sortMode) {
+      setSortMode(false)
+      return
+    }
+    setFilter('all')
+    setQuery('')
+    setSortMode(true)
+  }
+
+  /** 手动换位：只保存真正变了 order 的行（物化会让同方向其它行也带上 order，但值相同的不用写库） */
+  const move = async (id: string, dir: -1 | 1) => {
+    const next = movePlanItem(items, id, dir, sortCtx)
+    const before = new Map(items.map((c) => [c.id, c.order]))
+    const changed = next.filter((c) => before.get(c.id) !== c.order)
+    if (changed.length === 0) return
+    await saveMany(changed.map((c) => ({ ...c, updatedAt: nowISO() })))
+  }
+
+  /** 「AI 建议」：把当前进度预填给天机（**不自动发送** —— 发送权在用户手里） */
+  const askAi = () => {
+    const line = KIND_ORDER.map((k) => {
+      const p = progress.byKind[k]
+      return `${KIND_LABEL[k]} 已选 ${trim(p.selected)}/${trim(p.goal)}${
+        p.goal > 0 ? `（还差 ${trim(p.remaining)}）` : '（未设目标）'
+      }`
+    }).join('；')
+    const candidates = items.filter((c) => c.status === 'candidate').length
+    useAIChatStore.getState().openWithDraft(
+      `结合我的选课规划给点建议：${line}。候选课有 ${candidates} 门。优先补哪些缺口、哪些课值得优先考虑？`,
+    )
   }
 
   const addNote = async () => {
@@ -157,14 +218,28 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
         </div>
       </Section>
 
-      {/* ② 课程计划 —— 一行一课；筛选是轻量的药丸行，不是分区 */}
+      {/* ② 课程计划 —— 一行一课；筛选是"一级分类 + 状态"两行轻量药丸 + 一个搜索框 */}
       <Section
         title="课程计划"
         hint={items.length > 0 ? `${items.length} 门` : undefined}
         action={
-          <Button size="sm" variant="primary" onClick={() => openNew('limited')}>
-            <Plus size={13} /> 加一门
-          </Button>
+          items.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button size="sm" variant="tertiary" onClick={toggleSort} className="!px-2">
+                <ArrowUpDown size={13} /> {sortMode ? '完成' : '排序'}
+              </Button>
+              <Button size="sm" variant="tertiary" onClick={askAi} className="!px-2">
+                <Sparkles size={13} /> AI 建议
+              </Button>
+              <Button size="sm" variant="primary" onClick={() => openNew('limited')}>
+                <Plus size={13} /> 加一门
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="primary" onClick={() => openNew('limited')}>
+              <Plus size={13} /> 加一门
+            </Button>
+          )
         }
       >
         {items.length === 0 ? (
@@ -179,6 +254,25 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
           />
         ) : (
           <>
+            {/* 搜索：跨方向找课（课名 / 教师 / 二级分类 / 标签 / 备注） */}
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜课程 / 教师 / 二级分类 / 标签"
+              className="mb-2"
+              aria-label="搜索课程"
+            />
+            {/* 一级分类：限选 / 公选 / 体育（带计数）——"不方便找"的正解 */}
+            <ScrollRow className="mb-2" activeSelector={'[data-active="true"]'} activeKey={kindFilter}>
+              <Chip active={kindFilter === 'all'} onClick={() => setKindFilter('all')}>
+                全部 <span className="tabular opacity-60">{items.length}</span>
+              </Chip>
+              {KIND_ORDER.map((k) => (
+                <Chip key={k} active={kindFilter === k} onClick={() => setKindFilter(k)}>
+                  {KIND_LABEL[k]} <span className="tabular opacity-60">{counts[k]}</span>
+                </Chip>
+              ))}
+            </ScrollRow>
             <ScrollRow className="mb-2" activeSelector={'[data-active="true"]'} activeKey={filter}>
               {STATUS_FILTERS.map((key) => (
                 <Chip key={key} active={filter === key} onClick={() => setFilter(key)}>
@@ -186,20 +280,33 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
                 </Chip>
               ))}
             </ScrollRow>
+            {sortMode && (
+              <p className="mb-2 text-xs leading-relaxed text-ink-faint">
+                点 ↑↓ 在**方向内**调整顺序；跨方向的先后由方向本身决定。
+              </p>
+            )}
             {list.length > 0 ? (
               <div>
-                {list.map((c) => (
-                  <PlanRow
-                    key={c.id}
-                    item={c}
-                    onDetail={() => useInspectorStore.getState().open('coursePlan', c.id)}
-                    onEdit={() => openEdit(c)}
-                    onRemove={() => void removeItem(c.id)}
-                  />
-                ))}
+                {list.map((c) => {
+                  const bounds = moveBounds.get(c.id)
+                  return (
+                    <PlanRow
+                      key={c.id}
+                      item={c}
+                      sortMode={sortMode}
+                      canUp={bounds?.up ?? false}
+                      canDown={bounds?.down ?? false}
+                      onMove={(dir) => void move(c.id, dir)}
+                      onTag={setQuery}
+                      onDetail={() => useInspectorStore.getState().open('coursePlan', c.id)}
+                      onEdit={() => openEdit(c)}
+                      onRemove={() => void removeItem(c.id)}
+                    />
+                  )
+                })}
               </div>
             ) : (
-              <p className="py-2 text-xs text-ink-faint">没有该状态的课程</p>
+              <p className="py-2 text-xs text-ink-faint">没有符合条件的课程</p>
             )}
           </>
         )}
@@ -240,6 +347,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
       <PlanDialog
         draft={draft}
         editing={editingId != null}
+        groupOptions={groupSuggestions(items, draft?.kind ?? 'limited')}
         onDraft={setDraft}
         onClose={() => setDraft(null)}
         onSave={() => void saveDraft()}

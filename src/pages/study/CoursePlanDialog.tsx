@@ -3,6 +3,11 @@
  *
  * 从 `CoursePlanTab` 抽出（那一页已顶到 400 行上限）。
  * 只负责"把草稿改好并交回去"，落库由调用方做 —— 弹窗不该知道 store 的存在。
+ *
+ * ## 2026-10-02
+ *  · **二级分类**对所有方向可见（原仅公选）——数据仍是自由文本，不做预设清单；
+ *    建议值经 `groupOptions` 传入（由页面用 `groupSuggestions` 算好），本组件不知道来源；
+ *  · **标签**：一行文本输入（空格 / 逗号分隔），保存时由页面用 `normalizeTags` 归一化。
  */
 import { Button, Dialog, Input, Select } from '../../components/ui'
 import type { CoursePlanKind, CoursePlanStatus } from '../../types/entities'
@@ -11,6 +16,7 @@ import { KIND_LABEL, KIND_ORDER, STATUS_LABEL, type PlanDraft } from './plan-sha
 export function PlanDialog({
   draft,
   editing,
+  groupOptions,
   onDraft,
   onClose,
   onSave,
@@ -18,6 +24,8 @@ export function PlanDialog({
   /** null = 弹窗关着 */
   draft: PlanDraft | null
   editing: boolean
+  /** 二级分类建议值（同方向已录入值；可为空 = 无建议，仍可自由输入） */
+  groupOptions: string[]
   onDraft: (d: PlanDraft) => void
   onClose: () => void
   onSave: () => void
@@ -87,14 +95,27 @@ export function PlanDialog({
             onChange={(e) => set({ teacher: e.target.value })}
           />
         </div>
-        {/* 分组只对公选有意义（限选 / 体育没有"官方分类"这个概念） */}
-        {draft.kind === 'public' && (
+        {/* 二级分类：自由文本 + 已录入值建议（datalist）。全方向可用 */}
+        <div className="grid grid-cols-2 gap-3">
           <Input
-            placeholder="分类（如：文化传承与安全教育）"
+            list="plan-group-options"
+            placeholder="二级分类（可留空）"
             value={draft.group}
             onChange={(e) => set({ group: e.target.value })}
+            aria-label="二级分类"
           />
-        )}
+          <datalist id="plan-group-options">
+            {groupOptions.map((g) => (
+              <option key={g} value={g} />
+            ))}
+          </datalist>
+          <Input
+            placeholder="标签（空格 / 逗号分隔）"
+            value={draft.tags}
+            onChange={(e) => set({ tags: e.target.value })}
+            aria-label="标签"
+          />
+        </div>
         <Input
           placeholder="备注（可留空）"
           value={draft.note}

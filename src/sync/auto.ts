@@ -12,13 +12,38 @@ import { runSync } from './SyncService'
  * ⚠️ 这个标记此前是模块私有的，**界面看不到** —— 于是刚改完数据、还没同步时，
  * 设置页照样显示「已同步」，用户以为已经是最新的（实际还差一次推送）。
  * 现在对外暴露 + 可订阅，状态展示才有正确判据。
+ *
+ * ⚠️ 2026-10-02：标记**持久化到 localStorage**（离线队列的最小实现）——
+ * 此前是纯内存变量，离线期间的改动刷新页面后 dirty 归零，
+ * 网络恢复也不会补推，用户只看到"改了没同步 / 同步老是失败"。
  */
-let dirty = false
+const DIRTY_KEY = 'zbt:sync-dirty:v1'
+
+/** 读本机持久化的待同步标记；localStorage 不可用（隐私模式 / 非浏览器）时退化为 false */
+function readStoredDirty(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(DIRTY_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** 持久化待同步标记；写不进去（隐私模式）就只保留本会话语义，不影响同步本身 */
+function writeStoredDirty(v: boolean): void {
+  try {
+    localStorage.setItem(DIRTY_KEY, v ? '1' : '0')
+  } catch {
+    /* 忽略：退化为仅本会话有效 */
+  }
+}
+
+let dirty = readStoredDirty()
 const dirtyListeners = new Set<() => void>()
 
 function setDirty(v: boolean): void {
   if (dirty === v) return
   dirty = v
+  writeStoredDirty(v)
   for (const fn of dirtyListeners) fn()
 }
 
@@ -120,13 +145,21 @@ export function notifyDataChanged(): void {
   schedule()
 }
 
-/** 网络恢复自动同步 */
+/** 网络恢复 / 回前台自动同步 —— 两者都只在"有积压改动"时才排一次 */
 export function initAutoSync(): void {
   if (typeof window === 'undefined') return
   // 云笺已下线：老配置（gist）一次性迁移为仓库模式
   migrateSyncModeToRepo()
+  // 启动补一次：上次会话留下的「待同步」改动已持久化，不必等下一次数据变更才推
+  if (dirty && navigator.onLine !== false) schedule()
   window.addEventListener('online', () => {
     const s = useSettingsStore.getState()
     if (s.autoSync && dirty) schedule()
+  })
+  // 回前台补一次：移动端 PWA 常被系统冻结，恢复时可能已跨过好几个节拍
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return
+    const s = useSettingsStore.getState()
+    if (s.autoSync && dirty && navigator.onLine !== false) schedule()
   })
 }

@@ -4,6 +4,9 @@
  * 从 SettingsPage 拆出。原文件 1259 行、四个分组全堆在一个组件里，
  * 这里按「**状态跟着分组走**」的原则独立成组件 —— 它需要的数据与操作
  * 在本文件内自洽，父组件只负责渲染，不再做 prop 传递。
+ *
+ * 2026-10-02 版式统一：四行（保留上限 / 清理 / 重复任务 / 诊断）收入
+ * `SettingsPanel` + `SettingsRow`（与 AI / 同步页同一套行式），功能一个不删。
  */
 import { useMemo, useRef, useState } from 'react'
 import { Download, Trash2, Upload } from 'lucide-react'
@@ -24,6 +27,7 @@ import { useTaskStore } from '../../stores/useTaskStore'
 import { cleanupDuplicateFixedTasks, previewDuplicateFixedTasks } from '../../services/task-repair'
 import { toISODate } from '../../utils/id'
 import { Button, Collapse, Dialog, Section, Select, useToast } from '../../components/ui'
+import { SettingsPanel, SettingsRow } from './SettingsRow'
 
 export function DataGroup() {
   const settings = useSettingsStore()
@@ -183,120 +187,119 @@ export function DataGroup() {
           </div>
         </Dialog>
 
-        {/* 情报数据（原来单开一段） */}
-        <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">保留上限</span>
-          <Select
-            value={String(settings.intelKeepLimit)}
-            onChange={(e) => settings.set({ intelKeepLimit: Number(e.target.value) })}
-            className="!w-auto !py-1.5 text-sm"
-            aria-label="情报保留上限"
-          >
-            {KEEP_LIMIT_OPTIONS.map((n) => (
-              <option key={n} value={String(n)}>
-                {n === 0 ? '不限制' : `${n} 条`}
-              </option>
-            ))}
-          </Select>
-          <span className="flex-1 text-xs text-ink-faint">
-            超出后按「已读且最旧优先」清理
-          </span>
-        </div>
-        <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">清理</span>
-          <Button
-            size="sm"
-            variant="tertiary"
-            disabled={intelTotal === 0}
-            onClick={async () => {
-              const { removed } = await clearReadIntelligence()
-              await useIntelligenceStore.getState().load()
-              toast(removed > 0 ? `已清理 ${removed} 条已读情报` : '没有已读情报可清理', removed > 0 ? 'success' : 'info')
-            }}
-          >
-            <Trash2 size={13} /> 清理已读
-          </Button>
-          <Button
-            size="sm"
-            variant="tertiary"
-            disabled={intelTotal === 0}
-            onClick={() => setClearIntelOpen(true)}
-          >
-            <Trash2 size={13} /> 清空情报
-          </Button>
-          <span className="text-xs text-ink-faint">当前 {intelTotal} 条</span>
-        </div>
-
-        {/* 数据修复（原来单开一段）：不是破坏性操作（只删重复的历史副本），
-            但会让「已完成」少几条旧记录，所以仍走一层确认 */}
-        <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">重复任务</span>
-          <Button
-            size="sm"
-            variant="tertiary"
-            disabled={dup.removable === 0}
-            onClick={() => setDupOpen(true)}
-          >
-            <Trash2 size={13} /> 清理历史重复
-          </Button>
-          <span className="flex-1 text-xs text-ink-faint">
-            {dup.removable > 0
-              ? `${dup.groups} 个固定任务残留 ${dup.removable} 条旧副本`
-              : '没有需要清理的重复'}
-          </span>
-        </div>
-        <Dialog
-          open={dupOpen}
-          onClose={() => setDupOpen(false)}
-          title="清理历史重复"
-          footer={
-            <>
-              <Button variant="tertiary" onClick={() => setDupOpen(false)}>取消</Button>
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  const { removed, groups } = await cleanupDuplicateFixedTasks()
-                  await useTaskStore.getState().load()
-                  setDupOpen(false)
-                  toast(
-                    removed > 0 ? `已清理 ${groups} 个任务下的 ${removed} 条旧副本` : '没有需要清理的重复',
-                    removed > 0 ? 'success' : 'info',
-                  )
-                }}
-              >
-                确认清理
-              </Button>
-            </>
-          }
-        >
-          <p className="mb-3 text-sm text-ink-muted">
-            将删除 <strong className="text-cinnabar">{dup.removable}</strong> 条历史副本
-            （涉及 {dup.groups} 个固定任务）。每个任务保留最新的一条。
-          </p>
-          {/* 把代价说清楚：旧副本也是真实的完成历史，删了「已完成」里对应条目会一起消失 */}
-          <p className="mb-3 text-xs text-ink-faint">
-            这些副本也是当时的完成记录，清理后「已完成」列表里对应条目会一并消失。
-            每一期的「已完成」本身不会被删掉，删的只是同一件事多出来的副本。
-          </p>
-          {dup.titles.length > 0 && (
-            <div className="max-h-40 overflow-y-auto rounded-tile border border-line p-2">
-              {dup.titles.map((t) => (
-                <div key={t} className="truncate px-1 py-0.5 text-sm text-ink-soft">{t}</div>
+        <SettingsPanel>
+          {/* 情报数据（原来单开一段） */}
+          <SettingsRow label="保留上限">
+            <Select
+              value={String(settings.intelKeepLimit)}
+              onChange={(e) => settings.set({ intelKeepLimit: Number(e.target.value) })}
+              className="!w-auto !py-1.5 text-sm"
+              aria-label="情报保留上限"
+            >
+              {KEEP_LIMIT_OPTIONS.map((n) => (
+                <option key={n} value={String(n)}>
+                  {n === 0 ? '不限制' : `${n} 条`}
+                </option>
               ))}
-            </div>
-          )}
-        </Dialog>
+            </Select>
+            <span className="flex-1 text-xs text-ink-faint">
+              超出后按「已读且最旧优先」清理
+            </span>
+          </SettingsRow>
 
-        {/* 诊断（原来在「数据」段里，保持位置：排查用，最低频） */}
-        <div className="row">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">诊断</span>
-          <Button size="sm" variant="tertiary" onClick={() => void copyDiagnostics()}>
-            复制诊断信息
-          </Button>
-          <span className="flex-1 text-xs text-ink-faint">
-            版本 / 浏览器 / 同步状态 / 数据量
-          </span>
-        </div>
+          <SettingsRow label="清理">
+            <Button
+              size="sm"
+              variant="tertiary"
+              disabled={intelTotal === 0}
+              onClick={async () => {
+                const { removed } = await clearReadIntelligence()
+                await useIntelligenceStore.getState().load()
+                toast(removed > 0 ? `已清理 ${removed} 条已读情报` : '没有已读情报可清理', removed > 0 ? 'success' : 'info')
+              }}
+            >
+              <Trash2 size={13} /> 清理已读
+            </Button>
+            <Button
+              size="sm"
+              variant="tertiary"
+              disabled={intelTotal === 0}
+              onClick={() => setClearIntelOpen(true)}
+            >
+              <Trash2 size={13} /> 清空情报
+            </Button>
+            <span className="text-xs text-ink-faint">当前 {intelTotal} 条</span>
+          </SettingsRow>
+
+          {/* 数据修复：不是破坏性操作（只删重复的历史副本），
+              但会让「已完成」少几条旧记录，所以仍走一层确认 */}
+          <SettingsRow label="重复任务">
+            <Button
+              size="sm"
+              variant="tertiary"
+              disabled={dup.removable === 0}
+              onClick={() => setDupOpen(true)}
+            >
+              <Trash2 size={13} /> 清理历史重复
+            </Button>
+            <span className="flex-1 text-xs text-ink-faint">
+              {dup.removable > 0
+                ? `${dup.groups} 个固定任务残留 ${dup.removable} 条旧副本`
+                : '没有需要清理的重复'}
+            </span>
+          </SettingsRow>
+          <Dialog
+            open={dupOpen}
+            onClose={() => setDupOpen(false)}
+            title="清理历史重复"
+            footer={
+              <>
+                <Button variant="tertiary" onClick={() => setDupOpen(false)}>取消</Button>
+                <Button
+                  variant="primary"
+                  onClick={async () => {
+                    const { removed, groups } = await cleanupDuplicateFixedTasks()
+                    await useTaskStore.getState().load()
+                    setDupOpen(false)
+                    toast(
+                      removed > 0 ? `已清理 ${groups} 个任务下的 ${removed} 条旧副本` : '没有需要清理的重复',
+                      removed > 0 ? 'success' : 'info',
+                    )
+                  }}
+                >
+                  确认清理
+                </Button>
+              </>
+            }
+          >
+            <p className="mb-3 text-sm text-ink-muted">
+              将删除 <strong className="text-cinnabar">{dup.removable}</strong> 条历史副本
+              （涉及 {dup.groups} 个固定任务）。每个任务保留最新的一条。
+            </p>
+            {/* 把代价说清楚：旧副本也是真实的完成历史，删了「已完成」里对应条目会一起消失 */}
+            <p className="mb-3 text-xs text-ink-faint">
+              这些副本也是当时的完成记录，清理后「已完成」列表里对应条目会一并消失。
+              每一期的「已完成」本身不会被删掉，删的只是同一件事多出来的副本。
+            </p>
+            {dup.titles.length > 0 && (
+              <div className="max-h-40 overflow-y-auto rounded-tile border border-line p-2">
+                {dup.titles.map((t) => (
+                  <div key={t} className="truncate px-1 py-0.5 text-sm text-ink-soft">{t}</div>
+                ))}
+              </div>
+            )}
+          </Dialog>
+
+          {/* 诊断（原来在「数据」段里，保持位置：排查用，最低频） */}
+          <SettingsRow label="诊断">
+            <Button size="sm" variant="tertiary" onClick={() => void copyDiagnostics()}>
+              复制诊断信息
+            </Button>
+            <span className="flex-1 text-xs text-ink-faint">
+              版本 / 浏览器 / 同步状态 / 数据量
+            </span>
+          </SettingsRow>
+        </SettingsPanel>
       </Section>
 
       {/* 危险操作 + 故障记录**合成一个条目且不嵌套**（Step 5-3E 用户拍板：

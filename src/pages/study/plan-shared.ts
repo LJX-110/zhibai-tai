@@ -12,21 +12,9 @@ import type { CoursePlanKind, CoursePlanStatus } from '../../types/entities'
 /** `Seal` 的色调闭集（转引，免得各处再写一遍字面量） */
 type SealTone = NonNullable<SealProps['tone']>
 
-/** 三个方向的中文名 */
-export const KIND_LABEL: Record<CoursePlanKind, string> = {
-  limited: '限选',
-  public: '公选',
-  pe: '体育',
-}
-
-/** 展示顺序：限选 → 公选 → 体育（与培养方案的习惯一致） */
-export const KIND_ORDER: CoursePlanKind[] = ['limited', 'public', 'pe']
-
-export const STATUS_LABEL: Record<CoursePlanStatus, string> = {
-  selected: '已选',
-  candidate: '候选',
-  unavailable: '不可选',
-}
+/* 方向 / 状态的中文字典与展示顺序（2026-10-02 上移到 services/study-plan.ts，
+ * 让天机工具（courses.plan）与页面说同一套词）—— 这里只转出，消费方 import 路径不变 */
+export { KIND_LABEL, KIND_ORDER, STATUS_LABEL } from '../../services/study-plan'
 
 /**
  * 状态印章 —— 圆形 · 细边 · 单字 · 低面积
@@ -71,6 +59,8 @@ export interface PlanDraft {
   teacher: string
   status: CoursePlanStatus
   note: string
+  /** 标签草稿（原始输入；保存时经 `normalizeTags` 归一化，2026-10-02 新增） */
+  tags: string
 }
 
 export const emptyDraft = (kind: CoursePlanKind, group = ''): PlanDraft => ({
@@ -81,6 +71,7 @@ export const emptyDraft = (kind: CoursePlanKind, group = ''): PlanDraft => ({
   teacher: '',
   status: 'candidate',
   note: '',
+  tags: '',
 })
 
 /** 学分去掉多余的 .0（12.0 → 12），保留一位小数（12.5 → 12.5） */

@@ -44,7 +44,7 @@ function proxyCandidates(selfProxyUrl?: string): ProxyCandidate[] {
 
 /** 未配置代理时的统一提示：要能直接照着做 */
 export const NEEDS_PROXY_MESSAGE =
-  '跨域抓取需要自建代理（公共代理在国内已全部不可用）。部署见仓库 proxy/ 或 cloudflare-worker/README.md，约 2 分钟'
+  '跨域抓取需要自建代理（公共代理在国内已全部不可用）。部署见仓库 proxy/README.md（从零步骤），约 5 分钟'
 
 /**
  * 校验并规整用户填的代理地址（Step 5-1 · B3）。

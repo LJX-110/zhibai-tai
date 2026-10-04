@@ -26,6 +26,8 @@ export function CoursePlanDetail({ id, onClose }: { id: string; onClose: () => v
 
   const rows: [string, string | undefined][] = [
     ['教师', item.teacher],
+    // 标签（2026-10-02）：随身展示、顿号连写 —— 详情页不承担编辑，看全即可
+    ['标签', item.tags && item.tags.length > 0 ? item.tags.join('、') : undefined],
     ['备注', item.note],
     ['更新', item.updatedAt?.slice(0, 10)],
   ]
@@ -36,7 +38,8 @@ export function CoursePlanDetail({ id, onClose }: { id: string; onClose: () => v
       <MetaSection>
         <Badge tone="plain">{KIND_LABEL[item.kind]}</Badge>
         <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
-        {item.group && item.kind === 'public' && <Badge tone="plain">{item.group}</Badge>}
+        {/* 二级分类对全部方向展示（2026-10-02；数据仍是自由文本） */}
+        {item.group && <Badge tone="plain">{item.group}</Badge>}
       </MetaSection>
       <div className="mt-3 text-3xl font-semibold tabular text-ink-bright">
         {item.credit != null ? trim(item.credit) : '—'}

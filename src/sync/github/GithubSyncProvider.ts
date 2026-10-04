@@ -9,6 +9,10 @@
  *  · 竞争处理：PATCH ref 默认 force=false，他端刚推送过时本次更新非
  *    fast-forward，GitHub 直接拒绝（422）→ 抛可重试错误，
  *    由 SyncService 整体重跑「拉取-合并-推送」完成收敛。
+ *  · 读-写窗口校验（2026-10-02）：读取快照时记住当时的头（readHeadSha），
+ *    写入前若头已变（他端推过），**即便本次提交能以新头为父"快进成功"也拒绝** ——
+ *    否则快照内容（基于旧头合并）会静默缺掉他端刚推的改动，
+ *    表现为远端数据被回退。同样抛可重试错误，交给 SyncService 重跑收敛。
  *
  * 兼容性：旧快照由 Contents API 写入，但文件本身就在仓库里，
  * Git Data API 按 blob 读取，新旧格式无缝衔接。
@@ -31,6 +35,11 @@ export class GitHubSnapshotProvider implements SyncProvider {
   private repo: string
   private token: string
   private branch: string
+  /**
+   * 本次读到快照时分支头的 commit sha（`null` = 当时分支/空仓库不存在）。
+   * `undefined` = 还没读过（直接调 `writeSyncFile` 的场景，如单测）→ 不做读-写窗口校验。
+   */
+  private readHeadSha: string | null | undefined = undefined
 
   constructor(repo: string, token: string, branch = 'main') {
     this.repo = repo
@@ -104,6 +113,8 @@ export class GitHubSnapshotProvider implements SyncProvider {
   /** 读取远端同步文件；不存在返回 null */
   async readSyncFile(): Promise<SyncFile | null> {
     const head = await this.headRef()
+    // 记录本次读取到的头：写入侧据此做读-写窗口校验（头变过就必须重跑）
+    this.readHeadSha = head?.commitSha ?? null
     if (!head) return null
     const blobSha = await this.findSnapshotBlob(head.treeSha)
     if (!blobSha) return null
@@ -131,6 +142,13 @@ export class GitHubSnapshotProvider implements SyncProvider {
 
     // 2. 分支头（空仓库/新分支时为 null）
     const head = await this.headRef()
+
+    // 读-写窗口校验（2026-10-02）：本实例读过快照的话，写入前头必须仍是当时那一个。
+    // 头变过 = 他端刚推送过 —— 此刻若照旧提交，它会以新头为父"快进成功"，
+    // 但快照内容缺他端的改动（静默回退远端）。显式抛可重试错误，交给 SyncService 重跑。
+    if (this.readHeadSha !== undefined && (head?.commitSha ?? null) !== this.readHeadSha) {
+      throw new Error('远端快照正被其他设备更新，请稍后重试同步')
+    }
 
     // 3. 建树：基于当前头树，仅替换快照文件一项
     const tree = await this.request('trees', {

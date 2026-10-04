@@ -8,7 +8,15 @@
  *  · **非法 credit 不计入**：一个 NaN 能把整页进度算废，且页面上看不出来。
  */
 import { describe, expect, it } from 'vitest'
-import { planProgress, publicGroupsOf } from '../services/study-plan'
+import {
+  comparePlanItems,
+  groupSuggestions,
+  matchesQuery,
+  movePlanItem,
+  normalizeTags,
+  planProgress,
+  publicGroupsOf,
+} from '../services/study-plan'
 import { KIND_ORDER, KIND_SEAL, STATUS_LABEL, STATUS_SEAL } from '../pages/study/plan-shared'
 import type { CoursePlan } from '../types/entities'
 
@@ -198,5 +206,100 @@ describe('状态印章（A3 形制）：三个状态各有一枚可区分的圆�
     expect(code).toContain('KIND_SEAL')
     // 手搓圆（rounded-full + border 的 span）是上一版的实现，禁止回退
     expect(code).not.toMatch(/rounded-full/)
+  })
+})
+
+describe('选课列表口径（2026-10-02）：搜索 / 标签 / 二级分类建议', () => {
+  it('matchesQuery：课名 / 教师 / 二级分类 / 标签 / 备注都命中，空查询恒真', () => {
+    const item = plan({
+      id: 'a',
+      title: '金融学',
+      teacher: '周明勇',
+      group: '文化传承与安全教育',
+      tags: ['专业课', '好过'],
+      note: '周二下午',
+    })
+    expect(matchesQuery(item, '')).toBe(true)
+    expect(matchesQuery(item, '   ')).toBe(true)
+    expect(matchesQuery(item, '金融')).toBe(true)
+    expect(matchesQuery(item, '周明勇')).toBe(true)
+    expect(matchesQuery(item, '文化传承')).toBe(true)
+    expect(matchesQuery(item, '好过')).toBe(true)
+    expect(matchesQuery(item, '周二')).toBe(true)
+    expect(matchesQuery(item, '英语')).toBe(false)
+    // 大小写不敏感（英文标签）
+    expect(matchesQuery(plan({ tags: ['AI'] }), 'ai')).toBe(true)
+  })
+
+  it('normalizeTags：按空白 / 中英文逗号 / 顿号切分、去重、去空（保序）', () => {
+    expect(normalizeTags('专业课, 好过、双语  AI')).toEqual(['专业课', '好过', '双语', 'AI'])
+    expect(normalizeTags('  ')).toEqual([])
+    expect(normalizeTags('a，a, a')).toEqual(['a'])
+  })
+
+  it('groupSuggestions：只收同方向、去重、保持首次出现序（不做预设清单）', () => {
+    const items = [
+      plan({ id: 'a', kind: 'public', group: '文化传承' }),
+      plan({ id: 'b', kind: 'limited', group: '限选自己的分类' }),
+      plan({ id: 'c', kind: 'public', group: '文化传承' }),
+      plan({ id: 'd', kind: 'public', group: '科技思维' }),
+      plan({ id: 'e', kind: 'public' }),
+      plan({ id: 'f', kind: 'public', group: '   ' }),
+    ]
+    expect(groupSuggestions(items, 'public')).toEqual(['文化传承', '科技思维'])
+    expect(groupSuggestions(items, 'limited')).toEqual(['限选自己的分类'])
+  })
+})
+
+describe('选课列表排序（2026-10-02）：comparePlanItems / movePlanItem', () => {
+  it('排序键：方向 → 手动序（有先无后）→ 状态 → 课名', () => {
+    const items = [
+      plan({ id: 'a', kind: 'public', title: '乙', status: 'candidate' }),
+      plan({ id: 'b', kind: 'limited', title: '甲', status: 'selected' }),
+      plan({ id: 'c', kind: 'limited', title: '丙', status: 'candidate', order: 0 }),
+      plan({ id: 'd', kind: 'limited', title: '乙', status: 'selected' }),
+    ]
+    const sorted = [...items].sort((x, y) => comparePlanItems(x, y))
+    // 限选在前：c（手动序 0）→ b/d（无 order，按状态 已选 先）→ 公选最后
+    expect(sorted.map((x) => x.id)).toEqual(['c', 'b', 'd', 'a'])
+  })
+
+  it('movePlanItem：同方向内换位（物化后交换），跨方向不受影响', () => {
+    const items = [
+      plan({ id: 'a', kind: 'limited', title: '甲' }),
+      plan({ id: 'b', kind: 'limited', title: '乙' }),
+      plan({ id: 'c', kind: 'public', title: '丙' }),
+    ]
+    // 上移：默认顺序 [甲, 乙]，乙上移 → [乙, 甲]
+    const moved = movePlanItem(items, 'b', -1)
+    const order = [...moved]
+      .filter((x) => x.kind === 'limited')
+      .sort((x, y) => comparePlanItems(x, y))
+      .map((x) => x.id)
+    expect(order).toEqual(['b', 'a'])
+    // 公选条目没被物化、也没被改
+    expect(moved.find((x) => x.id === 'c')!.order).toBeUndefined()
+    // 原数组未被就地修改（纯函数）
+    expect(items.find((x) => x.id === 'a')!.order).toBeUndefined()
+  })
+
+  it('movePlanItem：边界（已在头 / 尾）原样返回', () => {
+    const items = [
+      plan({ id: 'a', kind: 'limited', title: '甲' }),
+      plan({ id: 'b', kind: 'limited', title: '乙' }),
+      plan({ id: 'c', kind: 'public', title: '丙' }),
+    ]
+    expect(movePlanItem(items, 'a', -1)).toEqual(items)
+    expect(movePlanItem(items, 'c', 1)).toEqual(items)
+  })
+
+  it('movePlanItem：多条都没 order 时第一次点 ↑ 也有确定先后（物化）', () => {
+    // 兜底按课名：甲(b) 在前；把 a 上移 → a 到最前
+    const items = [plan({ id: 'a', title: '乙' }), plan({ id: 'b', title: '甲' })]
+    const moved = movePlanItem(items, 'a', -1)
+    const sorted = [...moved].sort((x, y) => comparePlanItems(x, y)).map((x) => x.id)
+    expect(sorted).toEqual(['a', 'b'])
+    // 物化：两行都带上了 order（否则下次比较仍然没有依据）
+    expect(moved.every((x) => typeof x.order === 'number')).toBe(true)
   })
 })

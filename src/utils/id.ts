@@ -71,6 +71,18 @@ export function formatHM(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+/**
+ * ISO 时间 → 「今天 15:54 / 10月1日 09:12」。
+ * 同步状态这类元信息展示用 —— 此前直接把 `toISOString()` 原文（2026-10-02T07:54:15.410Z）
+ * 摆在界面上，用户读不出"这是什么时候"。
+ */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return `${friendlyDate(date)} ${formatHM(iso)}`
+}
+
 /** 星期中文 */
 export function weekdayCN(weekday: number): string {
   return ['日', '一', '二', '三', '四', '五', '六'][weekday]

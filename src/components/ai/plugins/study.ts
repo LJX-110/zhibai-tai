@@ -7,11 +7,13 @@
 import { GraduationCap } from 'lucide-react'
 import { aiService } from '../../../services/ai/ai-service'
 import { useCourseCancellationStore, useCourseRescheduleStore, useCourseStore, useExamStore, useHomeworkStore } from '../../../stores/useStudyStore'
+import { useCoursePlanMetaStore, useCoursePlanStore } from '../../../stores/useCoursePlanStore'
 import { useSettingsStore } from '../../../stores/useSettingsStore'
 import { activeSlotsOfDay, currentWeek } from '../../../services/study'
+import { KIND_LABEL, KIND_ORDER, planProgress, type PlanKindProgress } from '../../../services/study-plan'
 import { defineTool } from '../../../services/agent/tools'
 import { diffDays, todayISO, weekdayCN } from '../../../utils/id'
-import type { Course } from '../../../types/entities'
+import type { Course, CoursePlanKind } from '../../../types/entities'
 import type { TianjiPlugin } from './index'
 
 /** 一门课的全部排课 → 一行可读描述（用于"XX 课什么时候上"这类查询） */
@@ -32,6 +34,18 @@ function dueText(due: string): string {
   if (d === 1) return '明天截止'
   if (d > 0) return `还剩 ${d} 天`
   return `已逾期 ${-d} 天`
+}
+
+/** 选课规划的当前快照（工具与明细区共用取数口径；文本各自组装，2026-10-02） */
+function planSnapshot() {
+  const items = useCoursePlanStore.getState().items
+  const goals = useCoursePlanMetaStore.getState().goals
+  return { items, progress: planProgress(items, goals) }
+}
+
+/** 方向进度一句话 —— 工具与明细区共用，避免两处格式漂移 */
+function kindProgressLine(kind: CoursePlanKind, p: PlanKindProgress): string {
+  return `${KIND_LABEL[kind]}：已选 ${p.selected}/${p.goal}${p.goal > 0 ? `，还差 ${p.remaining}` : '（未设目标）'}`
 }
 
 export const studyPlugin: TianjiPlugin = {
@@ -68,6 +82,41 @@ export const studyPlugin: TianjiPlugin = {
           return `- ${slot.start}–${slot.end} ${course.name}${where ? `（${where}）` : ''}`
         })
         return { count: slots.length, text: `${date} 共 ${slots.length} 节：\n${rows.join('\n')}` }
+      },
+    }),
+
+    /**
+     * 工具：选课规划（2026-10-02）。
+     * **只读** —— 学分进度与候选清单是"账"；推荐与决策由模型基于它给出，
+     * 不涉及任何写入（高风险写入永不允许作为工具，见 services/agent/tools.ts 的分工表）。
+     */
+    defineTool({
+      id: 'courses.plan',
+      name: '查选课规划',
+      description:
+        '取选课规划（限选 / 公选 / 体育）的学分进度与候选课清单。问"学分还差多少 / 公选还要选几门 / 选课建议"时用它。',
+      inputSchema: { kind: '可选：limited(限选) / public(公选) / pe(体育)，只看一个方向' },
+      mode: 'read',
+      riskLevel: 'read',
+      execute: async (args) => {
+        const { items, progress } = planSnapshot()
+        if (items.length === 0) {
+          return { count: 0, text: '还没有选课规划条目 —— 先在「学 · 课程表 · 学分选课」里加课。' }
+        }
+        const raw = typeof args.kind === 'string' ? args.kind : ''
+        const want = KIND_ORDER.find((k) => k === raw)
+        const kinds = want ? [want] : [...KIND_ORDER]
+        const lines = kinds.map((k) => kindProgressLine(k, progress.byKind[k]))
+        const candidates = items.filter((c) => c.status === 'candidate')
+        lines.push(
+          candidates.length > 0
+            ? `候选 ${candidates.length} 门：${candidates
+                .slice(0, 12)
+                .map((c) => `${c.title}${c.credit ? `（${c.credit} 学分）` : ''}`)
+                .join('、')}`
+            : '候选：无',
+        )
+        return { count: items.length, text: [`选课规划共 ${items.length} 门。`, ...lines].join('\n') }
       },
     }),
   ],
@@ -119,6 +168,17 @@ export const studyPlugin: TianjiPlugin = {
         }
       } else {
         lines.push('【待考】近期没有安排的考试')
+      }
+    }
+
+    // 选课规划明细（2026-10-02）：问选课 / 学分时补一份"进度账"（与 courses.plan 工具同口径）
+    if (/选课|学分|限选|公选|体育/.test(q)) {
+      const { items, progress } = planSnapshot()
+      lines.push(`【选课规划 · 共 ${items.length} 门】`)
+      for (const k of KIND_ORDER) lines.push(`  ${kindProgressLine(k, progress.byKind[k])}`)
+      const candidates = items.filter((c) => c.status === 'candidate')
+      if (candidates.length > 0) {
+        lines.push(`  候选 ${candidates.length} 门：${candidates.slice(0, 8).map((c) => c.title).join('、')}`)
       }
     }
 

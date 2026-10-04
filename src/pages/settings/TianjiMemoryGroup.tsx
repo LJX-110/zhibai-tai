@@ -10,13 +10,14 @@
  *    （所以没有"自动记录"开关 —— 那正是要避免的默认行为）；
  *  · **就地编辑**：文本与标签都是输入框，改完失焦即落库（无"编辑模式"，少一层操作）。
  *
- * ## 形制（2026-10-01）
- * 独立成段后不再套内层折叠（旧版是"人设"段里的一个折叠，标题还叫「记忆」——
- * 段头与折叠头同义重复）。段头 hint 承担计数（N/M 条生效），正文直接是新增行 + 列表。
+ * ## 形制（2026-10-02 版式统一）
+ * 新增行收入 `SettingsPanel`（与 AI 页其它段同一套行式）；记忆条目本身是"可操作的
+ * 列表行"，保持既有 `.row` 形制不变。
  */
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button, Input, Section, Switch, useToast } from '../../components/ui'
+import { SettingsPanel, SettingsRow } from './SettingsRow'
 import { makeMemory, useMemoryStore } from '../../stores/useMemoryStore'
 import { nowISO } from '../../utils/id'
 
@@ -43,8 +44,8 @@ export function TianjiMemoryGroup() {
 
   return (
     <Section title="AI 记忆" hint={items.length > 0 ? `${enabled}/${items.length} 条生效` : undefined}>
-      <div className="row flex-wrap">
-          <span className="w-20 shrink-0 text-sm text-ink-muted">新增</span>
+      <SettingsPanel>
+        <SettingsRow label="新增">
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -64,54 +65,58 @@ export function TianjiMemoryGroup() {
           <Button size="sm" variant="secondary" onClick={() => void add()} disabled={!text.trim()}>
             <Plus size={13} /> 记住
           </Button>
+        </SettingsRow>
+
+        <div className="px-2.5 pb-2.5">
+          {items.length === 0 ? (
+            <p className="text-xs text-ink-faint">还没有长期记忆 —— 聊天不会被自动记下，只收手动添加的条目。</p>
+          ) : (
+            <div className="space-y-2">
+              {items.map((m) => (
+                <div key={m.id} className="row group flex-wrap">
+                  <Switch
+                    size="md"
+                    checked={m.enabled}
+                    label={`${m.text.slice(0, 8)} 记忆开关`}
+                    onChange={() => void update(m.id, { enabled: !m.enabled, updatedAt: nowISO() })}
+                  />
+                  <Input
+                    defaultValue={m.text}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim()
+                      if (!v || v === m.text) return
+                      void update(m.id, { text: v, updatedAt: nowISO() })
+                    }}
+                    className="min-w-0 flex-1 basis-full sm:basis-0"
+                    aria-label="记忆内容"
+                  />
+                  <Input
+                    defaultValue={m.tags.join(' ')}
+                    onBlur={(e) => {
+                      const next = e.target.value.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean)
+                      if (next.join('|') === m.tags.join('|')) return
+                      void update(m.id, { tags: next, updatedAt: nowISO() })
+                    }}
+                    placeholder="标签"
+                    className="max-w-[9rem]"
+                    aria-label="记忆标签"
+                  />
+                  <button
+                    className="hover-reveal touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar"
+                    onClick={() => {
+                      void remove(m.id)
+                      toast('已删除这条记忆')
+                    }}
+                    aria-label="删除这条记忆"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        {items.length === 0 ? (
-          <p className="text-xs text-ink-faint">还没有长期记忆 —— 聊天不会被自动记下，只收手动添加的条目。</p>
-        ) : (
-          <div className="space-y-2">
-            {items.map((m) => (
-              <div key={m.id} className="row group flex-wrap">
-                <Switch
-                  size="md"
-                  checked={m.enabled}
-                  label={`${m.text.slice(0, 8)} 记忆开关`}
-                  onChange={() => void update(m.id, { enabled: !m.enabled, updatedAt: nowISO() })}
-                />
-                <Input
-                  defaultValue={m.text}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim()
-                    if (!v || v === m.text) return
-                    void update(m.id, { text: v, updatedAt: nowISO() })
-                  }}
-                  className="min-w-0 flex-1 basis-full sm:basis-0"
-                  aria-label="记忆内容"
-                />
-                <Input
-                  defaultValue={m.tags.join(' ')}
-                  onBlur={(e) => {
-                    const next = e.target.value.split(/[\s,，]+/).map((s) => s.trim()).filter(Boolean)
-                    if (next.join('|') === m.tags.join('|')) return
-                    void update(m.id, { tags: next, updatedAt: nowISO() })
-                  }}
-                  placeholder="标签"
-                  className="max-w-[9rem]"
-                  aria-label="记忆标签"
-                />
-                <button
-                  className="hover-reveal touch-target inline-flex items-center justify-center rounded-control p-1.5 text-ink-muted hover:bg-raised hover:text-cinnabar"
-                  onClick={() => {
-                    void remove(m.id)
-                    toast('已删除这条记忆')
-                  }}
-                  aria-label="删除这条记忆"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+      </SettingsPanel>
     </Section>
   )
 }

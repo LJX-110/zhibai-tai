@@ -14,6 +14,7 @@
  */
 import { useState } from 'react'
 import { Button, Collapse, Input, Section, Select, Textarea, useToast } from '../../components/ui'
+import { SettingsPanel, SettingsRow } from './SettingsRow'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { emptyPersona, resetDefaultPersona, usePersonaStore } from '../../stores/usePersonaStore'
 import { PERSONA_FIELD_LABELS } from '../../services/persona/defaults'
@@ -58,44 +59,46 @@ export function TianjiPersonaGroup() {
   return (
     <Section title="AI 人设">
       {/* 当前人设·一行三件（2026-10-01 收口）：选择 / 新建 / 恢复默认。
-          原来前面还压着一行"人设 + 恢复默认"的表头，与这行重复（用户嫌乱） */}
-      <div className="row flex-wrap">
-        <span className="w-20 shrink-0 text-sm text-ink-muted">当前人设</span>
-        <Select
-          value={activeId ?? ''}
-          onChange={(e) => set({ activePersonaId: e.target.value || undefined })}
-          className="!w-auto max-w-[200px]"
-          aria-label="选择人设"
-        >
-          <option value="">（不使用人设）</option>
-          {personas.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.builtin ? ' · 内置' : ''}
-            </option>
-          ))}
-        </Select>
-        <Button
-          size="sm"
-          variant="tertiary"
-          onClick={() => {
-            setOpen(true)
-            setDraft(emptyPersona())
-          }}
-        >
-          新建
-        </Button>
-        <Button
-          size="sm"
-          variant="tertiary"
-          onClick={() => void resetDefaultPersona().then(() => toast('已恢复默认人设', 'success'))}
-        >
-          恢复默认
-        </Button>
-        <span className="flex-1 text-xs text-ink-faint">
-          {active ? `自称「${active.selfClaim.replace(/^[A-Z_]+_/, '').slice(0, 12)}」` : '未选择：天机用中性语气'}
-        </span>
-      </div>
+          原来前面还压着一行"人设 + 恢复默认"的表头，与这行重复（用户嫌乱）。
+          2026-10-02：收入面板卡，与 AI 页其它段同一套行式 */}
+      <SettingsPanel>
+        <SettingsRow label="当前人设">
+          <Select
+            value={activeId ?? ''}
+            onChange={(e) => set({ activePersonaId: e.target.value || undefined })}
+            className="!w-auto max-w-[200px]"
+            aria-label="选择人设"
+          >
+            <option value="">（不使用人设）</option>
+            {personas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.builtin ? ' · 内置' : ''}
+              </option>
+            ))}
+          </Select>
+          <Button
+            size="sm"
+            variant="tertiary"
+            onClick={() => {
+              setOpen(true)
+              setDraft(emptyPersona())
+            }}
+          >
+            新建
+          </Button>
+          <Button
+            size="sm"
+            variant="tertiary"
+            onClick={() => void resetDefaultPersona().then(() => toast('已恢复默认人设', 'success'))}
+          >
+            恢复默认
+          </Button>
+          <span className="flex-1 text-xs text-ink-faint">
+            {active ? `自称「${active.selfClaim.replace(/^[A-Z_]+_/, '').slice(0, 12)}」` : '未选择：天机用中性语气'}
+          </span>
+        </SettingsRow>
+      </SettingsPanel>
 
       <Collapse title={draft && draft.id !== active?.id ? '新建人设' : '编辑人设'} open={open} onOpenChange={setOpen}>
         {draft ? (

@@ -17,7 +17,7 @@
  * 规格 §B2 要求"位置是用户设定的，桌宠不能自己改"，所以现在三种结局
  * （点击 / 系统取消 / 真拖拽）**动作完全相同：就地停下**。差别只剩一处 ——
  * 真拖拽要抑制随后浏览器补发的那次 click（`isDragSession`）。
- * `throwVelocity` / `integrate` / `resolveDragEnd` 已随重力一起移除，见 `备份/2026-09-Step4/`。
+ * `throwVelocity` / `integrate` / `resolveDragEnd` 已随重力一起移除（代码不保留）。
  */
 /** 判定"这是一次拖拽而不是点击"的位移阈值（px） */
 export const DRAG_THRESHOLD = 4

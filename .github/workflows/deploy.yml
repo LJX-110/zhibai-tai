@@ -36,6 +36,18 @@ jobs:
           # 出现描述不清的瞬间失败时，禁用缓存与软链定位根因
           npm_config_cache: /tmp/npm-cache
 
+      - name: Lint
+        # 发布门禁（2026-10-04）：代码检查不过即拦截，不让有问题的版本上线
+        run: npm run lint
+        env:
+          npm_config_cache: /tmp/npm-cache
+
+      - name: Test
+        # 发布门禁：自动化测试全过才继续构建（check:rules 的脚本在仓库外 work/scripts，无法上 CI）
+        run: npm run test
+        env:
+          npm_config_cache: /tmp/npm-cache
+
       - name: Build (base = 仓库名)
         # 关键：GitHub Pages 部署在 https://<user>.github.io/<仓库名>/ 子路径
         # 用仓库名作为 base，资源路径才正确

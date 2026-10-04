@@ -1,5 +1,5 @@
 /**
- * 设置 · AI 组（2026-10-01 三段收口）
+ * 设置 · AI 组（2026-10-01 三段收口；2026-10-02 版式统一）
  *
  * 只留三段，按「用户要理解的概念数」收敛：
  *  · **模型与连接** —— 用哪个服务、端点、Key、模型、测试（**Base URL 并入本段**，不再是单独入口）
@@ -13,6 +13,10 @@
  * NVIDIA 不返回任何 `Access-Control-*`）。不标注的话，用户会照着预设配好
  * 再看到一句"连接失败"，还以为是自己填错了 —— 这是环境限制，不是他的错。
  * 故不可直连的预设**直接置灰**（title 里写明原因）。
+ *
+ * ## 2026-10-02 版式统一（用户反馈"AI 页太乱"）
+ * 七行控件收入**一张面板卡**（`SettingsPanel` + `SettingsRow`），label 列与留白
+ * 从此有唯一口径；按钮加载态统一 `<Loading>`；Key 增加「清除」出口（删除能力要留出口）。
  */
 import { useState } from 'react'
 import { Zap } from 'lucide-react'
@@ -20,6 +24,8 @@ import { useSettingsStore } from '../../stores/useSettingsStore'
 import { encryptor, isWebCryptoAvailable } from '../../sync/encryption/encryption'
 import { listAIModels, resolveAIProvider, testAIProvider } from '../../services/ai/ai-service'
 import { Button, Input, Section, Select, useToast } from '../../components/ui'
+import { Loading } from '../../components/ui/Loading'
+import { SettingsPanel, SettingsRow } from './SettingsRow'
 import { TianjiPersonaGroup } from './TianjiPersonaGroup'
 import { TianjiMemoryGroup } from './TianjiMemoryGroup'
 import { cn } from '../../utils/cn'
@@ -99,6 +105,17 @@ export function AiGroup() {
   }
 
   /**
+   * 清除 API Key（2026-10-02）：Key 是加密存本机的凭据，"换一个"之外也要能"拿掉"——
+   * 清除后 Provider 立刻回落到本地规则，不再带着一个可能已废弃的 Key 发请求。
+   */
+  const clearKey = () => {
+    settings.set({ aiKey: undefined, aiKeyEnc: false })
+    setAiKeyDraft('')
+    void resolveAIProvider()
+    toast('已清除 API Key —— 天机回到本地规则', 'success')
+  }
+
+  /**
    * 测试连接。
    * 之前按钮挂着 `disabled={!settings.aiKey}` —— Key 没存进去时它就是个禁用按钮，
    * 点下去毫无反应，看起来像"按钮坏了"。改为**始终可点**：缺 Key 就用提示告诉用户，
@@ -142,151 +159,159 @@ export function AiGroup() {
   return (
     <>
       <Section title="模型与连接" hint="OpenAI 兼容">
-        <div className="max-w-xl space-y-3">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">Provider</span>
-            <div className="switch-pill flex shrink-0 gap-1 rounded-tile p-0.5">
-              {([
-                ['local', '本地规则'],
-                ['remote', '远程模型'],
-              ] as const).map(([v, l]) => (
-                <button
-                  key={v}
-                  onClick={() => {
-                    settings.set({ aiProvider: v })
-                    void resolveAIProvider()
-                  }}
-                  className={cn(
-                    'whitespace-nowrap rounded-control px-3 py-1 text-sm transition-colors',
-                    settings.aiProvider === v ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
-                  )}
-                >
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">服务</span>
-            <div className="flex flex-wrap gap-1">
-              {AI_PRESETS.map((p) => (
-                <Button
-                  key={p.name}
-                  size="sm"
-                  variant={settings.aiBaseUrl === p.baseUrl ? 'primary' : 'tertiary'}
-                  // 不可直连的预设**直接置灰**（2026-10-01 收口）：此前能选中、选中后才红字报错，
-                  // 属于"先让你踩坑再解释"；现在按钮自己说明原因（title）
-                  disabled={p.cors === 'blocked'}
-                  title={
-                    p.cors === 'blocked'
-                      ? '该服务不返回跨域头，浏览器无法直连；自建转发目前不代传凭据，暂不可用于 AI'
-                      : undefined
-                  }
-                  onClick={() => {
-                    settings.set({ aiBaseUrl: p.baseUrl, aiModel: p.model })
-                    toast(`已切换 ${p.name} 预设，填 Key 后点「测试连接」`, 'info')
-                  }}
-                  className="!px-2"
-                >
-                  {p.name}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Base URL 并入本段（2026-10-01 用户拍板）：端点地址与「服务」预设是同一件事，
-              不再单独占一个「高级」入口 —— 换服务后想微调端点，就地就能改 */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">Base URL</span>
-            <Input
-              value={settings.aiBaseUrl}
-              onChange={(e) => settings.set({ aiBaseUrl: e.target.value })}
-              className="min-w-0 flex-1 basis-full font-mono !text-xs sm:basis-0"
-              placeholder="https://api.deepseek.com/v1"
-              aria-label="Base URL"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">API Key</span>
-            <Input
-              type="password"
-              placeholder={settings.aiKeyEnc ? '已加密保存 · 输入以更换' : 'sk-…'}
-              value={aiKeyDraft}
-              onChange={(e) => setAiKeyDraft(e.target.value)}
-              className="flex-1"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void saveKey()
-              }}
-            />
-            <Button
-              variant="secondary"
-              onClick={() => void saveKey()}
-              disabled={!aiKeyDraft.trim() || keySaving || !cryptoOk}
-            >
-              {keySaving ? '保存中…' : '加密保存'}
-            </Button>
-          </div>
-          {!cryptoOk && (
-            <p className="ml-[92px] text-xs leading-relaxed text-cinnabar">
-              当前环境不支持加密（需要 https 或 localhost），Key 无法安全保存。
-              请改用 https 访问，或把它装成应用后再配置。
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="w-20 shrink-0 text-sm text-ink-muted">模型</span>
-            <Input
-              value={settings.aiModel}
-              onChange={(e) => settings.set({ aiModel: e.target.value })}
-              className="min-w-0 flex-1 basis-full font-mono !text-xs sm:basis-0"
-              placeholder="如 deepseek-chat"
-            />
-            <Button size="sm" variant="tertiary" onClick={() => void fetchModels()} disabled={modelsLoading}>
-              {modelsLoading ? '拉取中…' : '拉取模型列表'}
-            </Button>
-          </div>
-          {/* 拉到的列表挂在「模型」行下方（比并排多一个下拉更省横向空间）；
-              只在属于当前 baseUrl 时显示 —— 换端点后旧列表必须失效 */}
-          {availableModels.length > 0 && (
-            <div className="flex items-center gap-3">
-              <span className="w-20 shrink-0" />
-              <Select
-                value={availableModels.includes(settings.aiModel) ? settings.aiModel : ''}
-                onChange={(e) => {
-                  if (e.target.value) settings.set({ aiModel: e.target.value })
-                }}
-                className="!w-auto max-w-[300px] font-mono !text-xs"
-                aria-label="从拉取到的模型中选择"
-              >
-                <option value="">从列表选择…</option>
-                {availableModels.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+        <div className="max-w-xl">
+          <SettingsPanel>
+            <SettingsRow label="Provider">
+              <div className="switch-pill flex shrink-0 gap-1 rounded-tile p-0.5">
+                {([
+                  ['local', '本地规则'],
+                  ['remote', '远程模型'],
+                ] as const).map(([v, l]) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      settings.set({ aiProvider: v })
+                      void resolveAIProvider()
+                    }}
+                    className={cn(
+                      'whitespace-nowrap rounded-control px-3 py-1 text-sm transition-colors',
+                      settings.aiProvider === v ? 'switch-pill-active' : 'text-ink-muted hover:text-ink',
+                    )}
+                  >
+                    {l}
+                  </button>
                 ))}
-              </Select>
-            </div>
-          )}
+              </div>
+            </SettingsRow>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="w-20 shrink-0" />
-            <Button variant="tertiary" onClick={() => void runTest()} disabled={testing}>
-              <Zap size={13} /> {testing ? '测试中…' : '测试连接'}
-            </Button>
-          </div>
+            <SettingsRow label="服务">
+              <div className="flex flex-wrap gap-1">
+                {AI_PRESETS.map((p) => (
+                  <Button
+                    key={p.name}
+                    size="sm"
+                    variant={settings.aiBaseUrl === p.baseUrl ? 'primary' : 'tertiary'}
+                    // 不可直连的预设**直接置灰**（2026-10-01 收口）：此前能选中、选中后才红字报错，
+                    // 属于"先让你踩坑再解释"；现在按钮自己说明原因（title）
+                    disabled={p.cors === 'blocked'}
+                    title={
+                      p.cors === 'blocked'
+                        ? '该服务不返回跨域头，浏览器无法直连；自建转发目前不代传凭据，暂不可用于 AI'
+                        : undefined
+                    }
+                    onClick={() => {
+                      settings.set({ aiBaseUrl: p.baseUrl, aiModel: p.model })
+                      toast(`已切换 ${p.name} 预设，填 Key 后点「测试连接」`, 'info')
+                    }}
+                    className="!px-2"
+                  >
+                    {p.name}
+                  </Button>
+                ))}
+              </div>
+            </SettingsRow>
 
-          {/* 状态行（2026-10-01 收口）：原先散在 Provider 行与「服务」行的两处提示合成一行 */}
-          <div className="flex flex-wrap items-center gap-x-2 text-xs">
-            <span
-              className={cn(
-                'h-1.5 w-1.5 shrink-0 rounded-full',
-                blockedNotice ? 'bg-cinnabar' : settings.aiKey ? 'bg-teal' : 'bg-line-strong',
+            {/* Base URL 并入本段（2026-10-01 用户拍板）：端点地址与「服务」预设是同一件事，
+                不再单独占一个「高级」入口 —— 换服务后想微调端点，就地就能改 */}
+            <SettingsRow label="Base URL">
+              <Input
+                value={settings.aiBaseUrl}
+                onChange={(e) => settings.set({ aiBaseUrl: e.target.value })}
+                className="min-w-0 flex-1 basis-full font-mono !text-xs sm:basis-0"
+                placeholder="https://api.deepseek.com/v1"
+                aria-label="Base URL"
+              />
+            </SettingsRow>
+
+            <SettingsRow label="API Key">
+              <Input
+                type="password"
+                placeholder={settings.aiKeyEnc ? '已加密保存 · 输入以更换' : 'sk-…'}
+                value={aiKeyDraft}
+                onChange={(e) => setAiKeyDraft(e.target.value)}
+                className="min-w-0 flex-1 basis-full sm:basis-0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveKey()
+                }}
+              />
+              <Button
+                variant="secondary"
+                onClick={() => void saveKey()}
+                disabled={!aiKeyDraft.trim() || keySaving || !cryptoOk}
+              >
+                <Loading size={13} spinning={keySaving} />
+                {keySaving ? '保存中…' : '加密保存'}
+              </Button>
+              {settings.aiKey && (
+                <button
+                  type="button"
+                  onClick={clearKey}
+                  aria-label="清除 API Key"
+                  className="link-underline shrink-0 rounded-control px-1 py-0.5 text-xs text-ink-faint hover:text-cinnabar"
+                >
+                  清除
+                </button>
               )}
-            />
-            <span className={cn('leading-relaxed', blockedNotice ? 'text-cinnabar' : 'text-ink-faint')}>
-              {blockedNotice ?? (settings.aiKey ? 'Key 已保存 · 点「测试连接」确认可用性' : '未配 Key · 天机走本地规则')}
-            </span>
-          </div>
+            </SettingsRow>
+            {!cryptoOk && (
+              <p className="px-2.5 pb-2 text-xs leading-relaxed text-cinnabar">
+                当前环境不支持加密（需要 https 或 localhost），Key 无法安全保存。
+                请改用 https 访问，或把它装成应用后再配置。
+              </p>
+            )}
+
+            <SettingsRow label="模型">
+              <Input
+                value={settings.aiModel}
+                onChange={(e) => settings.set({ aiModel: e.target.value })}
+                className="min-w-0 flex-1 basis-full font-mono !text-xs sm:basis-0"
+                placeholder="如 deepseek-chat"
+              />
+              <Button size="sm" variant="tertiary" onClick={() => void fetchModels()} disabled={modelsLoading}>
+                <Loading size={13} spinning={modelsLoading} />
+                {modelsLoading ? '拉取中…' : '拉取模型列表'}
+              </Button>
+            </SettingsRow>
+            {/* 拉到的列表挂在「模型」行下方（比并排多一个下拉更省横向空间）；
+                只在属于当前 baseUrl 时显示 —— 换端点后旧列表必须失效 */}
+            {availableModels.length > 0 && (
+              <SettingsRow label="">
+                <Select
+                  value={availableModels.includes(settings.aiModel) ? settings.aiModel : ''}
+                  onChange={(e) => {
+                    if (e.target.value) settings.set({ aiModel: e.target.value })
+                  }}
+                  className="!w-auto max-w-[300px] font-mono !text-xs"
+                  aria-label="从拉取到的模型中选择"
+                >
+                  <option value="">从列表选择…</option>
+                  {availableModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </Select>
+              </SettingsRow>
+            )}
+
+            <SettingsRow label="">
+              <Button variant="tertiary" onClick={() => void runTest()} disabled={testing}>
+                <Zap size={13} /> {testing ? '测试中…' : '测试连接'}
+              </Button>
+            </SettingsRow>
+
+            {/* 状态行（2026-10-01 收口）：原先散在 Provider 行与「服务」行的两处提示合成一行。
+                2026-10-02 并入面板底部 —— 它是这一整段的结论，不再悬空在两行之间 */}
+            <div className="flex flex-wrap items-center gap-x-2 border-t border-line px-2.5 py-2 text-xs">
+              <span
+                className={cn(
+                  'h-1.5 w-1.5 shrink-0 rounded-full',
+                  blockedNotice ? 'bg-cinnabar' : settings.aiKey ? 'bg-teal' : 'bg-line-strong',
+                )}
+              />
+              <span className={cn('leading-relaxed', blockedNotice ? 'text-cinnabar' : 'text-ink-faint')}>
+                {blockedNotice ?? (settings.aiKey ? 'Key 已保存 · 点「测试连接」确认可用性' : '未配 Key · 天机走本地规则')}
+              </span>
+            </div>
+          </SettingsPanel>
         </div>
       </Section>
 

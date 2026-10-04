@@ -3,7 +3,9 @@
  * 滚动容器与 ref 留在面板本体（属于面板的副作用），这里只负责"画什么"。
  */
 import { Fragment } from 'react'
+import { Copy } from 'lucide-react'
 import { useTodayStats } from '../../hooks/useTodayStats'
+import { useToast } from '../ui/toast-store'
 import { cn } from '../../utils/cn'
 import { CapabilityRow } from './CapabilityRow'
 import { WelcomeBoard } from './WelcomeBoard'
@@ -97,7 +99,11 @@ export function MessageStream({
                 <div className="flex justify-start">
                   {/* AI 回答常带编号与明细，窄气泡会把每行切成两三字；
                       给到 92% 让长回答少折行，用户气泡仍窄，两侧一眼分得清 */}
-                  <div className={AI_BUBBLE}>{display}</div>
+                  <div className="flex min-w-0 flex-col items-start">
+                    <div className={AI_BUBBLE}>{display}</div>
+                    {/* 复制出口（2026-10-02）：长回答常要被粘去别处，此前只能手动选中 */}
+                    <CopyButton text={display} />
+                  </div>
                 </div>
               )}
               {acts.map((a, j) => {
@@ -155,5 +161,35 @@ export function MessageStream({
         </div>
       )}
     </>
+  )
+}
+
+/**
+ * 复制一条回答（2026-10-02）。
+ * 常显、低对比（移动端没有 hover，藏起来的按钮等于不存在）；
+ * 非安全上下文里 `navigator.clipboard` 可能不存在 —— 如实说明，不装成功。
+ */
+function CopyButton({ text }: { text: string }) {
+  const toast = useToast().toast
+  return (
+    <button
+      type="button"
+      aria-label="复制这条回答"
+      title="复制"
+      onClick={() => {
+        const clip = navigator.clipboard
+        if (!clip) {
+          toast('当前环境不支持一键复制 —— 可长按选中文本', 'danger')
+          return
+        }
+        clip
+          .writeText(text)
+          .then(() => toast('已复制这条回答', 'success'))
+          .catch(() => toast('复制失败 —— 可长按选中文本', 'danger'))
+      }}
+      className="mt-0.5 inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-xs text-ink-faint transition-colors hover:bg-raised hover:text-ink"
+    >
+      <Copy size={12} /> 复制
+    </button>
   )
 }

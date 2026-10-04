@@ -15,6 +15,10 @@
  * ## Step 5-1 · E4：320px 不再挤压
  * 输入框在窄屏独占一行（`basis-full`），宽屏才与说明并排 —— 220px 的 `min-w`
  * 在 320 屏上会把说明文字挤成一列两个字。
+ *
+ * ## 2026-10-02：未配置时直接给「三段部署步骤」
+ * 用户反馈"自建代理我不会" —— 步骤必须**在要填地址的地方**就能看到，
+ * 而不是让人去翻仓库。完整版见 `proxy/README.md`（唯一权威指南）。
  */
 import { useState } from 'react'
 import { useSettingsStore } from '../../stores/useSettingsStore'
@@ -57,7 +61,7 @@ export function ProxyConfig() {
   }
 
   return (
-    <div className="mb-3 rounded-tile border border-line bg-paper/50 px-3 py-2">
+    <div className="mb-3 rounded-tile border border-line bg-panel px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-ink">自建代理</span>
         <Input
@@ -73,10 +77,26 @@ export function ProxyConfig() {
           aria-invalid={error !== null}
         />
         <span className="text-xs leading-relaxed text-ink-faint">
-          中文源与 B 站都需要它 · 部署见仓库 proxy/（首选 Netlify）
+          中文源与 B 站都需要它 · 完整步骤见仓库 proxy/README.md
         </span>
       </div>
       {error && <p className="mt-1 text-xs leading-relaxed text-cinnabar">{error}</p>}
+      {/* 未配置时给三段最短可行步骤（配好后整块消失，不再占地方） */}
+      {!current && (
+        <ol className="mt-2 space-y-1 border-t border-line pt-2 text-xs leading-relaxed text-ink-muted">
+          <li>
+            1. 用 GitHub 账号登录 netlify.com → <span className="text-ink-soft">Add new site → Import an existing project</span> →
+            选知白台仓库（仓库里 <code className="rounded-control bg-nested px-1">netlify.toml</code> 已配好，构建命令留空、发布目录 public）。
+          </li>
+          <li>
+            2. 部署后到 Site configuration → Environment variables 加 <code className="rounded-control bg-nested px-1">ALLOWED_HOSTS</code>
+            （<b className="text-ink-soft">必填</b>，逗号分隔要抓的主机名；用 B 站源必须含 api.bilibili.com），然后 Trigger deploy 重新部署。
+          </li>
+          <li>
+            3. 把站点地址 <code className="rounded-control bg-nested px-1">https://xxx.netlify.app/proxy</code> 填进上面的输入框。
+          </li>
+        </ol>
+      )}
     </div>
   )
 }

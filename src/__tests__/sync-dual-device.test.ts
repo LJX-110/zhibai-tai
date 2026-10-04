@@ -430,3 +430,111 @@ describe('设备 A 推送 → 设备 B 首拉恢复（D1 / D2）', () => {
     void createId
   })
 })
+
+/**
+ * 同步竞争加固（2026-10-02）
+ *
+ * 这一组覆盖两个此前真实存在的失败形态：
+ *  ① **读-写窗口**：本端读完快照之后、写回之前，他端又推了一次 ——
+ *     此时提交仍能以新头为父"快进成功"，但快照内容缺他端的改动（静默回退远端）。
+ *     现在写入侧做 CAS（头必须仍是读到的那个），抛可重试错误并由 runSync 重跑收敛。
+ *  ② **退避重试**：连续相撞不再"立即重试一次"，而是最多 3 次尝试、带退避与抖动。
+ */
+describe('同步竞争加固（读-写窗口 / 退避重试）', () => {
+  it('读取后他端又推过（即便能快进）→ 不覆盖对方，重跑后双方数据都在', async () => {
+    const github = createFakeGitHub()
+    const a = await bootDevice(github)
+    await seedEverything(a, 'a')
+    await a.sync.runSync()
+
+    const b = await bootDevice(github)
+    await b.sync.runSync()
+    await b.reload.reloadAllStores()
+
+    // 双方各自改一处：B 改待办、A 新增笔记（都还没推）
+    await b.tasks.getState().update(b.tasks.getState().items[0].id, {
+      title: '待办（B 改）',
+      updatedAt: justNow(),
+    })
+    await a.notes.getState().add({
+      id: 'note-a2',
+      kind: 'note',
+      title: '笔记（A 新增）',
+      body: '',
+      tags: [],
+      pinned: false,
+      createdAt: justNow(),
+      updatedAt: justNow(),
+    } as never)
+
+    // 注入：B 进入写入阶段（第一个 POST /blobs）时，设备 A "正好"推了一次 ——
+    // 这正是读-写窗口竞争：B 的快照基于读到的旧头合并，缺 A 的笔记。
+    const original = github.impl
+    let injected = false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input))
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (!injected && method === 'POST' && url.pathname.endsWith('/git/blobs')) {
+          injected = true
+          await a.sync.runSync() // A 的推送落在 B 的"读之后、写之前"
+        }
+        return original(String(input), init)
+      }),
+    )
+
+    const res = await b.sync.runSync()
+    expect(injected).toBe(true)
+    expect(res.ok).toBe(true)
+
+    // 第三台设备应**同时**看到 A 的笔记与 B 的改动（谁都没被覆盖）
+    const c = await bootDevice(github)
+    await c.sync.runSync()
+    await c.reload.reloadAllStores()
+    expect(c.notes.getState().items.map((n) => n.title)).toContain('笔记（A 新增）')
+    expect(c.tasks.getState().items[0].title).toBe('待办（B 改）')
+  })
+
+  it('连续相撞 → 最多 3 次尝试后收敛（不无限重试）', async () => {
+    const github = createFakeGitHub()
+    const a = await bootDevice(github)
+    await seedEverything(a, 'a')
+    await a.sync.runSync()
+
+    const b = await bootDevice(github)
+    await b.sync.runSync()
+    await b.reload.reloadAllStores()
+
+    // 前两次 PATCH 都撞 422（他端连续推），第三次放行
+    let patchCount = 0
+    const original = github.impl
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (method === 'PATCH') {
+          patchCount++
+          if (patchCount <= 2) {
+            return new Response(JSON.stringify({ message: 'Update is not a fast forward' }), { status: 422 })
+          }
+        }
+        return original(String(input), init)
+      }),
+    )
+
+    await b.tasks.getState().update(b.tasks.getState().items[0].id, {
+      title: '待办（B 第三次才推上去）',
+      updatedAt: justNow(),
+    })
+    const res = await b.sync.runSync()
+
+    expect(res.ok).toBe(true)
+    expect(patchCount).toBe(3) // 恰好 3 次尝试，没有无限循环
+
+    const c = await bootDevice(github)
+    await c.sync.runSync()
+    await c.reload.reloadAllStores()
+    expect(c.tasks.getState().items[0].title).toBe('待办（B 第三次才推上去）')
+  })
+})

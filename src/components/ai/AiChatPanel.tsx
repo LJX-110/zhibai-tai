@@ -29,11 +29,25 @@ import { AgentProgress } from './AgentProgress'
 export function AiChatPanel() {
   const open = useAIChatStore((s) => s.open)
   const setOpen = useAIChatStore((s) => s.setOpen)
+  const draft = useAIChatStore((s) => s.draft)
   const chat = useTianjiChat()
   const listRef = useRef<HTMLDivElement>(null)
   /** 是否"贴着底部"：流式增量不断把气泡撑长，只有本来就在底部才跟随滚动，
    *  用户上滑回看前文时不抢滚动位置（否则长回答会被一直拽回结尾） */
   const stickToBottom = useRef(true)
+
+  /**
+   * 页面入口（如选课页「AI 建议」）预填的问题：面板打开展示后填入输入框，**不自动发送**。
+   * 取后即清（consumeDraft）——否则下次打开面板又会冒出上次的草稿。
+   * `setInput` 先取出来（它是 useState 的 setter，身份稳定）：直接写 `chat.setInput`
+   * 会让 exhaustive-deps 认为依赖了整个 chat 对象。
+   */
+  const setChatInput = chat.setInput
+  useEffect(() => {
+    if (!open || draft === null) return
+    setChatInput(draft)
+    useAIChatStore.getState().consumeDraft()
+  }, [open, draft, setChatInput])
 
   useEffect(() => {
     if (!open) return
@@ -115,8 +129,9 @@ export function AiChatPanel() {
           />
         </div>
 
-        {/* 真实的 Agent 进度（理解任务 → 查待办 → 完成；默认只显示当前一步） */}
-        <AgentProgress />
+        {/* 真实的 Agent 进度（理解任务 → 查待办 → 完成；默认只显示当前一步。
+            失败行带「重试」——重发上一问的出口在进度行就地给） */}
+        <AgentProgress onRetry={chat.retry} />
 
         <ChatInput
           input={chat.input}

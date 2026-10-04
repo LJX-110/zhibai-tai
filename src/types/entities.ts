@@ -239,13 +239,28 @@ export type CoursePlanStatus =
 export interface CoursePlan {
   id: ID
   kind: CoursePlanKind
-  /** 公选下的官方分类（如「文化传承与安全教育」）。**自由文本**，不做预设清单、不建分类表 */
+  /**
+   * **二级分类**（如公选下的「文化传承与安全教育」）。**自由文本**，不做预设清单、不建分类表；
+   * 2026-10-02 起界面为全部方向提供输入（原仅公选），并用「已录入值」做建议（`groupSuggestions`）。
+   */
   group?: string
   /** 课程名（必填） */
   title: string
   credit?: number
   /** 教师；多人用「、」连写（不为教师建实体体系） */
   teacher?: string
+  /**
+   * 标签（2026-10-02 新增）：自由文本、无预设；服务「跨分类找课」——
+   * 搜索命中 + 行内点按即筛。内嵌在条目里而不是单独建表：
+   * 量级小、只服务这张列表，不值得再开一条同步 / 墓碑 / 备份面。
+   */
+  tags?: string[]
+  /**
+   * 同一方向内的手动顺序（2026-10-02 新增）。
+   * 缺省 = 未手动排过（排序时排在已排过的之后，再按状态 → 课名兜底）；
+   * 由选课页「排序」模式的 ↑↓ 维护（纯函数 `movePlanItem`，物化后交换相邻位）。
+   */
+  order?: number
   status: CoursePlanStatus
   note?: string
   createdAt: string

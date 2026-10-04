@@ -54,9 +54,27 @@ export interface SyncRunResult {
 let syncInFlight = false
 
 /**
+ * 竞争重跑的退避间隔（ms）。第 N 次失败后等 `RETRY_BACKOFF_MS[N] × 抖动` 再整体重来。
+ * 抖动取 0.5–1.5：两台设备同时自动同步相撞时，避免退避后又"撞在同一拍"。
+ */
+const RETRY_BACKOFF_MS = [800, 2500]
+
+/** 可重试错误（竞争类）的唯一判据 —— 与 SyncGroup / describeGitHubError 的展示分工不同，勿合并 */
+function isRetryableRace(e: unknown): boolean {
+  return e instanceof Error && e.message.includes('远端快照正被其他设备更新')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
  * 执行一次完整同步。
- * 远端快照刚被其他设备更新（sha 竞争）时，整体重跑一次"拉取-合并-推送"：
- * 重跑会拿到对方的最新快照重新合并，保证双方数据都不丢；仅重试一次，避免无限循环。
+ *
+ * 远端快照刚被其他设备更新（sha 竞争）时，整体重跑「拉取-合并-推送」：
+ * 重跑会拿到对方的最新快照重新合并，保证双方数据都不丢。
+ * 2026-10-02 起：最多 3 次尝试、每次带退避与抖动 —— 此前"立即重试一次"在
+ * 两台设备同时自动同步时会再次正面相撞，用户看到的就是"同步经常失败"。
  */
 export async function runSync(): Promise<SyncRunResult> {
   if (syncInFlight) {
@@ -64,13 +82,13 @@ export async function runSync(): Promise<SyncRunResult> {
   }
   syncInFlight = true
   try {
-    try {
-      return await runSyncOnce()
-    } catch (e) {
-      if (e instanceof Error && e.message.includes('远端快照正被其他设备更新')) {
-        return runSyncOnce()
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await runSyncOnce()
+      } catch (e) {
+        if (!isRetryableRace(e) || attempt >= RETRY_BACKOFF_MS.length) throw e
+        await sleep(RETRY_BACKOFF_MS[attempt] * (0.5 + Math.random()))
       }
-      throw e
     }
   } finally {
     syncInFlight = false

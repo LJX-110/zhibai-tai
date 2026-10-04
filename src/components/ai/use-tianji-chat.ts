@@ -71,6 +71,8 @@ export interface TianjiChat {
   proposal: ProposalView | null
   stats: ReturnType<typeof useTodayStats>
   send: (text?: string) => void
+  /** 重试上一问（失败 / 中止后的出口；把最后一条用户消息再发一次） */
+  retry: () => void
   stop: () => void
   newChat: () => void
   confirmAction: (i: number, j: number, a: TianjiActionPayload) => void
@@ -364,6 +366,14 @@ export function useTianjiChat(): TianjiChat {
     }
   }
 
+  /** 重试上一问：把最后一条用户消息原样再发（2026-10-02；失败 / 中止后最常用的出口） */
+  const retry = () => {
+    if (busy) return
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+    if (!lastUser) return
+    void send(lastUser.content)
+  }
+
   return {
     messages,
     input,
@@ -375,6 +385,7 @@ export function useTianjiChat(): TianjiChat {
     proposal: proposal ? { toolName: proposal.toolName, summary: proposal.summary, state: proposal.state } : null,
     stats,
     send: (t) => void send(t),
+    retry,
     stop: () => abortRef.current?.abort(),
     newChat,
     confirmAction: (i, j, a) => void confirmAction(i, j, a),

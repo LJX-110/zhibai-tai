@@ -26,8 +26,13 @@ export default defineConfig({
      *
      * 这类红**本身就是隐患**：它会掩盖真正的失败，也会让人养成"重跑一次就好"的习惯。
      * 所以要治配置，不是治某一个文件。此前 settings-sync / intel-auto 各自在文件里
-     * `vi.setConfig` 放宽，属于同一原因的补丁 —— 现在统一提到这里，文件内不再各写一份。 */
-    testTimeout: 20_000,
+     * `vi.setConfig` 放宽，属于同一原因的补丁 —— 现在统一提到这里，文件内不再各写一份。
+     *
+     * 2026-10-04 发布审查实测：intel-auto / settings-sync 单文件正常就要 15–16s
+     * （重模块图加载；settings-sync 每个用例还 resetModules 重载一遍），CPU 争抢
+     * （并行子进程 / 本机开发负载）时会越过 20s —— 复现到两例「Test timed out in 20000ms」。
+     * 故上限再放宽到 30s：仍是**有限等待**（真挂住照样失败），但给重文件留出争抢余量。 */
+    testTimeout: 30_000,
     hookTimeout: 30_000,
   },
 })

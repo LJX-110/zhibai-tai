@@ -92,10 +92,14 @@ describe('每源开关：一类一类地关', () => {
 
 describe('免打扰时段', () => {
   it('落在时段内 → quiet：不弹、不响、不发系统通知，但进历史', () => {
-    // 用当天真实时间构造，避免"测试在夜里跑就红"
+    // 用当天真实时间构造窗口，**前后各留足余量**（2026-10-04 修两个边界坑）：
+    //  · `isQuietNow` 的右端是**开区间**（`cur < end`）——窗口写成 `HH:00–HH:59` 时，
+    //    **整段 :59 分钟都不算"时段内"**，每逢 :59 运行必红（发布审查时复现到）；
+    //  · 构造 now 与投递内部 now 之间可能跨整点，左端多留 1 小时即可免疫。
     const now = new Date()
-    const hh = String(now.getHours()).padStart(2, '0')
-    resetSettings({ quietEnabled: true, quietFrom: `${hh}:00`, quietTo: `${hh}:59` })
+    const h2 = (n: number) => String((n + 24) % 24).padStart(2, '0')
+    const h = now.getHours()
+    resetSettings({ quietEnabled: true, quietFrom: `${h2(h - 1)}:00`, quietTo: `${h2(h + 2)}:00` })
 
     const out = deliverNotice({
       source: 'intel',
