@@ -60,8 +60,23 @@ export function ProxyConfig() {
     useSettingsStore.getState().set({ corsProxyUrl: normalized })
   }
 
+  /**
+   * `http://` 且非本机地址 → 在 https 页面里会被浏览器按**混合内容**直接拦截，
+   * 抓取只会得到一句含糊的"自建代理不可达"（2026-10-07 补提醒）。
+   * 只提醒、不拦截：本机调试（localhost / 127.0.0.1）用 http 是合法场景。
+   */
+  const insecureHttp = (() => {
+    try {
+      const u = new URL(current)
+      return u.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
+    } catch {
+      return false
+    }
+  })()
+
   return (
-    <div className="mb-3 rounded-tile border border-line bg-panel px-3 py-2">
+    // 2026-10-07：不再画卡片（底色随页面背景、无描边、无横线）—— 与「数据」组其它内容统一
+    <div className="mb-3 px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-ink">自建代理</span>
         <Input
@@ -81,9 +96,15 @@ export function ProxyConfig() {
         </span>
       </div>
       {error && <p className="mt-1 text-xs leading-relaxed text-cinnabar">{error}</p>}
+      {insecureHttp && (
+        <p className="mt-1 text-xs leading-relaxed text-bronze">
+          这是 http:// 地址：知白台在 https 下打开时，浏览器会按"混合内容"直接拦截它（表现为"抓取失败"）。
+          正式部署请用 https:// 地址；本机调试（localhost）不受影响。
+        </p>
+      )}
       {/* 未配置时给三段最短可行步骤（配好后整块消失，不再占地方） */}
       {!current && (
-        <ol className="mt-2 space-y-1 border-t border-line pt-2 text-xs leading-relaxed text-ink-muted">
+        <ol className="mt-2 space-y-1 pt-2 text-xs leading-relaxed text-ink-muted">
           <li>
             1. 用 GitHub 账号登录 netlify.com → <span className="text-ink-soft">Add new site → Import an existing project</span> →
             选知白台仓库（仓库里 <code className="rounded-control bg-nested px-1">netlify.toml</code> 已配好，构建命令留空、发布目录 public）。

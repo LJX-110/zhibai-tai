@@ -10,6 +10,12 @@
  *    同步根本不经过应用内抓取代理（Token 不过任何第三方）。同步只认浏览器直连 api.github.com，
  *    网络不通时该用系统级代理 / VPN；
  *  · Token / 同步口令补「清除」出口（删除能力要留出口），清除走确认弹窗。
+ *
+ * ## 2026-10-07 收口（与 AI 组对齐）
+ * 保存 Token / 口令此前**没有 try/catch**：非 https 环境（Web Crypto 不存在）时
+ * `encryptor.encrypt` 会抛，异步事件处理器不归错误边界管 —— 表现是"点了加密保存，
+ * 没提示、也没存上"（AI 组 2026-10-02 修过同一类问题，这里当时漏了）。
+ * 现在：环境不支持时**按钮禁用 + 就地说明**，保存失败也**如实报错**。
  */
 import { Loading } from '../../components/ui/Loading'
 import { useState, useSyncExternalStore } from 'react'
@@ -18,7 +24,7 @@ import { useSettingsStore } from '../../stores/useSettingsStore'
 import type { SyncInterval } from '../../stores/useSettingsStore'
 import { useConflictStore } from '../../stores/useConflictStore'
 import { runSync } from '../../sync/SyncService'
-import { encryptor } from '../../sync/encryption/encryption'
+import { encryptor, isWebCryptoAvailable } from '../../sync/encryption/encryption'
 import { isDirty, subscribeDirty } from '../../sync/auto'
 import { SYNC_TONE_CLASS, syncSummary } from '../../sync/status'
 import { formatDateTime } from '../../utils/id'
@@ -37,6 +43,9 @@ export function SyncGroup() {
   const conflicts = useConflictStore((s) => s.items)
   const pendingConflicts = conflicts.filter((c) => !c.resolved)
   const connected = Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
+  /** Web Crypto 可用性：加密是"保存凭据"的前提（非 https / localhost 时不存在），
+   *  与 AI 组同一口径 —— 先摆出来，别让用户点完才知道存不进去 */
+  const cryptoOk = isWebCryptoAvailable()
   // 「有改动待同步」这个标记在 sync/auto 的模块作用域里（已持久化），不是 store ——
   // 只能用订阅方式取值（与 services/ai/health.ts 同一套路）
   const dirty = useSyncExternalStore(subscribeDirty, isDirty, () => false)
@@ -61,22 +70,30 @@ export function SyncGroup() {
     }
   }
 
-  /** 保存 Token：加密后落本地存储 */
+  /** 保存 Token：加密后落本地存储。失败**必须报出来**（见文件头 2026-10-07） */
   const saveToken = async () => {
     if (!tokenDraft.trim()) return
-    const enc = await encryptor.encrypt(tokenDraft.trim())
-    settings.set({ githubToken: enc, githubTokenEnc: true })
-    setTokenDraft('')
-    toast('Token 已加密保存（AES-GCM）', 'success')
+    try {
+      const enc = await encryptor.encrypt(tokenDraft.trim())
+      settings.set({ githubToken: enc, githubTokenEnc: true })
+      setTokenDraft('')
+      toast('Token 已加密保存（AES-GCM）', 'success')
+    } catch (e) {
+      toast(`保存失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+    }
   }
 
-  /** 保存 Sync Password：设备本地密钥加密（跨设备恢复用同一密码） */
+  /** 保存 Sync Password：设备本地密钥加密（跨设备恢复用同一密码）。失败同样必须报出来 */
   const savePassword = async () => {
     if (passwordDraft.length < 6) return toast('Sync Password 至少 6 位', 'danger')
-    const enc = await encryptor.encrypt(passwordDraft.trim())
-    settings.set({ syncPassword: enc, syncPasswordEnc: true })
-    setPasswordDraft('')
-    toast('Sync Password 已加密保存（PBKDF2 推导数据密钥）', 'success')
+    try {
+      const enc = await encryptor.encrypt(passwordDraft.trim())
+      settings.set({ syncPassword: enc, syncPasswordEnc: true })
+      setPasswordDraft('')
+      toast('Sync Password 已加密保存（PBKDF2 推导数据密钥）', 'success')
+    } catch (e) {
+      toast(`保存失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
+    }
   }
 
   /** 清除凭据（走确认弹窗）：只影响本机；重新填入同一口令 / 有效 Token 即可恢复 */
@@ -189,7 +206,7 @@ export function SyncGroup() {
             onChange={(e) => setTokenDraft(e.target.value)}
             className="min-w-0 flex-1 basis-full sm:basis-0"
           />
-          <Button size="sm" variant="secondary" onClick={saveToken} disabled={!tokenDraft.trim()}>
+          <Button size="sm" variant="secondary" onClick={saveToken} disabled={!tokenDraft.trim() || !cryptoOk}>
             加密保存
           </Button>
           {settings.githubTokenEnc && (
@@ -214,7 +231,7 @@ export function SyncGroup() {
             onChange={(e) => setPasswordDraft(e.target.value)}
             className="min-w-0 flex-1 basis-full sm:basis-0"
           />
-          <Button size="sm" variant="secondary" onClick={savePassword} disabled={passwordDraft.length < 6}>
+          <Button size="sm" variant="secondary" onClick={savePassword} disabled={passwordDraft.length < 6 || !cryptoOk}>
             加密保存
           </Button>
           {settings.syncPasswordEnc && (
@@ -231,6 +248,15 @@ export function SyncGroup() {
             </>
           )}
         </SettingsRow>
+        {/* 非安全上下文（http 裸域）里 Web Crypto 不存在：先摆出来并禁用保存，
+            别让用户点完才看到"没反应"（与 AI 组同一条纪律，2026-10-07） */}
+        {!cryptoOk && (
+          <p className="flex items-start gap-1.5 px-2.5 pb-2 text-xs leading-relaxed text-cinnabar">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-cinnabar" />
+            当前环境不支持加密（需要 https 或 localhost）—— Token 与同步口令无法安全保存。
+            请改用 https 访问，或把它装成应用后再配置。
+          </p>
+        )}
         <p className="flex items-center gap-1.5 px-2.5 pb-2 text-xs text-cinnabar">
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cinnabar" />
           加密后仅存本机；需仓库 <code className="rounded-control bg-nested px-1">contents:write</code> 权限
@@ -244,8 +270,9 @@ export function SyncGroup() {
         </p>
       </SettingsPanel>
 
-      {/* 自动同步 */}
-      <div className="mt-2 flex flex-wrap items-center gap-3 rounded-paper border border-line bg-panel px-3 py-2">
+      {/* 自动同步：与面板同样**不画卡片**（2026-10-07 与 AI / 数据两页统一，
+          底色随页面背景、无描边 —— 见 SettingsRow.tsx 文件头） */}
+      <div className="mt-2 flex flex-wrap items-center gap-3 px-3 py-2">
         <span className="text-sm text-ink-soft">自动同步</span>
         {/* 用共用 Switch（位移走 translate-x）；此前这里手抄了一份用 `left` 过渡的开关 —— 
             既重复实现，又在动画 `left`（只允许 transform / opacity） */}

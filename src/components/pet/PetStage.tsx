@@ -41,7 +41,7 @@ import { requestPetLine } from '../../services/pet/ai-speech'
 import { getAiRemoteHealth } from '../../services/ai/health'
 import { requestSettingsGroup } from '../../services/settings-intent'
 
-/** 预热上限：别一次把 107 张（约 63MB）都拉下来。当前配置下待机 1 张 + 点击 5 张 = 6 张 */
+/** 预热上限：别一次把 107 张（约 63MB）都拉下来。当前配置下待机 1 张 + 点击 5 张 + 拖动 1 张 = 7 张 */
 const WARMUP_LIMIT = 8
 /** 菜单里「安静一小时」的时长 */
 const HUSH_MS = 60 * 60 * 1000

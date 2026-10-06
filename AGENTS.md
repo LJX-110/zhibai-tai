@@ -74,6 +74,11 @@ node ../scripts/proxy-security-test.mjs      # 代理安全回归（ALLOWED_HOST
 
 - **版本号唯一来源 `package.json`**（构建注入 `__APP_VERSION__`，应用内读 `src/app/version.ts`）；构建产物：CI 落仓库内 `dist/`，本地落 `work/dist`（分环境 outDir，**别删 CI 分支**）。
 - **层级只用 `styles/tokens.css` 的 `--z-*` 令牌**（八层，禁写死 `z-50`）；**弹层背景滚动锁在 `ui/overlay.ts`（计数式）**。
+- **PWA 更新是"提示式"的**（`registerType: 'prompt'`）：新 SW 会停在 `waiting`，**光 reload 不会让它接管** ——
+  让用户"拿最新"的唯一出口是 `components/pwa/refresh.ts`（SKIP_WAITING → controllerchange → 刷新），
+  更新横幅与系统页「刷新」按钮共用它；**别再另写 `window.location.reload()` 当更新手段**。
+- **设置页"无卡片"版式**（2026-10-07 用户拍板）：`SettingsPanel` 不带底色/描边，并挂 `rows-flat`
+  关掉行内分隔线（AI / 数据两页与外观 / 桌宠 / 通知统一）——改版式前先读 `settings/SettingsRow.tsx` 文件头。
 - **列表操作按钮用 `.hover-reveal`，其祖先必须带 `group`**（触屏无 hover；禁写 `opacity-0 group-hover:opacity-100`）。
 - **金额唯一实现** `utils/money.ts` 的 `money(n)`；**动画只动 `transform`/`opacity`**（尊重 `prefers-reduced-motion`；禁补间 width/height）。
 - 筛选药丸只有一种形制（`components/ui/Chip`）；`Section.title` 嵌在折叠层里时**可省略**。
@@ -102,6 +107,9 @@ node ../scripts/proxy-security-test.mjs      # 代理安全回归（ALLOWED_HOST
 - **不许碰业务层**：核心（geometry / runtime / motion / state-machine / interaction / state）**只认数字与 `PetBounds`** —— 不读 `window`、不 import store、不写 Dexie；宿主差异走 `PetHost` 三档接口。
 - **位置是设备级**（localStorage，**不进业务表、不触发同步**）；移动端必须扣顶/底栏（`data-pet-reserve-top/bottom` + `reserveInsets()`，保底 120px）。
 - **尺寸只有一个真相**：`geometry.ts` 的 `effectiveSize`；⛔ **无重力、无惯性、无甩抛**（物理整套移除，别再引入）；**`ready`（落位完成）之前不做任何位置校正**（会抢先写坏本机存档）。
+- **换帧必须"预载成功才上屏"**（`PetSprite`：隐藏预载层 → 成功才替换；失败**保留旧帧** + 限次重试 + 记故障流水）——
+  直接换 `<img src>` 在加载期会把宠物变成空白（单张素材约 521KB，手机上必现）；`<img key>` = `anim:seq`，
+  重播规则（插播强制重播 / idle 与状态保持不重播）唯一收在 `hooks/usePetView.ts`，改 key 规则前先读它。
 - **状态驱动优先于随机表演**：UI 只写 `services/agent/status.ts` 的 AgentStatus、桌宠只读；优先级 ERROR > WAITING > WORKING > THINKING > SUCCESS > FOCUSED > SLEEP > IDLE；随机动作链只在 idle；**漫游默认关**。
 - 菜单只有一种形态（`PetMenu` 紧凑浮层，条目在 `menu-items.ts`）；弹层 z 必须高于 `--z-pet`(55) → 用 `--z-overlay`(60)。
 

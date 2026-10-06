@@ -4,8 +4,9 @@
  * 两件事：① **定时链**（按状态机的 `until` 排下一拍，`setTimeout` 而非 rAF —— 决策是秒级的）；
  * ② **把决策落到视图**（`move` 段交给 `usePetMovement`，其余段只换动画与朝向）。
  *
- * 分工：位置 / rAF 插值 / 打断收口 / 本机落盘在 `usePetMovement`；真实应用状态在 `usePetWorld`；
- * 指针那一路在 `usePetDrag`。⚠️ 纪律：不可见时停链（回前台补一拍）；reduced-motion 下不给 move/turn；
+ * 分工：位置 / rAF 插值 / 打断收口 / 本机落盘在 `usePetMovement`；**视图帧与重播序号在
+ * `usePetView`**；真实应用状态在 `usePetWorld`；指针那一路在 `usePetDrag`。
+ * ⚠️ 纪律：不可见时停链（回前台补一拍）；reduced-motion 下不给 move/turn；
  * **配置加载失败显式上报并停用**（绝不静默兜底）；**落位前不做位置校正**（理由见 resize effect，B7 实测）。
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
@@ -19,7 +20,6 @@ import {
   initialRuntime,
   onPetClick,
   type DecideContext,
-  type Facing,
   type PetRuntime,
 } from '../services/pet/state-machine'
 import type { PetBounds } from '../services/pet/types'
@@ -30,15 +30,11 @@ import { usePetDrag, type PetDragHandlers } from './usePetDrag'
 import { usePetWorld } from './usePetWorld'
 import { usePetConfig } from './usePetConfig'
 import { usePetReset } from './usePetReset'
+import { usePetView, type PetView } from './usePetView'
 import { prefersReducedMotion } from '../utils/motion'
 
-export interface PetView {
-  /** 素材名（作为 `<img key>` 用：不换 key 同一张动图不会从第一帧重播） */
-  anim: string
-  /** 素材 URL —— **由宿主适配层解析**，渲染层不拼路径（见 `services/pet/adapter.ts`） */
-  src: string
-  facing: Facing
-}
+/** 视图帧类型住在 `usePetView`；这里转出给渲染层（`PetSprite` 从本模块取） */
+export type { PetView } from './usePetView'
 
 export interface UsePetLoopResult {
   /** React 只负责"长什么样"。⚠️ **位置不在里面**（每帧由 rAF 直写 DOM，不走 state） */
@@ -83,7 +79,8 @@ export function usePetLoop(
 ): UsePetLoopResult {
   // 配置载入 + 派生（cfg / cfgRef / 首屏预热名单）——Step 5-1 · E5 拆出独立模块
   const { cfg, cfgRef, warmup } = usePetConfig()
-  const [view, setView] = useState<PetView | null>(null)
+  // 视图帧（素材 / 朝向 / 重播序号）—— 见 usePetView；重播规则只有那一处
+  const { view, show, init, setDrag } = usePetView()
   const [ready, setReady] = useState(false)
   /** 用户设备偏好：桌宠尺寸倍率。订阅它 → 改设置时尺寸自动跟着重渲染 */
   const petScale = useSettingsStore((s) => s.petScale)
@@ -175,9 +172,10 @@ export function usePetLoop(
       if (idleEraNames(cfgRef.current!).has(next.anim)) {
         markIdleLoaded(loadedIdleRef.current, next.anim, IDLE_SESSION_LIMIT)
       }
-      setView({ anim: next.anim, src: host.resolveAsset(next.anim), facing: next.facing })
+      // 落成视图帧：同名重播规则收在 `usePetView`（唯一一处）
+      show(next, host.resolveAsset(next.anim))
     },
-    [host, startMovement, posRef, cfgRef],
+    [host, startMovement, posRef, cfgRef, show],
   )
 
   /** 排下一拍 */
@@ -195,11 +193,6 @@ export function usePetLoop(
     stopMovement()
   }, [stopMovement])
 
-  /** 拖拽姿态：换 `anim`（换 key 才会从第一帧重播，见 PetSprite） */
-  const setDragAnim = useCallback((anim: string, src: string) => {
-    setView((v) => (v ? { ...v, anim, src } : v))
-  }, [])
-
   // 帧级那一路（拖拽）：位置的所有权在它手上，这里只提供必要的读写口
   const petDrag = usePetDrag({
     host,
@@ -209,7 +202,7 @@ export function usePetLoop(
     spriteRef,
     pause,
     resume: step,
-    setAnim: setDragAnim,
+    setAnim: setDrag,
     onSettle: settleAt,
     /** 长按：由指针那一路判定 —— 点击 / 长按 / 拖拽的互斥只在一处实现 */
     onLongPress: () => longPressRef.current(),
@@ -280,7 +273,7 @@ export function usePetLoop(
     if (!runtimeRef.current) {
       const first = initialRuntime(cfg, now)
       runtimeRef.current = first
-      setView({ anim: first.anim, src: host.resolveAsset(first.anim), facing: first.facing })
+      init(first.anim, host.resolveAsset(first.anim), first.facing)
       // 先落位（本机存档 → 旧字段 → 角落），再起链 —— 两者都在启动瞬间完成，无观感差异。
       // 读旧位置失败不该让桌宠彻底不出现（曾表现为"已开启但什么都没有"，静默无痕）：
       // 留一次痕，并按配置角落落位（与 placeInitial 自己的"没有存档"分支同一语义）。
@@ -308,7 +301,7 @@ export function usePetLoop(
       pause()
       cancelDrag() // 拖拽的计时器也要清：不清就是"卸载后还在跑"的孤儿
     }
-  }, [cfg, host, placeInitial, step, pause, cancelDrag, resetPositionOf, cfgRef])
+  }, [cfg, host, placeInitial, step, pause, cancelDrag, resetPositionOf, cfgRef, init])
 
   /**
    * `ready` 之后立刻画一次真实位置：首次落位发生在组件挂载**之前**（那时 `spriteRef`

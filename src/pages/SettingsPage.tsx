@@ -6,8 +6,10 @@
  * 拆分的目的是让每个文件都能一眼读完：原先这里是 1260 行、四个分组的 JSX 全堆在一个函数里。
  */
 import { useEffect, useState } from 'react'
-import { Collapse, PageHeader, ScrollRow } from '../components/ui'
+import { RefreshCw } from 'lucide-react'
+import { Button, Collapse, PageHeader, ScrollRow, useToast } from '../components/ui'
 import { APP_VERSION } from '../app/version'
+import { refreshToLatest } from '../components/pwa/refresh'
 import { cn } from '../utils/cn'
 import { AppearanceGroup } from './settings/AppearanceGroup'
 import { AlertsGroup } from './settings/AlertsGroup'
@@ -54,12 +56,32 @@ const SETTINGS_GROUPS: { key: SettingsGroup; label: string }[] = [
 
 export function SettingsPage() {
   const [group, setGroup] = useState<SettingsGroup>('appearance')
+  const toast = useToast().toast
   /** 外部意图（如桌宠菜单的「桌宠设置」）→ 切到指定分组（见 settings-intent.ts） */
   useEffect(() => onSettingsGroupRequest(setGroup), [])
 
   return (
     <div className="mx-auto max-w-[var(--content-max-w)]">
-      <PageHeader poem="大象无形" title="系统 · 配置" />
+      {/* 页头「刷新」（2026-10-07 用户要求）：一键拿最新 —— 手机端"刷好几次才是最新"
+          的根因是新 SW 停在 waiting（见 components/pwa/refresh.ts）。按钮做两件事：
+          检查并激活新版本 SW；没有新版本也整页刷新一次（本地数据在 IndexedDB，不受影响） */}
+      <PageHeader
+        poem="大象无形"
+        title="系统 · 配置"
+        action={
+          <Button
+            size="sm"
+            variant="tertiary"
+            title="检查新版本并刷新到最新"
+            onClick={() => {
+              toast('正在检查更新并刷新…', 'info')
+              void refreshToLatest()
+            }}
+          >
+            <RefreshCw size={13} /> 刷新
+          </Button>
+        }
+      />
       {/* 分组导航：一次点击定位任一设置。
           横滑行复用 ScrollRow —— 四个药丸在 375px 上已贴边，
           系统字号一放大就会溢出，而溢出必须自带「右边还有」的暗示。 */}

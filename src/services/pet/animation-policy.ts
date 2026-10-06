@@ -67,15 +67,20 @@ export function pickStateAnim(cfg: PetConfig, state: PetState, roll: number, avo
 }
 
 /**
- * **首屏要预热的动画**（Step 4-3 · 九）：待机池 + 点击回应池。
+ * **首屏要预热的动画**（Step 4-3 · 九）：待机池 + 点击回应池 + 「被拎起来」池。
  *
- * 为什么是这两个：它们对应"用户什么都没做"与"用户第一次戳它"这两种必然发生的情形，
- * 其余状态（thinking / working / waiting / success / error / sleep）都由**真实状态驱动**，
- * 到那一刻再按需取 —— 没有提前拉下来的理由。
+ * 为什么是这三个：它们对应"用户什么都没做""用户第一次戳它""用户第一次拖它"
+ * 这三种**必然发生**的情形；其余状态（thinking / working / waiting / success / error / sleep）
+ * 都由**真实状态驱动**，到那一刻再按需取 —— 没有提前拉下来的理由。
+ *
+ * 2026-10-07 追加拖动姿态：拖动是第一次交互就会用到的动作，不预热的话首次拖动
+ * 要等素材下载完才换姿（配合 PetSprite 的"预载成功才上屏"门控，表现为拖着不动）。
+ * 数量仍受 PetStage 的 `WARMUP_LIMIT`（8）约束，不会退回"全量预载"。
  *
  * 名单**从配置派生**，不写死素材名：写死的话改了 `config.json` 就会悄悄失配
  * （旧版 `PetStage` 就是一份硬编码名单）。
  */
 export function warmupAnims(cfg: PetConfig): string[] {
-  return [...new Set([...cfg.animations.idle, ...cfg.animations.clicks])].filter(Boolean)
+  const dragging = cfg.animations.events.dragging.flatMap((s) => (typeof s === 'string' ? [s] : s))
+  return [...new Set([...cfg.animations.idle, ...cfg.animations.clicks, ...dragging])].filter(Boolean)
 }

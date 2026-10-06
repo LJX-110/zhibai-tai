@@ -299,8 +299,9 @@ export function AiGroup() {
             </SettingsRow>
 
             {/* 状态行（2026-10-01 收口）：原先散在 Provider 行与「服务」行的两处提示合成一行。
-                2026-10-02 并入面板底部 —— 它是这一整段的结论，不再悬空在两行之间 */}
-            <div className="flex flex-wrap items-center gap-x-2 border-t border-line px-2.5 py-2 text-xs">
+                2026-10-02 并入面板底部 —— 它是这一整段的结论，不再悬空在两行之间。
+                2026-10-07：去掉上边框横线（与其它设置页统一"无卡片、无横线"观感） */}
+            <div className="flex flex-wrap items-center gap-x-2 px-2.5 py-2 text-xs">
               <span
                 className={cn(
                   'h-1.5 w-1.5 shrink-0 rounded-full',

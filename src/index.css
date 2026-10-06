@@ -208,6 +208,13 @@
     border-top: 1px solid var(--color-line);
   }
 
+  /* 设置页"无卡片"分段容器（2026-10-07 用户拍板）：
+     AI / 数据两页要与外观 / 桌宠 / 通知页统一 —— 不画卡片，也不画行间横线。
+     特异性 (0,3,0) 高于上面的 `.row + .row`，同层内生效。 */
+  .rows-flat .row + .row {
+    border-top: 0;
+  }
+
   /* 印章状态（完成/激活） */
   .seal {
     display: inline-flex;

@@ -111,8 +111,8 @@ describe('真实配置：策略链在真素材上同样成立', () => {
 })
 
 describe('首屏预热名单（Step 4-3 · 九）', () => {
-  it('只含待机池与点击应答池，且已去重', () => {
-    expect(warmupAnims(cfg)).toEqual(['待机', '回应甲', '回应乙'])
+  it('只含待机池、点击应答池与「被拎起来」池，且已去重', () => {
+    expect(warmupAnims(cfg)).toEqual(['待机', '回应甲', '回应乙', '被拎起来'])
   })
 
   it('**不包含任何"按需状态"的素材**（thinking / working / waiting / success / error / sleep）', () => {
