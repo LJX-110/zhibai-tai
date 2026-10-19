@@ -25,6 +25,7 @@ import { encryptor, isWebCryptoAvailable } from './encryption/encryption'
 import { useSettingsStore } from '../stores/useSettingsStore'
 import { useSyncStore } from '../stores/useSyncStore'
 import { reloadAllStores } from '../stores/reload'
+import { currentSyncRevision, markSynced } from './dirty'
 import type { Tombstone } from '../types/entities'
 import {
   SYNC_TABLES,
@@ -124,6 +125,9 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     const since = meta.lastSyncedAt ? new Date(meta.lastSyncedAt).getTime() : 0
 
     const key = await deriveSyncKey(password)
+    // 快照导出的起点版本：推送成功后据此判断"同步窗口内有没有新写入"
+    // （有则本次快照不完整，标记必须留给下一次同步，否则那次改动会静默丢失）
+    const syncRevision = currentSyncRevision()
     const local = await exportData()
 
     // 拉远端（解密）
@@ -221,6 +225,10 @@ async function runSyncOnce(): Promise<SyncRunResult> {
     })
     await reloadAllStores()
     await useSyncStore.getState().refresh()
+
+    // 推送已成功：只有「同步窗口内没有新写入」才清「待同步」标记。
+    // 放在最后 —— 前面的 reload / refresh 若真的触发了写入，也要按新写入对待。
+    markSynced(syncRevision)
 
     settings.set({ syncStatus: 'success', lastSyncedAt: now })
     return {

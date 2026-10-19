@@ -8,15 +8,15 @@ import { usePomodoroStore } from '../../stores/usePomodoroStore'
 import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useHabitLogStore } from '../../stores/useHabitStore'
 import { Section } from '../../components/ui'
-import { todayISO } from '../../utils/id'
+import { toISODate } from '../../utils/id'
 import { money } from '../../utils/money'
 import { cn } from '../../utils/cn'
+import { useNow } from '../../hooks/useNow'
 
-function weekStart(weeksAgo = 0): Date {
-  const d = new Date()
-  const day = (d.getDay() + 6) % 7
-  const s = new Date(d)
-  s.setDate(d.getDate() - day - weeksAgo * 7)
+function weekStart(now: Date, weeksAgo = 0): Date {
+  const day = (now.getDay() + 6) % 7
+  const s = new Date(now)
+  s.setDate(now.getDate() - day - weeksAgo * 7)
   s.setHours(0, 0, 0, 0)
   return s
 }
@@ -26,9 +26,11 @@ export function WeekReview() {
   const pomos = usePomodoroStore((s) => s.items)
   const finances = useFinanceStore((s) => s.items)
   const habitLogs = useHabitLogStore((s) => s.items)
+  // 本周 / 本月口径随"现在"走：挂机跨过周一或月初后，不用等数据变动才翻页
+  const now = useNow()
 
   const data = useMemo(() => {
-    const ws = weekStart()
+    const ws = weekStart(now)
     const we = new Date(ws.getTime() + 7 * 864e5)
     const inRange = (iso: string | undefined, from: Date, to: Date) => {
       if (!iso) return false
@@ -39,7 +41,7 @@ export function WeekReview() {
     const focusMin = pomos
       .filter((p) => inRange(p.startAt, ws, we))
       .reduce((s, p) => s + p.durationMin, 0)
-    const month = todayISO().slice(0, 7)
+    const month = toISODate(now).slice(0, 7)
     const income = finances
       .filter((f) => f.kind === 'income' && f.date.startsWith(month))
       .reduce((s, f) => s + f.amount, 0)
@@ -50,7 +52,7 @@ export function WeekReview() {
       habitLogs.filter((h) => inRange(h.date, ws, we)).map((h) => h.date),
     ).size
     const trend = [3, 2, 1, 0].map((i) => {
-      const from = weekStart(i)
+      const from = weekStart(now, i)
       const to = new Date(from.getTime() + 7 * 864e5)
       return {
         label: i === 0 ? '本周' : `${from.getMonth() + 1}/${from.getDate()}`,
@@ -58,7 +60,7 @@ export function WeekReview() {
       }
     })
     return { doneThisWeek, focusMin, income, expense, habitDays, trend }
-  }, [tasks, pomos, finances, habitLogs])
+  }, [tasks, pomos, finances, habitLogs, now])
 
   const cells = [
     { label: '待办完成', value: `${data.doneThisWeek}`, unit: '件', tone: 'text-teal' },

@@ -127,7 +127,7 @@ export function DesktopSidebar() {
           onClick={() => useAIChatStore.getState().setOpen(true)}
           className="flex w-full items-center gap-2.5 rounded-chip border border-teal/30 bg-teal/12 px-3 py-2 text-left transition-colors hover:border-teal/50 hover:bg-teal/18"
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal text-on-sidebar">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal text-on-teal">
             <Bot size={13} />
           </span>
           <span className="min-w-0 flex-1">
@@ -155,7 +155,7 @@ export function DesktopSidebar() {
           <span className="flex-1 text-left">通知中心</span>
           {unread > 0 && (
             /* 字号例外：侧栏未读角标 —— 与导航文字同排，必须小一档 */
-            <span className="rounded-full bg-cinnabar px-1.5 text-[10px] leading-4 text-on-sidebar">
+            <span className="rounded-full bg-cinnabar px-1.5 text-[10px] leading-4 text-on-cinnabar">
               {unread > 99 ? '99+' : unread}
             </span>
           )}

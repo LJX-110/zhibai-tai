@@ -65,7 +65,7 @@ export function Switch({
       <span className={cn('relative block rounded-full transition-colors', s.track, checked ? 'bg-teal' : 'bg-nested')}>
         <span
           className={cn(
-            'absolute left-0.5 top-0.5 rounded-full bg-paper shadow-sm transition-transform',
+            'absolute left-0.5 top-0.5 rounded-full bg-paper transition-transform',
             s.knob,
             checked ? s.on : 'translate-x-0',
           )}

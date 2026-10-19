@@ -4,61 +4,19 @@
  */
 import { useSettingsStore } from '../stores/useSettingsStore'
 import type { SyncInterval } from '../stores/useSettingsStore'
+import { isDirty, markDirty } from './dirty'
 import { runSync } from './SyncService'
 
 /**
- * 是否有本地改动尚未推送到远端。
- *
- * ⚠️ 这个标记此前是模块私有的，**界面看不到** —— 于是刚改完数据、还没同步时，
- * 设置页照样显示「已同步」，用户以为已经是最新的（实际还差一次推送）。
- * 现在对外暴露 + 可订阅，状态展示才有正确判据。
+ * 「本地有改动待同步」标记在 `sync/dirty.ts`（持久化 + 可订阅 + 版本号）。
+ * 这里 re-export 保持既有引用路径不变；清标记由 SyncService 在推送成功后统一做。
  *
  * ⚠️ 2026-10-02：标记**持久化到 localStorage**（离线队列的最小实现）——
- * 此前是纯内存变量，离线期间的改动刷新页面后 dirty 归零，
+ * 此前是纯内存变量，离线期间的改动刷新页面后归零，
  * 网络恢复也不会补推，用户只看到"改了没同步 / 同步老是失败"。
+ * ⚠️ 2026-10-19：清标记收口到 `SyncService` —— 手动同步此前不清，标记会一直挂着。
  */
-const DIRTY_KEY = 'zbt:sync-dirty:v1'
-
-/** 读本机持久化的待同步标记；localStorage 不可用（隐私模式 / 非浏览器）时退化为 false */
-function readStoredDirty(): boolean {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(DIRTY_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-/** 持久化待同步标记；写不进去（隐私模式）就只保留本会话语义，不影响同步本身 */
-function writeStoredDirty(v: boolean): void {
-  try {
-    localStorage.setItem(DIRTY_KEY, v ? '1' : '0')
-  } catch {
-    /* 忽略：退化为仅本会话有效 */
-  }
-}
-
-let dirty = readStoredDirty()
-const dirtyListeners = new Set<() => void>()
-
-function setDirty(v: boolean): void {
-  if (dirty === v) return
-  dirty = v
-  writeStoredDirty(v)
-  for (const fn of dirtyListeners) fn()
-}
-
-/** 是否有本地改动待同步（配合 subscribeDirty + useSyncExternalStore 使用） */
-export function isDirty(): boolean {
-  return dirty
-}
-
-/** 订阅「待同步」标记变化；返回取消订阅函数 */
-export function subscribeDirty(fn: () => void): () => void {
-  dirtyListeners.add(fn)
-  return () => {
-    dirtyListeners.delete(fn)
-  }
-}
+export { isDirty, subscribeDirty } from './dirty'
 
 let timer: number | null = null
 let inFlight = false
@@ -118,14 +76,17 @@ function schedule() {
 async function doSync() {
   if (inFlight) return
   const s = useSettingsStore.getState()
-  if (!s.autoSync || !dirty) return
+  if (!s.autoSync || !isDirty()) return
   // dirty 保留：等用户配好同步参数后，下一次变更会把积压的改动一并推上去
   if (!isSyncConfigured()) return
   inFlight = true
   try {
     await runSync()
-    setDirty(false)
     failCount = 0
+    // 成功且同步窗口内没有新写入时，dirty 已由 SyncService 清掉。
+    // 仍为 true 只有两种可能：同步期间又改了数据（不在本次快照里），
+    // 或本次因并发锁被跳过 —— 都要再排一次，不能把标记丢掉。
+    if (isDirty()) schedule()
   } catch {
     failCount++
     // 失败重试（限次），否则保留 dirty 待下次
@@ -139,7 +100,7 @@ async function doSync() {
 
 /** 数据变更时调用（store 工厂统一埋点） */
 export function notifyDataChanged(): void {
-  setDirty(true)
+  markDirty()
   const s = useSettingsStore.getState()
   if (!s.autoSync || s.syncInterval === 'manual') return
   schedule()
@@ -151,15 +112,15 @@ export function initAutoSync(): void {
   // 云笺已下线：老配置（gist）一次性迁移为仓库模式
   migrateSyncModeToRepo()
   // 启动补一次：上次会话留下的「待同步」改动已持久化，不必等下一次数据变更才推
-  if (dirty && navigator.onLine !== false) schedule()
+  if (isDirty() && navigator.onLine !== false) schedule()
   window.addEventListener('online', () => {
     const s = useSettingsStore.getState()
-    if (s.autoSync && dirty) schedule()
+    if (s.autoSync && isDirty()) schedule()
   })
   // 回前台补一次：移动端 PWA 常被系统冻结，恢复时可能已跨过好几个节拍
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return
     const s = useSettingsStore.getState()
-    if (s.autoSync && dirty && navigator.onLine !== false) schedule()
+    if (s.autoSync && isDirty() && navigator.onLine !== false) schedule()
   })
 }

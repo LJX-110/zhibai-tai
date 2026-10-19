@@ -21,6 +21,7 @@ import { useFinanceStore } from '../../stores/useFinanceStore'
 import { useCourseStore } from '../../stores/useStudyStore'
 import { useTodayStats } from '../../hooks/useTodayStats'
 import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
+import { useNow } from '../../hooks/useNow'
 import { money } from '../../utils/money'
 import { cn } from '../../utils/cn'
 import { TIANJI_CAPABILITIES, type TianjiCapabilityKey } from './tianji-capability'
@@ -65,7 +66,7 @@ export function WelcomeBoard({
   ]
 
   // 看板要回答的第一个问题是"今天"——日期摆在最前面，用户不用去想今天是几号
-  const d = new Date()
+  const d = useNow()
   const dateLabel = `${d.getMonth() + 1}月${d.getDate()}日 周${'日一二三四五六'[d.getDay()]}`
 
   return (

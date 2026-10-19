@@ -22,6 +22,7 @@ import { usePetStore } from '../../stores/usePetStore'
 import { usePetLoop } from '../../hooks/usePetLoop'
 import { usePetSaying } from '../../hooks/usePetSaying'
 import { usePetStateSpeech } from '../../hooks/usePetStateSpeech'
+import { useNow } from '../../hooks/useNow'
 import { petAssetUrl } from '../../services/pet/config'
 import { hushFor } from '../../services/pet/saying-throttle'
 import { daysTogether } from '../../services/pet/affinity'
@@ -66,6 +67,8 @@ export function PetStage() {
 function PetStageInner() {
   const longPressedRef = useRef(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // 只用于「相识天数」：小时级刷新足够，别为一行字每分钟重渲染整只宠物
+  const now = useNow(60 * 60_000)
   /**
    * 庆祝窗口（截止时刻，ms）。**D-4 拍板方案 B**：给状态机的输入加一个有时限的标记，
    * 对外仍只返回已有的 `success` —— 不新增 `PetState` 枚举值、不新增宠物状态。
@@ -254,7 +257,7 @@ function PetStageInner() {
 
   if (!ready || !view) return null
 
-  const days = daysTogether(petCreatedAt, new Date())
+  const days = daysTogether(petCreatedAt, now)
   const meta = `相识 ${days} 天 · 好感 ${affinity}`
 
   return (

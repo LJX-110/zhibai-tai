@@ -23,6 +23,7 @@ import { Sheet, useToast } from '../components/ui'
 import { useAIChatStore } from '../components/ai/chat-store'
 import { useNoticeCenterStore } from '../components/notification/notice-center-store'
 import { useUnreadNotices } from '../hooks/useUnreadNotices'
+import { useNow } from '../hooks/useNow'
 import { runSync } from '../sync/SyncService'
 import { isConfigured, isSyncConfigured } from '../sync/auto'
 import { cn } from '../utils/cn'
@@ -40,7 +41,7 @@ export function MobileHeader() {
   const section = useAppStore((s) => s.section)
   const setSection = useAppStore((s) => s.setSection)
   const current = navSectionOf(section)
-  const now = new Date()
+  const now = useNow()
   const month = now.getMonth() + 1
   const day = now.getDate()
   const week = weekdayCN(now.getDay())
@@ -83,7 +84,7 @@ export function MobileHeader() {
       <div className="flex items-baseline gap-2">
         <span className="tabular eyebrow text-on-sidebar-muted">{current.index}</span>
         <div>
-          <div className="display text-lg font-semibold tracking-wide text-on-sidebar">{current.label}</div>
+          <div className="display text-lg font-semibold text-on-sidebar">{current.label}</div>
           <div className="eyebrow text-on-sidebar-muted">{current.sub}</div>
         </div>
       </div>
@@ -112,7 +113,7 @@ export function MobileHeader() {
           <Bell size={17} />
           {unread > 0 && (
             /* 字号例外：未读角标 —— 徽标本体只有 16px，字号必须小于正文 */
-            <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-cinnabar px-0.5 text-center text-[10px] font-medium leading-4 text-on-sidebar">
+            <span className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-cinnabar px-0.5 text-center text-[10px] font-medium leading-4 text-on-cinnabar">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
@@ -242,7 +243,7 @@ export function MobileNav() {
             }}
             className="flex w-full items-center gap-3 rounded-paper border border-teal/40 bg-teal/10 px-3 py-2.5 text-left transition-colors hover:border-teal/60 hover:bg-teal/15"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal text-on-sidebar">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal text-on-teal">
               <Bot size={14} />
             </span>
             <span className="min-w-0 flex-1">

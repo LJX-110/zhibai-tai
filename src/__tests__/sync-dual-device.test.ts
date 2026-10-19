@@ -538,3 +538,43 @@ describe('同步竞争加固（读-写窗口 / 退避重试）', () => {
     expect(c.tasks.getState().items[0].title).toBe('待办（B 第三次才推上去）')
   })
 })
+
+/**
+ * 「待同步」标记与手动同步（2026-10-19 修复）
+ *
+ * 此前标记只在 `auto.ts` 的自动同步里清，手动同步（设置页 / 顶栏 / 命令面板）
+ * 直接调 `runSync()`，成功后仍挂着「有改动待同步 —— 本地已改动，尚未推送到远端」。
+ * 现在清标记收口到 SyncService，并保留"同步窗口内又改过数据"的保护。
+ */
+describe('「待同步」标记（手动同步也要清）', () => {
+  it('手动 runSync 成功 → 清标记；同步窗口内又改 → 保留标记', async () => {
+    const DIRTY_KEY = 'zbt:sync-dirty:v1'
+    localStorage.removeItem(DIRTY_KEY)
+    const github = createFakeGitHub()
+    const a = await bootDevice(github)
+    const auto = await import('../sync/auto')
+
+    auto.notifyDataChanged()
+    expect(auto.isDirty()).toBe(true)
+    await a.sync.runSync()
+    expect(auto.isDirty()).toBe(false)
+
+    // 同步窗口内又改数据：快照已经导出，这次改动不在里面 —— 标记必须留着
+    auto.notifyDataChanged()
+    const original = github.impl
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (method === 'POST' && new URL(String(input)).pathname.endsWith('/git/blobs')) {
+          auto.notifyDataChanged()
+        }
+        return original(String(input), init)
+      }),
+    )
+    await a.sync.runSync()
+    expect(auto.isDirty()).toBe(true)
+
+    localStorage.removeItem(DIRTY_KEY)
+  })
+})

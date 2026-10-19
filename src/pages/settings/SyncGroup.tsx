@@ -25,7 +25,7 @@ import type { SyncInterval } from '../../stores/useSettingsStore'
 import { useConflictStore } from '../../stores/useConflictStore'
 import { runSync } from '../../sync/SyncService'
 import { encryptor, isWebCryptoAvailable } from '../../sync/encryption/encryption'
-import { isDirty, subscribeDirty } from '../../sync/auto'
+import { isConfigured, isDirty, subscribeDirty } from '../../sync/auto'
 import { SYNC_TONE_CLASS, syncSummary } from '../../sync/status'
 import { formatDateTime } from '../../utils/id'
 import { Badge, Button, Collapse, Dialog, Input, Section, Select, Switch, useToast } from '../../components/ui'
@@ -42,11 +42,18 @@ export function SyncGroup() {
   const [clearTarget, setClearTarget] = useState<'token' | 'password' | null>(null)
   const conflicts = useConflictStore((s) => s.items)
   const pendingConflicts = conflicts.filter((c) => !c.resolved)
-  const connected = Boolean(settings.githubRepo && settings.githubTokenEnc && settings.syncPasswordEnc)
+  // 与 runSync 的**实际可用**口径对齐（repo + Token + 口令非空；旧明文凭据同样能同步）——
+  // 此前只认加密标志 `*Enc`，明文凭据用户会被误判成「未连接」、连同步按钮都点不动
+  const connected = isConfigured(settings)
+  /** 旧版本可能留下明文凭据：仍可同步，但界面必须给出状态与清除出口，不能"看不见也删不掉" */
+  const hasToken = Boolean(settings.githubToken?.trim())
+  const hasPassword = Boolean(settings.syncPassword?.trim())
+  const legacyToken = hasToken && !settings.githubTokenEnc
+  const legacyPassword = hasPassword && !settings.syncPasswordEnc
   /** Web Crypto 可用性：加密是"保存凭据"的前提（非 https / localhost 时不存在），
    *  与 AI 组同一口径 —— 先摆出来，别让用户点完才知道存不进去 */
   const cryptoOk = isWebCryptoAvailable()
-  // 「有改动待同步」这个标记在 sync/auto 的模块作用域里（已持久化），不是 store ——
+  // 「有改动待同步」这个标记在 sync/dirty 的模块作用域里（已持久化；sync/auto 转发），不是 store ——
   // 只能用订阅方式取值（与 services/ai/health.ts 同一套路）
   const dirty = useSyncExternalStore(subscribeDirty, isDirty, () => false)
   const summary = syncSummary({
@@ -209,9 +216,14 @@ export function SyncGroup() {
           <Button size="sm" variant="secondary" onClick={saveToken} disabled={!tokenDraft.trim() || !cryptoOk}>
             加密保存
           </Button>
-          {settings.githubTokenEnc && (
+          {hasToken && (
             <>
-              <span className="shrink-0 text-xs text-teal">已保存（加密）</span>
+              <span
+                className={cn('shrink-0 text-xs', legacyToken ? 'text-cinnabar' : 'text-teal')}
+                title={legacyToken ? '旧版本保存的明文凭据，建议重新粘贴后点「加密保存」' : undefined}
+              >
+                {legacyToken ? '已保存（旧明文）' : '已保存（加密）'}
+              </span>
               <button
                 type="button"
                 onClick={() => setClearTarget('token')}
@@ -234,9 +246,14 @@ export function SyncGroup() {
           <Button size="sm" variant="secondary" onClick={savePassword} disabled={passwordDraft.length < 6 || !cryptoOk}>
             加密保存
           </Button>
-          {settings.syncPasswordEnc && (
+          {hasPassword && (
             <>
-              <span className="shrink-0 text-xs text-teal">已保存（加密）</span>
+              <span
+                className={cn('shrink-0 text-xs', legacyPassword ? 'text-cinnabar' : 'text-teal')}
+                title={legacyPassword ? '旧版本保存的明文凭据，建议重新粘贴后点「加密保存」' : undefined}
+              >
+                {legacyPassword ? '已保存（旧明文）' : '已保存（加密）'}
+              </span>
               <button
                 type="button"
                 onClick={() => setClearTarget('password')}

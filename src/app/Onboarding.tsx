@@ -87,7 +87,7 @@ export function Onboarding() {
               <div className="mx-auto mb-5 flex h-[68px] w-[68px] items-center justify-center rounded-full border border-line-strong">
                 <Taiji size={38} className="text-teal" />
               </div>
-              <h1 className="display text-2xl font-semibold tracking-[0.12em] text-ink">
+              <h1 className="display text-2xl font-semibold text-ink">
                 知白台
               </h1>
               <p className="mx-auto mt-3 max-w-[300px] text-sm leading-relaxed text-ink-muted">

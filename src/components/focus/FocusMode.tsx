@@ -2,7 +2,6 @@
  * FocusMode —— 桌面专注模式
  * 隐藏侧栏与无关数据，只留：当前任务 / 番茄钟 / 时间 / 退出
  */
-import { useEffect, useState } from 'react'
 import { Check, Pause, Play, X } from 'lucide-react'
 import { useAppStore } from '../../stores/useAppStore'
 import { useTaskStore } from '../../stores/useTaskStore'
@@ -13,6 +12,7 @@ import { playSound } from '../../services/sound'
 import { Seal } from '../ui/Seal'
 import { Button } from '../ui/Button'
 import { effectiveDone, liveFixedTasks, todayISO, nowISO } from '../../utils/id'
+import { useNow } from '../../hooks/useNow'
 import { cn } from '../../utils/cn'
 
 export function FocusMode() {
@@ -23,7 +23,8 @@ export function FocusMode() {
   // 全局番茄钟（与学页/顶栏共用）
   const timer = usePomodoroTimerStore()
   const { running, seconds } = timer
-  const [now, setNow] = useState(new Date())
+  // 每秒刷新：时间显示到分钟，秒级刷新保证跨分钟立即翻位
+  const now = useNow(1000)
 
   // 当前专注任务：本期未完成，优先级高→中
   // （固定任务按「本期」判，否则昨天做完的每日固定今天就认领不到了；
@@ -31,12 +32,6 @@ export function FocusMode() {
   const current = liveFixedTasks(tasks)
     .filter((t) => !effectiveDone(t))
     .sort((a, b) => Number(b.priority === 'high') - Number(a.priority === 'high') || a.createdAt.localeCompare(b.createdAt))[0]
-
-  // 每秒刷新时间
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 1000)
-    return () => window.clearInterval(id)
-  }, [])
 
   if (!focusMode) return null
 

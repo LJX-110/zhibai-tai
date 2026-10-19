@@ -61,7 +61,7 @@ export function ChatInput({
           onClick={onSend}
           disabled={!input.trim()}
           aria-label="发送"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal text-on-sidebar transition-opacity disabled:opacity-35"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal text-on-teal transition-opacity disabled:opacity-35"
         >
           <Send size={14} />
         </button>

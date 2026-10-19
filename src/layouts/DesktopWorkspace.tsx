@@ -14,7 +14,8 @@ import { CommandMenu, ToastViewport } from '../components/ui'
 import { Inspector } from '../components/inspector/Inspector'
 import { useInspectorStore } from '../components/inspector/inspector-store'
 import { playSound } from '../services/sound'
-import { todayISO, weekdayCN } from '../utils/id'
+import { toISODate, weekdayCN } from '../utils/id'
+import { useNow } from '../hooks/useNow'
 import { cn } from '../utils/cn'
 
 export function DesktopWorkspace() {
@@ -30,8 +31,8 @@ export function DesktopWorkspace() {
   const pomoSeconds = usePomodoroTimerStore((s) => s.seconds)
   const pomoMode = usePomodoroTimerStore((s) => s.mode)
   const pomoPause = usePomodoroTimerStore((s) => s.pause)
-  const now = new Date()
-  const date = todayISO()
+  const now = useNow()
+  const date = toISODate(now)
   const pmm = String(Math.floor(pomoSeconds / 60)).padStart(2, '0')
   const pss = String(pomoSeconds % 60).padStart(2, '0')
 
@@ -129,7 +130,8 @@ export function DesktopWorkspace() {
         <main
           className={cn(
             // 不写 transition-[padding]：padding 动画每帧触发布局（本项目只允许 transform / opacity）
-            'mx-auto max-w-[var(--content-max-w)] px-8 py-8 lg:px-10',
+            // 底部给安装引导条留实测高度（InstallPrompt 写入的文档级变量）
+            'mx-auto max-w-[var(--content-max-w)] px-8 pt-8 pb-[calc(2rem+var(--install-prompt-h,0px))] lg:px-10',
             inspectorOpen && 'pr-[380px]',
           )}
         >

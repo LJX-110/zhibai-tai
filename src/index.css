@@ -147,7 +147,9 @@
     animation: page-fade var(--duration-med) var(--ease-standard) both;
   }
 
-  /* 大标题（书法感衬线，仅用于大标题，克制使用） */
+  /* 大标题（书法感衬线，仅用于大标题，克制使用）
+     ⚠️ letter-spacing 在这里定死：调用方在 `.display` 元素上再写 `tracking-*`
+     工具类**不会生效** —— 二者同处 utilities 层、本规则在构建产物里更靠后。 */
   .display {
     font-family: var(--font-serif);
     letter-spacing: 0.02em;

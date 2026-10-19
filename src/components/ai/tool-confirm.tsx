@@ -58,7 +58,7 @@ export function ToolConfirmCard({
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="flex-1 rounded-control bg-teal py-1.5 text-sm font-medium text-on-sidebar transition-opacity active:opacity-80 disabled:opacity-50"
+          className="flex-1 rounded-control bg-teal py-1.5 text-sm font-medium text-on-teal transition-opacity active:opacity-80 disabled:opacity-50"
         >
           {busy ? '处理中…' : '确认'}
         </button>

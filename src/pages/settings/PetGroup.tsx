@@ -20,6 +20,7 @@ import { requestPlayAnim, requestResetPosition } from '../../services/pet/comman
 import { loadPetConfig } from '../../services/pet/config'
 import { animationCatalog, type AnimationGroup } from '../../services/pet/animation-catalog'
 import { aiLineCountToday } from '../../services/pet/ai-speech'
+import { useNow } from '../../hooks/useNow'
 
 export function PetGroup() {
   const enabled = useSettingsStore((s) => s.petEnabled)
@@ -30,6 +31,8 @@ export function PetGroup() {
   const aiSpeech = useSettingsStore((s) => s.petAiSpeech)
   const affinity = usePetStore((s) => s.affinity)
   const createdAt = usePetStore((s) => s.createdAt)
+  // 相识天数按小时刷新即可，避免这一页每分钟重渲染
+  const now = useNow(60 * 60_000)
 
   /**
    * 「动作」目录（Step 5-3E）：从 `public/pet/config.json` 拉一次摊平 ——
@@ -53,7 +56,7 @@ export function PetGroup() {
   const actionCount = catalog?.reduce((n, g) => n + g.names.length, 0) ?? 0
 
   // 相识天数按"初次落库"算；没有记录时按 0（显示为"今天刚认识"）
-  const days = daysTogether(createdAt, new Date())
+  const days = daysTogether(createdAt, now)
   // 好感不是"一个数字"了：等级 + 本级进度（Step 5-2C E-5）
   const tier = affinityTier(affinity)
 

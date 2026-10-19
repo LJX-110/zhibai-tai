@@ -176,7 +176,7 @@ export function CommandMenu() {
             <div className="space-y-2">
               {groupBy(commands).map(([group, items]) => (
                 <div key={group}>
-                  <div className="px-3 py-1 text-xs tracking-widest text-ink-faint">{group}</div>
+                  <div className="px-3 py-1 eyebrow text-ink-faint">{group}</div>
                   {items.map((c) => (
                     <CommandRow key={c.id} active={cursor === commands.indexOf(c)} icon={group === '新建' ? NEW_ICON : undefined} label={c.label} hint={c.hint} onClick={c.run} />
                   ))}
@@ -188,7 +188,7 @@ export function CommandMenu() {
               <div className="space-y-2">
                 {grouped.map(([group, items]) => (
                   <div key={group}>
-                    <div className="px-3 py-1 text-xs tracking-widest text-ink-faint">{group}</div>
+                    <div className="px-3 py-1 eyebrow text-ink-faint">{group}</div>
                     {items.map((r) => (
                       <CommandRow key={r.id} active={cursor === results.indexOf(r)} icon={groupIcon(r.group)} label={r.title} hint={r.sub} onClick={() => openResult(r)} />
                     ))}

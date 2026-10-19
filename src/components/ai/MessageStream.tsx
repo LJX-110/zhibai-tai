@@ -28,12 +28,12 @@ export interface PendingToolProposal {
 /** 气泡形制（用户 / AI / 流式三处共用）：
  *  ① 流式增量与定稿必须同宽同字号，否则回答收齐的瞬间会"跳变"；
  *  ② 正文用 text-sm（14px）而非 13px —— 长回答里 13px 在手机上明显偏小。 */
-const BUBBLE = 'whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed'
+const BUBBLE = 'whitespace-pre-wrap break-words rounded-sheet px-3.5 py-2.5 text-sm leading-relaxed'
 
 /** AI 气泡：浅色主题下 raised 与 paper 同为白色，纯底色等于没有气泡
  *  （长回答就变成一坨悬空白字）；描边沿用面板内已有的「线框 + raised」形制
  *  （预览确认卡片同款），暗色主题下也依旧成立。AI 与流式共用，避免两处漂移。 */
-const AI_BUBBLE = cn(BUBBLE, 'max-w-[92%] rounded-bl-sm border border-line bg-raised text-ink')
+const AI_BUBBLE = cn(BUBBLE, 'max-w-[92%] rounded-control border border-line bg-raised text-ink')
 
 export function MessageStream({
   messages,
@@ -83,7 +83,7 @@ export function MessageStream({
           if (m.role === 'user') {
             return (
               <div key={m.id} className="mt-2 flex justify-end first:mt-0">
-                <div className={cn(BUBBLE, 'max-w-[82%] rounded-br-sm bg-teal text-on-sidebar')}>
+                <div className={cn(BUBBLE, 'max-w-[82%] rounded-control bg-teal text-on-teal')}>
                   {m.content}
                 </div>
               </div>

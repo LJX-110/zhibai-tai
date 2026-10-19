@@ -33,6 +33,7 @@ import {
   type NoticeTone,
 } from '../../services/notification'
 import { NOTIFY_SOURCES } from '../../services/notify-sources'
+import { useNow } from '../../hooks/useNow'
 
 /** 来源标签：`app` 是操作回执，其余取统一清单的中文名（与设置页同一份） */
 function sourceLabel(source?: string): string {
@@ -70,7 +71,7 @@ export function NotificationCenter() {
 
   const unread = unreadNoticeCount(list)
   const shown = onlyUnread ? list.filter((n) => !n.read) : list
-  const now = new Date()
+  const now = useNow()
   const today = shown.filter((n) => isToday(n.at, now))
   const earlier = shown.filter((n) => !isToday(n.at, now))
 

@@ -28,8 +28,11 @@ interface ToastStore {
   dismiss: (id: number) => void
 }
 
-/** 同时可见的上限：超过就把**最旧的非危险**一条挤掉 —— 防"一次批量操作刷出一屏提示盖住内容" */
-const MAX_VISIBLE = 3
+/**
+ * 同时可见的上限：手机是第一形态，底部导航上方最多叠两条就到顶了；
+ * 超过就把**最旧的非危险**一条挤掉 —— 防"一次批量操作刷出一屏提示盖住内容"。
+ */
+const MAX_VISIBLE = 2
 /** 每条提示的存活时长 */
 const DURATION_MS = 2600
 

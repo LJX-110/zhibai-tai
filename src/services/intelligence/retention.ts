@@ -15,6 +15,7 @@ import { db } from '../../db/db'
 import { markTombstones } from '../../repositories/repo'
 import { useSettingsStore } from '../../stores/useSettingsStore'
 import { useIntelligenceStore } from '../../stores/useIntelligenceStore'
+import { notifyDataChanged } from '../../sync/auto'
 import type { IntelligenceItem } from '../../types/entities'
 
 /** 上限的可选档位（0 = 不限制） */
@@ -80,6 +81,8 @@ export async function clearReadIntelligence(before?: string): Promise<RetentionR
     await markTombstones('intelligenceItems', doomed)
     await db.intelligenceItems.bulkDelete(doomed)
   })
+  // 清理是本地改动：置脏，删除的墓碑才不会拖到下一次无关写入才随快照传播（2026-10-20）
+  notifyDataChanged()
   return { removed: doomed.length }
 }
 

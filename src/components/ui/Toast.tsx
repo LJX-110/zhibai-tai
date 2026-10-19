@@ -37,8 +37,10 @@ export function ToastViewport() {
       style={{
         left: 0,
         right: 0,
+        // 安装引导条是 fixed 的、不占布局：把它的实测高度加进来，
+        // 否则手机底部两条提示正好压在「立即安装 / 知道了」上。
         bottom:
-          'calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 12px)',
+          'calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px) + 12px + var(--install-prompt-h, 0px))',
       }}
     >
       {toasts.map((t) => {

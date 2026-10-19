@@ -270,7 +270,7 @@ export function TimetableTab({
               <div key={c.id} className="row">
                 {/* 图例色块改用实色（barFor）：原来取 colorFor 的 10% 淡底当色块，
                     在米白底上几乎看不出颜色，图例等于失效 */}
-                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-sm', barFor(c.id))} />
+                <span className={cn('h-2.5 w-2.5 shrink-0 rounded-control', barFor(c.id))} />
                 <button
                   onClick={() => useInspectorStore.getState().open('course', c.id)}
                   className="min-w-0 flex-1 text-left"

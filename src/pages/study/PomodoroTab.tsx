@@ -18,7 +18,8 @@ import {
   Section,
 } from '../../components/ui'
 
-import { effectiveDone, liveFixedTasks, todayISO } from '../../utils/id'
+import { effectiveDone, liveFixedTasks, toISODate, todayISO } from '../../utils/id'
+import { useNow } from '../../hooks/useNow'
 
 import type { PomodoroSession } from '../../types/entities'
 import { cn } from '../../utils/cn'
@@ -157,8 +158,8 @@ export function PomodoroTab() {
 
 /** 番茄钟统计：今日 / 本周 / 本月 / 最长 —— 四个数字一张卡，别的交给天机 */
 function PomodoroStats({ sessions }: { sessions: PomodoroSession[] }) {
-  const today = todayISO()
-  const now = new Date()
+  const now = useNow()
+  const today = toISODate(now)
   const monday = new Date(now)
   monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
   const mondayStart = new Date(monday).setHours(0, 0, 0, 0)

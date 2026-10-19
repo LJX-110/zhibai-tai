@@ -8,7 +8,7 @@
  *
  * 已以独立窗口运行、或本会话点过关闭后不再打扰 —— 给出口，不纠缠。
  */
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { MonitorDown, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import {
@@ -31,10 +31,31 @@ export function InstallPrompt() {
   )
   // 只在首次渲染判定一次：iOS 且未安装 → 给分步指引
   const [iosGuide] = useState(() => !isStandalone() && isIOS())
-
-  if (dismissed) return null
   const kind: Kind | null = canInstall ? 'install' : iosGuide ? 'ios' : null
-  if (!kind) return null
+  const visible = !dismissed && kind !== null
+  const ref = useRef<HTMLDivElement>(null)
+
+  /* 这条横幅是 fixed 定位、不占文档流 —— 内容区底部的按钮与 Toast 会正好压上来。
+     所以把实测高度写进文档级变量，供两个 Workspace 的底部 padding 与 Toast 的
+     bottom 消费。窄屏长文案换行会改变高度，用 ResizeObserver 补写；
+     关闭 / 卸载时清掉变量，别在白留一段空隙。 */
+  useEffect(() => {
+    if (!visible) return
+    const el = ref.current
+    if (!el) return
+    const root = document.documentElement
+    const sync = () => root.style.setProperty('--install-prompt-h', `${el.offsetHeight + 8}px`)
+    sync()
+    if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty('--install-prompt-h')
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      root.style.removeProperty('--install-prompt-h')
+    }
+  }, [visible])
+
+  if (!visible || kind === null) return null
 
   const dismiss = () => {
     try {
@@ -54,7 +75,10 @@ export function InstallPrompt() {
   //    而桌宠的活动矩形只扣掉顶/底栏，扣不到这条横幅 —— 用 `--z-nav`(50) 的话
   //    宠物停在右下角时就可能压住按钮，用户点不动（Step 4-3 · 十）。
   return (
-    <div className="fixed inset-x-3 bottom-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom,0px)+8px)] z-[var(--z-overlay)] mx-auto max-w-md md:bottom-4">
+    <div
+      ref={ref}
+      className="fixed inset-x-3 bottom-[calc(var(--mobile-nav-h)+env(safe-area-inset-bottom,0px)+8px)] z-[var(--z-overlay)] mx-auto max-w-md md:bottom-4"
+    >
       <div className="anim-enter flex items-center gap-3 rounded-paper border border-line bg-paper/95 px-3.5 py-3 shadow-float backdrop-blur">
         <MonitorDown size={18} className="shrink-0 text-skill-indigo" />
         <p className="min-w-0 flex-1 text-xs leading-relaxed text-ink-soft">

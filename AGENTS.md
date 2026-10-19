@@ -2,12 +2,13 @@
 
 本文件是给 AI 与协作者的**速查**（最容易踩的坑与硬红线）。完整规范各见其文：
 
-- `../docs/编码规范.md` —— 分层 / 命名 / 样式 / 文件规模 / 提交自检清单
-- `../docs/方案与实现.md` —— **§1 是"还剩什么"的唯一状态源**；§2 天机 · §3 桌宠 · §4 通知 · §5 情报
-- `../docs/Step5-2C-产品标准.md` —— **"新功能对齐老功能"的唯一依据**
-- `../docs/Step5-3-设计规范.md` —— 令牌选用（什么时候用哪个）+ Microcopy 纪律
+- `../docs/规范.md` —— **工程 + 设计规范的唯一权威**（分层 / 命名 / 样式 / 规模 / 自检 + 令牌 / 交互 / 双端 / Microcopy）
+- `../docs/产品标准.md` —— **"新功能对齐老功能"的唯一依据**（页面结构 / 信息架构 / 能力矩阵 / 各类实体口径）
+- `../docs/方案与实现.md` —— **§1.4 是"还剩什么"的唯一状态源**；§2 天机 · §3 桌宠 · §4 通知 · §5 情报
+- `../MEMORY.md` —— 现状 / 硬规则 / **§4 子系统红线**（修行 / 天机 / 桌宠 / 通知·课程·情报 / 印章字体 / 品牌启动链）
 
-冲突时以 `编码规范.md` 为准，并回头同步本文件。
+**裁决链**（声明在 `../AGENTS.md` §一，本文件只声明自己这一层的分工）：
+本文件（速查）与 `../docs/规范.md`（完整规范）冲突时，**以 `../docs/规范.md` 为准，并回头同步本文件**。
 
 ## 定位与技术栈
 
@@ -39,10 +40,19 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
 5. **兜底必须留痕**：catch 静默返回默认值 = 用户永远不知道出事 —— 报界面（`services/ai/health.ts` 三态）或记流水（`services/error-log.ts`，**写盘前 `redactSecrets` 脱敏**）。
 6. **凡有列表必须能给出口**（走 `repo.remove`，自动写墓碑）；**会持续增长的表必须设保留上限**（`services/intelligence/retention.ts`：先写墓碑再删，否则远端快照会加回）。
 7. 组件与非组件分文件；单文件 ≤ **400 行**；注释写"为什么"；不携带 `P0-B`、`v0.x` 等内部版本代号。
-8. **改动前先备份原文件到 `备份/YYYY-MM-DD_<主题>/`**；不自建 AGENTS 外文档。
+8. **改动前先备份原文件**（见下「备份约定」）；本项目的文档只有这一套：`../docs/`（3 份）·
+   `../AGENTS.md`（非提交区）· `../MEMORY.md`，**不要再新建别的文档**，要加内容就加进现有那一份。
 9. **"一处修了、别处漏了"是最高频复发形态** → 能做成机器可查的就做成规则：`npm run check:rules` 现为 5 条 —— 单文件 ≤400 行 / `@layer` 内 CSS / 圆角字号魔法值 / **取课点必须走 `activeSlotsOfDay`** / 死导出。
    ⚠️ 规则 5 有漏报（同名局部定义会给死导出"续命"）→ 查死代码**必须排除 `__tests__`**；重复实现要人工扫。
-10. **要"跨设备一致"的必须是业务表**，不放设置项；时间统一走 `utils/id`（`nowISO`/`todayISO`/`formatHM`），`Date.now()` 不进组件/hook 的渲染体。
+10. **要"跨设备一致"的必须是业务表**，不放设置项；时间统一走 `utils/id`（`nowISO`/`todayISO`/`formatHM`），
+    需要"现在"用 `hooks/useNow`（默认 60s，秒级传 1000）；`new Date()` / `Date.now()` 都不进组件/hook 的渲染体。
+
+### 备份约定（本层覆盖全局规则 3）
+
+按 `../AGENTS.md` §四 执行，本层只声明两处差异：
+
+- 备份落在 **`../备份/YYYY-MM-DD/`**，不在本目录内。
+- `../docs/` 不在版本库，**删改前必先备份**；本目录有 git 兜底，仍按同一约定备份。
 
 ## 移动端优先
 
@@ -66,7 +76,7 @@ node ../scripts/proxy-security-test.mjs      # 代理安全回归（ALLOWED_HOST
 # 以下三个探针需先起 preview（4173）：theme-boot-probe / ai-cors-probe / mobile-acceptance
 ```
 
-> ⚠️ `scripts/` 与 `docs/` **不入库**，在 `work/` 区（见 `work/目录约定.md`）。
+> ⚠️ `scripts/` 与 `docs/` **不入库**，在 `work/` 区 —— 目录边界、备份与验证命令见 **`../AGENTS.md`**（work 非提交区）。
 
 ## 模块备忘（改前必读）
 
@@ -125,7 +135,7 @@ node ../scripts/proxy-security-test.mjs      # 代理安全回归（ALLOWED_HOST
 - ⚠️ **GitHub「空仓库」返回 409 不是 404**：判定"分支不存在"须**同时**识别 404 与「409 且消息含 empty」（`headRef()` 已处理）；写入侧自动建根提交 + 建分支。认 409 **必须校验消息含 empty**，否则真冲突会被误吞。
 - **同步错误落界面前译人话**（`sync/github/errors.ts` 的 `describeGitHubError()`）；provider 内部仍用原文做分支判断 —— **两处用途不同，别合并**。
 - GitHub 同步走 **Git Data API**（`sync/github/GithubSyncProvider.ts`，blob → tree → commit → ref）。竞争处理有两道：**读-写窗口 CAS**（写入前校验头仍是 `readSyncFile` 记住的那个，变了抛可重试错误 —— 否则本次提交会"快进成功"却静默缺掉他端改动）+ ref 非快进 422；`runSync` 对竞争类错误**最多 3 次尝试、退避 + 抖动**（2026-10-02）。
-- **「待同步」标记持久化**（`sync/auto.ts`，`localStorage['zbt:sync-dirty:v1']`）：刷新不再丢；启动 / 回前台 / 网络恢复时若仍有积压会自动补推。
+- **「待同步」标记持久化**（`sync/dirty.ts`，`localStorage['zbt:sync-dirty:v1']`；**清标记收口在 `SyncService` 推送成功后**，手动同步同样生效）：刷新不再丢；启动 / 回前台 / 网络恢复时若仍有积压会自动补推。
 - 同步请求 30s 超时；快照带 `schemaVersion` 校验；冲突记录留本地可查；墓碑随快照传播。
 - 推送到 GitHub 需代理（本机）：`$env:HTTPS_PROXY="http://127.0.0.1:7890"` **仅一次会话，不留持久 git 配置**（git 不读 Windows 系统代理）。
 

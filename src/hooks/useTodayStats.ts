@@ -1,7 +1,8 @@
 /**
  * 今日统计 —— 聚合各 store 得到当天数据，供首页「观」与今日炁象计算复用
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useNow } from './useNow'
 import { useBodyMetricLogStore } from '../stores/useBodyStore'
 import { useCollectionStore } from '../stores/useCollectionStore'
 import { useHabitLogStore } from '../stores/useHabitStore'
@@ -122,10 +123,5 @@ export function useTodayStats(): TodayStats {
 /** 当前本地日期（yyyy-mm-dd） —— 每分钟滚动一次，跨午夜后自动翻新；
  *  此前 useMemo(()=>…,[]) 固定首次渲染值，应用挂机过午夜统计与"今日"不再更新 */
 function useTodayISO(): string {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(new Date()), 60_000)
-    return () => window.clearInterval(t)
-  }, [])
-  return toISODate(now)
+  return toISODate(useNow())
 }

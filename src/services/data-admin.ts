@@ -7,9 +7,13 @@
  * 会在 28 张表上写 28 次），但也不该让页面 `import { db }` ——
  * 页面只管"点了按钮之后要发生什么"，"怎么动数据库"属于服务层。
  *
- * ## 边界：本模块**只做数据库读写**
+ * ## 边界：本模块**只做数据库读写与置脏**
  * 文件下载、toast、store 重载都留在调用方 —— 那些是界面行为。
  * 混进来会让"清空"这类危险操作既难测、也难复用。
+ * 置脏（`notifyDataChanged`）则收口在这里：清空 / 导入是**跨表直写**、不走 store
+ * 工厂，曾经全程不触发自动同步 —— 设置页显示「已是最新」而本地已与远端分叉；
+ * 清掉的墓碑也要等下一次无关写入才随快照传播（2026-10-20 修，同族缺口见
+ * `services/intelligence/retention.ts` 的「清理已读」）。
  *
  * ## ⚠️ 两条不能改的约定
  *  · **导出格式**（字段名 / `_meta` 结构 / 遍历顺序）与历史备份文件必须保持兼容 ——
@@ -21,6 +25,7 @@ import { APP_VERSION } from '../app/version'
 import { db } from '../db/db'
 import { BUSINESS_TABLES, TOMBSTONES } from '../db/tables'
 import { markTombstones } from '../repositories/repo'
+import { notifyDataChanged } from '../sync/auto'
 import { nowISO } from '../utils/id'
 
 /** 备份文件的形状（键即表名；另有 `tombstones` 与 `_meta`）。**字段名不要改** */
@@ -51,12 +56,16 @@ export async function exportAllData(): Promise<BackupDump> {
  * 冲突记录一并清空（本机表，不参与同步）。
  */
 export async function clearAllData(): Promise<void> {
+  let removed = 0
   for (const t of BUSINESS_TABLES) {
     const ids = (await db.table(t.key).toCollection().primaryKeys()) as string[]
+    removed += ids.length
     await db.table(t.key).clear()
     await markTombstones(t.key, ids)
   }
   await db.table('conflicts').clear()
+  // 只在实际清掉了东西时置脏：空对空的"清空"不算本地改动，不该挂起一次同步
+  if (removed > 0) notifyDataChanged()
 }
 
 /** 各业务表的行数（键用中文 label，直接进诊断文本） */
@@ -82,9 +91,12 @@ export async function importAllData(dump: BackupDump): Promise<number> {
     if (rows.length > 0) await db.table(t.key).bulkPut(rows as never[])
     restoredTables++
   }
-  if (Array.isArray(dump.tombstones)) {
+  const hasTombstones = Array.isArray(dump.tombstones)
+  if (hasTombstones) {
     await db.table(TOMBSTONES).clear()
     await db.table(TOMBSTONES).bulkPut(dump.tombstones as never[])
   }
+  // 恢复是本地改动：置脏，别让「待同步」与自动同步漏掉这次写入（2026-10-20）
+  if (restoredTables > 0 || hasTombstones) notifyDataChanged()
   return restoredTables
 }

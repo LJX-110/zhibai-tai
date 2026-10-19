@@ -23,7 +23,8 @@ import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
 import { Section, EmptyState, Button, PageHeader, Taiji } from '../components/ui'
 import { activeSlotsOfDay, currentWeek } from '../services/study'
-import { formatHM, todayISO } from '../utils/id'
+import { formatHM, toISODate, todayISO } from '../utils/id'
+import { useNow } from '../hooks/useNow'
 import type { Task } from '../types/entities'
 import { FourSymbolsCompass } from './overview/Compass'
 import { WeekReview } from './overview/WeekReview'
@@ -50,9 +51,9 @@ export function OverviewPage() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [allTraceOpen, setAllTraceOpen] = useState(false)
 
-  const now = new Date()
-  const date = todayISO()
-  // 当前时刻 HH:mm（每渲染实时计算；分钟级变化由使用处驱动重渲染）
+  const now = useNow()
+  const date = toISODate(now)
+  // 当前时刻 HH:mm（useNow 每分钟刷新 —— 挂机跨分钟 / 跨午夜都不会停在首次渲染）
   const nowHMStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 
   // 今日待上课 —— 必须经 activeSlotsOfDay **按周次过滤**，不能只按周几取课。
@@ -66,7 +67,7 @@ export function OverviewPage() {
   const week = currentWeek(termStartDate)
   // 已停 / 已调走的课不在首页今日课程里显示，调来的课要显示（首页答的是"今天实际要上什么"）
   const todayClasses = activeSlotsOfDay(courses, todayWeekday, week, {
-    date: todayISO(),
+    date,
     cancellations: courseCancellations,
     reschedules: courseReschedules,
   })

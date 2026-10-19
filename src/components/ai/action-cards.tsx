@@ -52,7 +52,7 @@ export function ActionConfirmCard({
       <div className="mt-2 flex gap-2">
         <button
           onClick={onConfirm}
-          className="flex-1 rounded-control bg-teal py-1.5 text-sm font-medium text-on-sidebar transition-opacity active:opacity-80"
+          className="flex-1 rounded-control bg-teal py-1.5 text-sm font-medium text-on-teal transition-opacity active:opacity-80"
         >
           确认添加
         </button>
