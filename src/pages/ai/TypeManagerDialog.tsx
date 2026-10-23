@@ -91,7 +91,7 @@ export function TypeManagerDialog({
           </Button>
         </div>
         <p className="text-xs leading-relaxed text-ink-faint">
-          删除类型不删能力，相关条目仍在「全部」可见；改名会同步迁移所属能力。
+          删除类型不删条目；改名会迁移所属条目。
         </p>
       </div>
     </Dialog>

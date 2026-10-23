@@ -163,7 +163,7 @@ export function StatsTab() {
             <p className="mt-3 text-xs leading-relaxed text-ink-faint">
               {income > 0
                 ? `结余率 ${Math.round(((income - expenseTotal) / income) * 100)}%${expenseTotal > income ? '，支出已超收入' : '，总体健康'}`
-                : '记下收入后即可看到结余率'}
+                : '记下收入后显示结余率'}
             </p>
           </Section>
         </div>

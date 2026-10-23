@@ -35,7 +35,7 @@ export function PetGroup() {
   const now = useNow(60 * 60_000)
 
   /**
-   * 「动作」目录（Step 5-3E）：从 `public/pet/config.json` 拉一次摊平 ——
+   * 「动作」目录：从 `public/pet/config.json` 拉一次摊平 ——
    * **代码里不写死任何素材名**（桌宠的既有纪律）；点一个名字发一条播放命令。
    */
   const [catalog, setCatalog] = useState<AnimationGroup[] | null>(null)
@@ -57,7 +57,7 @@ export function PetGroup() {
 
   // 相识天数按"初次落库"算；没有记录时按 0（显示为"今天刚认识"）
   const days = daysTogether(createdAt, now)
-  // 好感不是"一个数字"了：等级 + 本级进度（Step 5-2C E-5）
+  // 好感不是"一个数字"了：等级 + 本级进度
   const tier = affinityTier(affinity)
 
   return (
@@ -84,7 +84,7 @@ export function PetGroup() {
           )}
         </span>
       </div>
-      {/* 大小：三档（Step 5-2C E-2 用户拍板）。
+      {/* 大小：三档（用户拍板）。
           改前这里**没有任何控件** —— `petScale` 一直是连续滑杆语义却没有 UI，
           等于"有这个设置但用户碰不到"。 */}
       <div className="row flex-wrap">
@@ -101,8 +101,8 @@ export function PetGroup() {
           ))}
         </div>
       </div>
-      {/* 台词：只关"常驻表现"，不关互动与动画（Step 5-2C F 批）；
-          「AI 台词」是 Step 5-3E 用户拍板 —— 气泡里的话由人设（鲸鱼娘）生成，
+      {/* 台词：只关"常驻表现"，不关互动与动画；
+          「AI 台词」由用户拍板 —— 气泡里的话由人设（鲸鱼娘）生成，
           未配 AI / 请求失败自动回退本地台词库 */}
       <div className="row flex-wrap">
         <span className="w-20 shrink-0 text-sm text-ink-muted">台词</span>
@@ -130,7 +130,7 @@ export function PetGroup() {
               : '只走本地台词'}
         </span>
       </div>
-      {/* 动作（Step 5-3E 重做 · 用户拍板）：**列动作名，点一个它立刻做给你看** ——
+      {/* 动作（重做 · 用户拍板）：**列动作名，点一个它立刻做给你看** ——
           此前理解的"随机动作开关 + 频率"方向错了，已撤回 */}
       <Collapse
         title="动作"
@@ -154,7 +154,7 @@ export function PetGroup() {
               </div>
             ))}
             {!enabled && (
-              <p className="text-xs text-ink-faint">桌宠未开启 —— 打开后这些动作才会真的播放。</p>
+              <p className="text-xs text-ink-faint">桌宠未开启，打开后动作才会播放。</p>
             )}
           </div>
         )}
@@ -167,7 +167,7 @@ export function PetGroup() {
         </Button>
         <span className="flex-1 text-xs text-ink-faint">回到底部右下角 · 拖动位置只存本机</span>
       </div>
-      {/* 漫游：关着时位置只由拖动决定（默认关，Step 4-2） */}
+      {/* 漫游：关着时位置只由拖动决定（默认关） */}
       <div className="row flex-wrap">
         <span className="w-20 shrink-0 text-sm text-ink-muted">漫游</span>
         <Switch
@@ -177,10 +177,10 @@ export function PetGroup() {
           disabled={!enabled}
           onChange={() => set({ petWander: !wander })}
         />
-        {/* ⚠️ 据实描述（Step 5-3C 素材审计）：`public/pet/` 共 106 张素材、零死素材，
-            但**没有任何行走循环 / 方向帧**；`moves.actions` 只有「螃蟹走路」「原地漂浮踏步」
-            「原地左转奔跑」——后两个命名即"原地"。位移是 rAF 线性插值，所以视觉是**平移**，
-            不是走路。在补上朝左/朝右的 walk cycle 之前，这里如实写作"移动"，不写"走动"。 */}
+        {/* ⚠️ 据实描述（素材审计）：`public/pet/` 共 106 张素材、零未归类，
+            但**没有任何行走循环 / 方向帧**；`moves.actions` 的「漂浮踏步」「左转奔跑」
+            都是原地动作，位移靠 rAF 线性插值 —— 视觉是**平移**，不是走路。
+            在补上朝左/朝右的 walk cycle 之前，这里如实写作"移动"，不写"走动"。 */}
         <span className="flex-1 text-xs text-ink-faint">
           {wander ? '空闲时自己移动' : '不自己移动 · 拖到哪就待在哪'}
         </span>

@@ -42,7 +42,7 @@ export function FollowPanel({
         ))}
         {follows.length === 0 && (
           <span className="text-xs text-ink-faint">
-            还没有关注。在情报详情里点「关注」即可追踪某个来源或主题
+            还没有关注。在情报详情点「关注」追踪来源或主题
           </span>
         )}
       </div>

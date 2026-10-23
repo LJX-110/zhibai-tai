@@ -59,7 +59,7 @@ export function MobileHeader() {
     if (syncing) return
     if (!isSyncConfigured()) {
       setSection('system')
-      toast('请先配置同步目标（仓库 + Token + 口令）', 'info')
+      toast('未配置同步：仓库 + Token + 口令', 'info')
       return
     }
     setSyncing(true)

@@ -2,7 +2,7 @@
  * 天机 · 空会话看板：实时状态（各板块脉搏）+ 动作胶囊。
  * 管家先亮出"我已经看到什么"，再给一键动作 —— 不堆 2×2 大卡占屏。
  *
- * ⚠️ **「可以这样问」快捷问句已删**（Step 5-3C）：天机的定位是
+ * ⚠️ **「可以这样问」快捷问句已删**：天机的定位是
  * 「通用 AI + 数据助手」，不是九大板块的问答入口 —— 把"能问什么"
  * 列成四颗按钮，等于把它的能力说小了，还把它变成了另一个导航层。
  * 空输入框不需要教学，用户直接说要做什么即可。
@@ -141,13 +141,13 @@ export function WelcomeBoard({
             后者才是「去填配置」，混成一句会把已经配好的用户指错方向 */}
         {remote.state === 'degraded' && (
           <p className="mt-3 text-xs leading-relaxed text-cinnabar/80">
-            远程 AI 暂时不可用{remote.reason ? `（${remote.reason}）` : ''} · 当前为本地规则概览。
-            再问一次可重试；持续失败请检查「系统 · AI · 模型与连接」的 Key、额度与 Base URL。
+            远程 AI 不可用{remote.reason ? `（${remote.reason}）` : ''}，已回落到本地规则。
+            再问一次可重试；持续失败查「系统 · AI」的 Key、额度与 Base URL。
           </p>
         )}
         {remote.state === 'unconfigured' && (
           <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-            未接入远程 AI · 在「系统 · AI · 模型与连接」填好 Base URL / 模型 / Key，天机才能结合你的数据作答。
+            未接入远程 AI · 在「系统 · AI」填 Base URL / 模型 / Key 后可用。
           </p>
         )}
       </div>

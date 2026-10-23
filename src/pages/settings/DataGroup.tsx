@@ -146,7 +146,7 @@ export function DataGroup() {
           </div>
         }
       >
-        {/* 备份 / 恢复 / 情报 / 修复 / 诊断 合成一段（Step 5-3D · 用户拍板"该合并的合并"）：
+        {/* 备份 / 恢复 / 情报 / 修复 / 诊断 合成一段（用户拍板"该合并的合并"）：
             它们都是"我的数据"的不同面，拆成三个 Section 只会把首屏拉长。
             顺序：备份是最高频的事 → 情报（上限 + 清理）→ 修复 → 诊断（排查用） */}
         <input
@@ -203,7 +203,7 @@ export function DataGroup() {
               ))}
             </Select>
             <span className="flex-1 text-xs text-ink-faint">
-              超出后按「已读且最旧优先」清理
+              超出后优先清理「已读且未收藏」的旧条目
             </span>
           </SettingsRow>
 
@@ -213,9 +213,16 @@ export function DataGroup() {
               variant="tertiary"
               disabled={intelTotal === 0}
               onClick={async () => {
+                const readFav = useIntelligenceStore.getState().items.filter((x) => x.read && x.favorite).length
                 const { removed } = await clearReadIntelligence()
                 await useIntelligenceStore.getState().load()
-                toast(removed > 0 ? `已清理 ${removed} 条已读情报` : '没有已读情报可清理', removed > 0 ? 'success' : 'info')
+                const text =
+                  removed > 0
+                    ? `已清理 ${removed} 条已读情报`
+                    : readFav > 0
+                      ? `${readFav} 条已读情报已收藏，已保留`
+                      : '没有已读情报可清理'
+                toast(text, removed > 0 ? 'success' : 'info')
               }}
             >
               <Trash2 size={13} /> 清理已读
@@ -278,8 +285,7 @@ export function DataGroup() {
             </p>
             {/* 把代价说清楚：旧副本也是真实的完成历史，删了「已完成」里对应条目会一起消失 */}
             <p className="mb-3 text-xs text-ink-faint">
-              这些副本也是当时的完成记录，清理后「已完成」列表里对应条目会一并消失。
-              每一期的「已完成」本身不会被删掉，删的只是同一件事多出来的副本。
+              这些副本也是完成记录，清理后「已完成」里对应条目会一起消失。
             </p>
             {dup.titles.length > 0 && (
               <div className="max-h-40 overflow-y-auto rounded-tile border border-line p-2">
@@ -302,7 +308,7 @@ export function DataGroup() {
         </SettingsPanel>
       </Section>
 
-      {/* 危险操作 + 故障记录**合成一个条目且不嵌套**（Step 5-3E 用户拍板：
+      {/* 危险操作 + 故障记录**合成一个条目且不嵌套**（用户拍板：
           "不要一环套一环"）—— 折叠里平铺"清空数据"行与故障列表，两层折叠被拆平 */}
       <Collapse title="清空与故障" hint="不可恢复">
         <div className="row flex-wrap">
@@ -320,7 +326,7 @@ export function DataGroup() {
 
       <Dialog open={clearOpen} onClose={() => setClearOpen(false)} title="清空全部数据？">
         <p className="text-sm leading-relaxed text-ink-soft">
-          将删除本机 IndexedDB 中的全部记录（待办/笔记/喝水/番茄钟/收藏等），不可恢复。建议先「导出备份」。
+          删除本机全部记录（待办 / 笔记 / 喝水 / 收藏等），不可恢复。先导出备份可回退。
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => setClearOpen(false)}>取消</Button>
@@ -331,8 +337,8 @@ export function DataGroup() {
       </Dialog>
       <Dialog open={clearIntelOpen} onClose={() => setClearIntelOpen(false)} title="清空全部情报？">
         <p className="text-sm leading-relaxed text-ink-soft">
-          将删除本机全部 {intelTotal} 条情报，不可恢复。删除会随同步传播到其他设备；
-          情报源与分类不受影响，之后拉取会重新积累。建议先「导出备份」。
+          删除全部 {intelTotal} 条情报，不可恢复，并会随同步传播到其他设备。
+          情报源与分类不受影响，之后拉取会重新积累。
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => setClearIntelOpen(false)}>取消</Button>

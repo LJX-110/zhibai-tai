@@ -6,13 +6,13 @@
  * 所以它不能再当情报源区块里的一行 —— 那是折叠层，指路会把用户带到空地方。
  * 说明文案在窄屏也保留：首屏上它是「为什么值得填」的唯一解释，不能只给桌面看。
  *
- * ## Step 5-1 · B3：地址在**输入那一刻**就校验
+ * ## 地址在**输入那一刻**就校验
  * 此前是每敲一个字就往 store 里写一次（`onChange` 直写），填错时表现为"抓取失败"，
  * 而失败会被归类成"跨域/网络" —— 用户于是去查网络，真问题在输入框里。
  * 现在改成**本地草稿 + 失焦/回车提交**：合法才写入并规整（去掉结尾 `/`），
  * 不合法就当场说明原因，**不写入**（保留上一个可用值）。
  *
- * ## Step 5-1 · E4：320px 不再挤压
+ * ## 320px 不再挤压
  * 输入框在窄屏独占一行（`basis-full`），宽屏才与说明并排 —— 220px 的 `min-w`
  * 在 320 屏上会把说明文字挤成一列两个字。
  *
@@ -92,14 +92,13 @@ export function ProxyConfig() {
           aria-invalid={error !== null}
         />
         <span className="text-xs leading-relaxed text-ink-faint">
-          中文源与 B 站都需要它 · 完整步骤见仓库 proxy/README.md
+          中文源与 B 站需要
         </span>
       </div>
       {error && <p className="mt-1 text-xs leading-relaxed text-cinnabar">{error}</p>}
       {insecureHttp && (
         <p className="mt-1 text-xs leading-relaxed text-bronze">
-          这是 http:// 地址：知白台在 https 下打开时，浏览器会按"混合内容"直接拦截它（表现为"抓取失败"）。
-          正式部署请用 https:// 地址；本机调试（localhost）不受影响。
+          http:// 地址在 https 页面下会被浏览器按混合内容拦截，表现就是抓取失败；本机调试不受影响。
         </p>
       )}
       {/* 未配置时给三段最短可行步骤（配好后整块消失，不再占地方） */}

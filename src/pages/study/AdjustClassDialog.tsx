@@ -164,8 +164,8 @@ export function AdjustClassDialog({ open, onClose }: { open: boolean; onClose: (
       }
     >
       <p className="mb-3 text-xs leading-relaxed text-ink-faint">
-        改的是**这一次**课，不动课程本身的排课。停掉的课不会再提醒；调走的课按新时间提醒。
-        想彻底调整请用「管理」改周次或时段。
+        只改这一天的这一次课，不动课程本身的排课。停掉的课不再提醒；调走的课按新时间提醒。
+        要改周次或时段，用「管理」。
       </p>
       {days.length === 0 ? (
         <p className="py-4 text-center text-sm text-ink-faint">未来 7 天没有课</p>

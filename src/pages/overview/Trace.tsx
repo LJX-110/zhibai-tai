@@ -30,8 +30,7 @@ export function TodayTraceSection({
       ) : (
         <EmptyState
           title="今日尚无轨迹"
-          desc="完成待办、专注、记录或收藏后会自动出现在这里"
-          step="先做一件事，轨迹自会浮现"
+          desc="完成待办、专注或记录后自动出现在这里"
         />
       )}
     </Section>

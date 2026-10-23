@@ -39,7 +39,7 @@ export function TidyDialog({
             <div className="mb-1 text-xs text-ink-faint">收藏原因</div>
             <p className="rounded-tile border border-line px-3 py-2 text-sm text-ink-muted">{tidy.reason}</p>
           </div>
-          <p className="text-xs text-ink-faint">写入前请确认：AI 仅生成建议，可自行修改。</p>
+          <p className="text-xs text-ink-faint">写入前确认：内容由 AI 生成，可修改后再保存。</p>
         </div>
       )}
     </Dialog>

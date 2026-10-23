@@ -37,7 +37,7 @@ export function BackupReminder() {
     if (gap >= GAP_DAYS) {
       const count = (last.count ?? 0) + 1
       if (count <= MAX_HINTS) {
-        useToastStore.getState().push('已有几天未备份，建议在「系统 · 数据」导出备份', 'info')
+        useToastStore.getState().push('已有几天未备份。到「系统 · 数据」导出备份', 'info')
       }
       persist(count)
     } else {

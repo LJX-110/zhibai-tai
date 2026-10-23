@@ -3,7 +3,7 @@
  * 打开即知今天：四维状态（非堆数字）→ **今日**（课程 + 待办时间轴）→ 天机入口。
  *
  * ⚠️ 「今日任务」与「到期提醒」原本是两个区块，同一件今天到期的重点待办会出现两次；
- * Step 5-1 · E3 合并成一条时间轴（信息一条没少，只是不再重复）。
+ * 合并成一条时间轴（信息一条没少，只是不再重复）。
  *
  * 拆分说明（2026-09-20 路线图第 4 步）：罗盘 / 本周回顾 / 今日轨迹与「全部轨迹」抽屉
  * 各自成文件放在 ./overview/ 下；本文件只留状态、派生数据与区块组合。
@@ -21,7 +21,7 @@ import { useTaskActions } from '../hooks/useTaskActions'
 import { useInspectorStore } from '../components/inspector/inspector-store'
 import { TaskItem } from '../components/task/TaskItem'
 import { TaskEditor } from '../components/task/TaskEditor'
-import { Section, EmptyState, Button, PageHeader, Taiji } from '../components/ui'
+import { Section, Collapse, EmptyState, Button, PageHeader, Taiji } from '../components/ui'
 import { activeSlotsOfDay, currentWeek } from '../services/study'
 import { formatHM, toISODate, todayISO } from '../utils/id'
 import { useNow } from '../hooks/useNow'
@@ -125,7 +125,7 @@ export function OverviewPage() {
   }, [follows, intelItems])
 
   /**
-   * 今日案台 · **一条时间轴**（Step 5-1 · E3）。
+   * 今日案台 · **一条时间轴**。
    *
    * 改这里的原因：原先「今日任务」渲染 `highPriorityOpen`、「到期提醒」渲染
    * `todayDue + upcoming`，而一件**今天到期的重点待办会同时落进两处** ——
@@ -199,7 +199,7 @@ export function OverviewPage() {
         <div className="mb-2 flex flex-wrap items-center justify-between gap-y-1">
           <div className="flex items-center gap-2 mono-meta text-ink-faint">
             <Sparkles size={13} className="text-bronze" />
-            今日炁象 · QI COMPASS
+            今日炁象
           </div>
           <div className="flex items-center gap-2">
             <span className="scribal text-base text-cinnabar">{realm.title}</span>
@@ -215,10 +215,6 @@ export function OverviewPage() {
           </div>
         </div>
         <FourSymbolsCompass qiDims={qiDims} gradeTitle={realm.title} />
-        {/* 方位口诀：桌面用一句话收束罗盘；窄屏四象牌已带方位名，重复说明藏掉 */}
-        <p className="mt-2 hidden text-center text-xs text-ink-faint md:block">
-          东·行 · 南·专 · 西·学 · 北·创 —— 五行流转，今日炁象
-        </p>
       </section>
 
       {/* 今日案台 · **一个「今日」**
@@ -304,7 +300,6 @@ export function OverviewPage() {
             <EmptyState
               icon={CheckCircle2}
               title="今天没有课，也没有待办"
-              desc="课表里今天没课；待办也清空了 —— 可从容布局"
               step="去「行」添加今天的重点"
               action={
                 <Button size="sm" variant="secondary" onClick={() => setSection('action')}>
@@ -316,14 +311,13 @@ export function OverviewPage() {
         </Section>
       </div>
 
-      {/* 本周回顾（数据看板） */}
+      {/* 回望：本周数据与今日轨迹都是「回头看」，不是现在要做什么 ——
+          收进折叠，首屏只留行动信息。展开后两块各自保留原来的标题与内容 */}
       <div className="mt-2">
-        <WeekReview />
-      </div>
-
-      {/* 今日轨迹 */}
-      <div className="mt-2">
-        <TodayTraceSection track={track} onOpenAll={() => setAllTraceOpen(true)} />
+        <Collapse title="回望" hint="本周 · 轨迹">
+          <WeekReview />
+          <TodayTraceSection track={track} onOpenAll={() => setAllTraceOpen(true)} />
+        </Collapse>
       </div>
 
       <TaskEditor

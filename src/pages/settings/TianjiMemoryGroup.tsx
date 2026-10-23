@@ -1,5 +1,5 @@
 /**
- * 设置 · 天机记忆（Step 4-2 · C9/C10；2026-10-01 独立成「AI 记忆」段）
+ * 设置 · 天机记忆（2026-10-01 独立成「AI 记忆」段）
  *
  * ## 界面要回答的问题
  * 「**天机记住了什么**」——每条记忆可**查看 / 编辑 / 删除 / 停用**（规格 §C9）。
@@ -16,7 +16,7 @@
  */
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import { Button, Input, Section, Switch, useToast } from '../../components/ui'
+import { Button, Collapse, Input, Switch, useToast } from '../../components/ui'
 import { SettingsPanel, SettingsRow } from './SettingsRow'
 import { makeMemory, useMemoryStore } from '../../stores/useMemoryStore'
 import { nowISO } from '../../utils/id'
@@ -43,7 +43,7 @@ export function TianjiMemoryGroup() {
   const enabled = items.filter((m) => m.enabled).length
 
   return (
-    <Section title="AI 记忆" hint={items.length > 0 ? `${enabled}/${items.length} 条生效` : undefined}>
+    <Collapse title="AI 记忆" hint={items.length > 0 ? `${enabled}/${items.length} 条生效` : undefined}>
       <SettingsPanel>
         <SettingsRow label="新增">
           <Input
@@ -117,6 +117,6 @@ export function TianjiMemoryGroup() {
           )}
         </div>
       </SettingsPanel>
-    </Section>
+    </Collapse>
   )
 }

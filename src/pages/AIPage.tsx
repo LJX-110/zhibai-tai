@@ -211,7 +211,7 @@ export function AIPage() {
           <EmptyState
             icon={Box}
             title="工具箱还是空的"
-            desc="把你常用的模型、工具、提示词记在这里，用的时候一眼能找到。"
+            desc="模型、工具、提示词，登记后按类型归档。"
             action={
               <Button variant="primary" onClick={() => openNew()}>
                 <Plus size={13} /> 记一个

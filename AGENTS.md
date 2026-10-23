@@ -42,7 +42,7 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
 7. 组件与非组件分文件；单文件 ≤ **400 行**；注释写"为什么"；不携带 `P0-B`、`v0.x` 等内部版本代号。
 8. **改动前先备份原文件**（见下「备份约定」）；本项目的文档只有这一套：`../docs/`（3 份）·
    `../AGENTS.md`（非提交区）· `../MEMORY.md`，**不要再新建别的文档**，要加内容就加进现有那一份。
-9. **"一处修了、别处漏了"是最高频复发形态** → 能做成机器可查的就做成规则：`npm run check:rules` 现为 5 条 —— 单文件 ≤400 行 / `@layer` 内 CSS / 圆角字号魔法值 / **取课点必须走 `activeSlotsOfDay`** / 死导出。
+9. **"一处修了、别处漏了"是最高频复发形态** → 能做成机器可查的就做成规则：`npm run check:rules` 现为 7 条 —— 单文件 ≤400 行 / `@layer` 内 CSS / 圆角字号魔法值 / **取课点必须走 `activeSlotsOfDay`** / 死导出 / **界面文案禁助手腔且单条 ≤60 汉字** / **源码禁 `Step`·`P0`·`v0.x` 内部代号**。
    ⚠️ 规则 5 有漏报（同名局部定义会给死导出"续命"）→ 查死代码**必须排除 `__tests__`**；重复实现要人工扫。
 10. **要"跨设备一致"的必须是业务表**，不放设置项；时间统一走 `utils/id`（`nowISO`/`todayISO`/`formatHM`），
     需要"现在"用 `hooks/useNow`（默认 60s，秒级传 1000）；`new Date()` / `Date.now()` 都不进组件/hook 的渲染体。
@@ -56,7 +56,7 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
 
 ## 移动端优先
 
-1. 页内页签 ≤ **4 个**（超出的收进页内子视图，功能不删）；首屏必须能看到当前核心操作，低频项折叠。
+1. 页内页签 ≤ **4 个**（超出的收进页内子视图，功能不删）；**设置页固定 5 组是唯一例外**（桌宠单开一组，用户已拍板）；首屏必须能看到当前核心操作，低频项折叠。
 2. 横向滚动必须用 `components/ui/ScrollRow`（右缘 mask + 选中自动居中）；**禁裸 `overflow-x-auto`**。
 3. `Section.hint` / `EmptyState.step` 移动端自动隐藏；新增说明小字优先 `hidden md:inline`。
 4. 长列表必须增量渲染（情报流 40 条/页 + 「加载更多」）。
@@ -66,7 +66,7 @@ pages → components → stores(Zustand) → repositories(Dexie) → services
 
 ```bash
 npm run dev / typecheck / lint / test / build / preview
-npm run check:rules        # 规则 1–5（不参与 CI）
+npm run check:rules        # 规则 1–7（不参与 CI）
 python ../scripts/subset_fonts.py            # 书法字体子集化（改字符集后重跑；完整字体与 OFL 见 src/assets/fonts/）
 python ../scripts/subset_seal_font.py <源.ttf>   # 印章篆书子集化（改印文用字后重跑）
 python ../scripts/check_seal_glyphs.py       # 校验印文用字在篆书字体里有字形（漏 = 印章静默空白）

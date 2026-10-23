@@ -206,7 +206,7 @@ export default defineConfig({
         // 点击系统通知要能聚焦窗口并跳到对应板块：generateSW 产出的 SW
         // 本身不含业务逻辑，用 importScripts 注入 public/sw-notify.js；
         // 该文件也会被上面的 glob 匹配到，故排除出预缓存清单避免重复注入
-        // `pet/**` 显式排除：桌宠素材（106 个 animated WebP，保真档合计约 55MB）
+        // `pet/**` 显式排除：桌宠素材（106 个 animated WebP，合计约 62MB）
         // **绝不能进预缓存** —— 否则每次版本升级整包重拉，且未开桌宠的用户也白付流量。
         // 现在 globPatterns 里没有 webp，但这条是"防回归"：将来有人加了 webp 也不会误收。
         globIgnores: ['sw-notify.js', 'pet/**'],

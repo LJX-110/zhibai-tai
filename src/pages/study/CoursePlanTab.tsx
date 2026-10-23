@@ -229,7 +229,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
                 <ArrowUpDown size={13} /> {sortMode ? '完成' : '排序'}
               </Button>
               <Button size="sm" variant="tertiary" onClick={askAi} className="!px-2">
-                <Sparkles size={13} /> AI 建议
+                <Sparkles size={13} /> 问天机
               </Button>
               <Button size="sm" variant="primary" onClick={() => openNew('limited')}>
                 <Plus size={13} /> 加一门
@@ -245,7 +245,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
         {items.length === 0 ? (
           <EmptyState
             title="还没有课程"
-            desc="把正在选 / 想选的课记进来，选完标成「已选」，学分进度会自己走"
+            desc="记下想选的课，标成「已选」后计入学分进度"
             action={
               <Button variant="primary" onClick={() => openNew('limited')}>
                 <Plus size={14} /> 加一门
@@ -282,7 +282,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
             </ScrollRow>
             {sortMode && (
               <p className="mb-2 text-xs leading-relaxed text-ink-faint">
-                点 ↑↓ 在**方向内**调整顺序；跨方向的先后由方向本身决定。
+                点 ↑↓ 在方向内调整顺序；跨方向的先后由方向本身决定。
               </p>
             )}
             {list.length > 0 ? (

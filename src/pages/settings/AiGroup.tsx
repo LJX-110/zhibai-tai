@@ -50,7 +50,7 @@ const AI_PRESETS: { name: string; baseUrl: string; model: string; cors: 'ok' | '
 ]
 
 /**
- * AI 组 —— **按"用户要做的事"分条，不按内部模块分**（Step 5-3C 起，2026-10-01 定稿三段）
+ * AI 组 —— **按"用户要做的事"分条，不按内部模块分**（现在，2026-10-01 定稿三段）
  *
  * ⚠️ **不做成二级页签**：页签只是把"条目多"换个地方堆，用户仍要理解同样多的概念。
  */
@@ -158,7 +158,7 @@ export function AiGroup() {
 
   return (
     <>
-      <Section title="模型与连接" hint="OpenAI 兼容">
+      <Section title="模型与连接">
         <div className="max-w-xl">
           <SettingsPanel>
             <SettingsRow label="Provider">
@@ -255,8 +255,8 @@ export function AiGroup() {
             </SettingsRow>
             {!cryptoOk && (
               <p className="px-2.5 pb-2 text-xs leading-relaxed text-cinnabar">
-                当前环境不支持加密（需要 https 或 localhost），Key 无法安全保存。
-                请改用 https 访问，或把它装成应用后再配置。
+                当前环境不支持加密（需 https 或 localhost），Key 无法安全保存。
+                改用 https，或装成应用后再配置。
               </p>
             )}
 
@@ -298,20 +298,21 @@ export function AiGroup() {
               </Button>
             </SettingsRow>
 
-            {/* 状态行（2026-10-01 收口）：原先散在 Provider 行与「服务」行的两处提示合成一行。
-                2026-10-02 并入面板底部 —— 它是这一整段的结论，不再悬空在两行之间。
-                2026-10-07：去掉上边框横线（与其它设置页统一"无卡片、无横线"观感） */}
-            <div className="flex flex-wrap items-center gap-x-2 px-2.5 py-2 text-xs">
-              <span
-                className={cn(
-                  'h-1.5 w-1.5 shrink-0 rounded-full',
-                  blockedNotice ? 'bg-cinnabar' : settings.aiKey ? 'bg-teal' : 'bg-line-strong',
-                )}
-              />
-              <span className={cn('leading-relaxed', blockedNotice ? 'text-cinnabar' : 'text-ink-faint')}>
-                {blockedNotice ?? (settings.aiKey ? 'Key 已保存 · 点「测试连接」确认可用性' : '未配 Key · 天机走本地规则')}
-              </span>
-            </div>
+            {/* 状态行只在需要行动时出现：配好 Key 且能直连时，「已保存」已写在 Key 的
+                placeholder 里，再复述一遍就是噪音 */}
+            {(blockedNotice || !settings.aiKey) && (
+              <div className="flex flex-wrap items-center gap-x-2 px-2.5 py-2 text-xs">
+                <span
+                  className={cn(
+                    'h-1.5 w-1.5 shrink-0 rounded-full',
+                    blockedNotice ? 'bg-cinnabar' : 'bg-line-strong',
+                  )}
+                />
+                <span className={cn('leading-relaxed', blockedNotice ? 'text-cinnabar' : 'text-ink-faint')}>
+                  {blockedNotice ?? '未配 Key · 天机走本地规则'}
+                </span>
+              </div>
+            )}
           </SettingsPanel>
         </div>
       </Section>

@@ -113,7 +113,7 @@ export function IntelTidy() {
         ) : (
           <div className="space-y-2">
             <p className="text-xs text-ink-faint">
-              建议：分类 / 新增标签 / 重要度（本地规则为轻量建议，配置远程模型后可更智能）
+              分类 / 标签 / 重要度由本地规则生成；接入远程模型后更准
             </p>
             {rows.map((r) => (
               <div key={r.id} className="rounded-tile border border-line px-3 py-2">

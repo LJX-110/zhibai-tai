@@ -97,7 +97,7 @@ export function SyncGroup() {
       const enc = await encryptor.encrypt(passwordDraft.trim())
       settings.set({ syncPassword: enc, syncPasswordEnc: true })
       setPasswordDraft('')
-      toast('Sync Password 已加密保存（PBKDF2 推导数据密钥）', 'success')
+      toast('Sync Password 已加密保存', 'success')
     } catch (e) {
       toast(`保存失败：${e instanceof Error ? e.message : '未知错误'}`, 'danger')
     }
@@ -110,7 +110,7 @@ export function SyncGroup() {
       toast('Token 已清除 —— 重新填入后恢复同步', 'success')
     } else if (clearTarget === 'password') {
       settings.set({ syncPassword: undefined, syncPasswordEnc: false })
-      toast('同步口令已清除 —— 重新填入同一口令即可恢复', 'success')
+      toast('同步口令已清除，重新填入同一口令可恢复', 'success')
     }
     setClearTarget(null)
   }
@@ -131,7 +131,7 @@ export function SyncGroup() {
       {/* 首次同步三步引导（2026-10-01 收口）：改回**折叠**（用户："没必要展开的可以不展开"）——
           标题即说明，首屏不再被三步占满一屏；仓库配好后整块消失 */}
       {!settings.githubRepo?.trim() && (
-        <Collapse title="第一次同步？三步开启" hint="建仓库 · 拿 Token · 填回这里" className="!pb-0 mb-3">
+        <Collapse title="首次同步 · 三步" hint="建仓库 · 拿 Token · 填回这里" className="!pb-0 mb-3">
           <ol className="space-y-2.5 text-sm leading-relaxed text-ink-soft">
             <li className="flex gap-2">
               <span className="display flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-xs text-on-teal">1</span>
@@ -145,14 +145,14 @@ export function SyncGroup() {
               <span>
                 <b className="text-ink">生成 Token</b>：GitHub → Settings → Developer settings →
                 Personal access tokens → <b className="text-ink">Fine-grained</b> → 仓库权限勾选{' '}
-                <code className="rounded-control bg-nested px-1">Contents: Read and write</code>（只读即可时选 Contents: Read）→ Generate。
+                <code className="rounded-control bg-nested px-1">Contents: Read and write</code>（只读选 Contents: Read）→ Generate。
               </span>
             </li>
             <li className="flex gap-2">
               <span className="display flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal text-xs text-on-teal">3</span>
               <span>
                 <b className="text-ink">填回这里</b>：下方「仓库」填 <code className="rounded-control bg-nested px-1">你的用户名/仓库名</code>，
-                Token 粘贴后点「加密保存」，再设 ≥6 位同步口令，点右上「立即同步」即可。
+                Token 粘贴后点「加密保存」，再设 ≥6 位同步口令，点右上「立即同步」。
               </span>
             </li>
           </ol>
@@ -250,7 +250,7 @@ export function SyncGroup() {
             <>
               <span
                 className={cn('shrink-0 text-xs', legacyPassword ? 'text-cinnabar' : 'text-teal')}
-                title={legacyPassword ? '旧版本保存的明文凭据，建议重新粘贴后点「加密保存」' : undefined}
+                title={legacyPassword ? '旧版本明文凭据，重新粘贴保存即可升级' : undefined}
               >
                 {legacyPassword ? '已保存（旧明文）' : '已保存（加密）'}
               </span>
@@ -270,8 +270,8 @@ export function SyncGroup() {
         {!cryptoOk && (
           <p className="flex items-start gap-1.5 px-2.5 pb-2 text-xs leading-relaxed text-cinnabar">
             <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-cinnabar" />
-            当前环境不支持加密（需要 https 或 localhost）—— Token 与同步口令无法安全保存。
-            请改用 https 访问，或把它装成应用后再配置。
+            当前环境不支持加密（需 https 或 localhost），Token 与同步口令无法保存。
+            改用 https，或装成应用后再配置。
           </p>
         )}
         <p className="flex items-center gap-1.5 px-2.5 pb-2 text-xs text-cinnabar">
@@ -356,8 +356,8 @@ export function SyncGroup() {
       >
         <p className="text-sm leading-relaxed text-ink-soft">
           {clearTarget === 'password'
-            ? '清除后本机无法解密远端快照、也无法推送；其他设备不受影响。重新填入同一个口令即可恢复。'
-            : '清除后本机无法推送与拉取；其他设备不受影响。重新生成并填入 Token 即可恢复。'}
+            ? '清除后本机无法解密远端快照、也无法推送；其他设备不受影响。重新填入同一个口令可恢复。'
+            : '清除后本机无法推送与拉取；其他设备不受影响。重新生成并填入 Token 可恢复。'}
         </p>
       </Dialog>
     </Section>

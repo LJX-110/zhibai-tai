@@ -1,5 +1,5 @@
 /**
- * 天机 · **工具确认卡片**（Step 4-3 · 二/三）
+ * 天机 · **工具确认卡片**（二/三）
  *
  * ## 它与「动作预览卡片」的区别（两张卡长得像，语义不同）
  * | | 动作卡片（`action-cards.tsx`） | 工具确认卡片（本文件） |
@@ -50,7 +50,7 @@ export function ToolConfirmCard({
 
   return (
     <div className="rounded-tile border border-line bg-raised px-3 py-2.5">
-      <div className="mb-1.5 eyebrow text-ink-faint">需要你确认 · {toolName}</div>
+      <div className="mb-1.5 eyebrow text-ink-faint">待确认 · {toolName}</div>
       {/* 正文可能较长（一句话事实），用 break-words 而不是截断 */}
       <div className="break-words text-sm text-ink">{summary}</div>
       <div className="mt-2 flex gap-2">
