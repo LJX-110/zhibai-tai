@@ -8,7 +8,7 @@
  * 出现「手动抓取刷新了源状态、定时抓取却忘了刷新」这类不对称。
  */
 import type { IntelligenceItem, IntelligenceProviderId, IntelligenceSource } from '../../../types/entities'
-import { createId } from '../../../utils/id'
+import { createId, nowISO } from '../../../utils/id'
 import { db } from '../../../db/db'
 import { useSettingsStore } from '../../../stores/useSettingsStore'
 import { githubProvider } from './github'
@@ -51,7 +51,7 @@ export async function fetchFromSource(
 
 /** 首次启动的默认源 —— 按用户兴趣精选（**宁少勿杂**）。
  *
- *  Step 5-1 · C5 收口后的默认状态：**只有实测可靠的两个源默认启用**
+ * 收口后的默认状态：**只有实测可靠的两个源默认启用**
  *  （GitHub 热榜 · 少数派，二者都自带 CORS、无需代理）。其余一律默认停用：
  *   · 候选源（`CANDIDATE_SOURCE_NAMES`）—— 实测不可靠，见那里；
  *   · 需自建转发端点的源（B 站 / 量子位 / IT之家）—— 没配代理前拉取必失败。
@@ -96,7 +96,7 @@ const PROXY_NEEDED_RSS: { name: string; url: string; category: string }[] = [
 ]
 
 /**
- * **候选源**（Step 5-1 · C1）：实测不可靠、因此**默认停用**的源名。
+ * **候选源**：实测不可靠、因此**默认停用**的源名。
  *
  * 判据不是"我觉得它不好"，而是实测：`api.jikan.moe/v4/seasons/now`（含应用实际使用的
  * `?filter=tv&limit=12`）在 2026-09-29 连续 4 次返回 **504**（上游过载）。
@@ -230,6 +230,29 @@ export async function migrateBilibiliSources(
       enabled: hasProxy,
       lastError: undefined,
       updatedAt: new Date().toISOString(),
+    })
+    changed.push(s.id)
+  }
+  return changed
+}
+
+/**
+ * 迁移：停用存量「AI 生成情报」源。
+ *
+ * 该 Provider 已下线（见 `./ai`）：它当年在抓取失败时让模型编条目，
+ * 与「情报只来自真实来源」冲突。源不直接删除 —— 用户可能想把它改成 RSS / JSON，
+ * 但必须停用并写清原因，不能让一个"永远失败"的开关继续亮着。
+ *
+ * @returns 被改写的源 id
+ */
+export async function retireAiSources(sources: readonly IntelligenceSource[]): Promise<string[]> {
+  const changed: string[] = []
+  for (const s of sources) {
+    if ((s.provider as string) !== 'ai' || !s.enabled) continue
+    await db.intelligenceSources.update(s.id, {
+      enabled: false,
+      lastError: 'AI 生成情报已下线（情报必须来自真实来源）；请改用 RSS / JSON，或删除该源',
+      updatedAt: nowISO(),
     })
     changed.push(s.id)
   }

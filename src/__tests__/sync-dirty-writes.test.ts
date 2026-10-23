@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../db/db'
 import { currentSyncRevision, isDirty, markSynced } from '../sync/dirty'
 import { clearAllData, exportAllData, importAllData } from '../services/data-admin'
-import { clearReadIntelligence } from '../services/intelligence/retention'
+import { clearReadIntelligence, pruneIntelligence } from '../services/intelligence/retention'
 
 const DIRTY_KEY = 'zbt:sync-dirty:v1'
 
@@ -67,6 +67,32 @@ describe('写入出口置脏：清空 / 导入 / 清理已读', () => {
       updatedAt: '2026-10-20T00:00:00.000Z',
     })
     const { removed } = await clearReadIntelligence()
+
+    expect(removed).toBe(1)
+    expect(await db.tombstones.count()).toBeGreaterThan(0)
+    expect(isDirty()).toBe(true)
+  })
+
+  it('按上限裁剪：删除后置脏（否则上限内删掉的条目会被远端快照加回）', async () => {
+    await db.table('intelligenceItems').bulkPut([
+      {
+        id: 'old-read',
+        title: '旧且已读',
+        read: true,
+        favorite: false,
+        createdAt: '2026-10-01T00:00:00.000Z',
+        updatedAt: '2026-10-01T00:00:00.000Z',
+      },
+      {
+        id: 'new-unread',
+        title: '新且未读',
+        read: false,
+        favorite: false,
+        createdAt: '2026-10-02T00:00:00.000Z',
+        updatedAt: '2026-10-02T00:00:00.000Z',
+      },
+    ])
+    const { removed } = await pruneIntelligence(1)
 
     expect(removed).toBe(1)
     expect(await db.tombstones.count()).toBeGreaterThan(0)

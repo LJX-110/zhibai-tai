@@ -21,7 +21,7 @@ import { AutoFetchBar } from './AutoFetchBar'
 import { SourceFormDialog } from './SourceFormDialog'
 import { SourceRow } from './SourceRow'
 import { TestPreviewDialog, type PreviewState } from './TestPreviewDialog'
-import { EMPTY, type FormState } from './shared'
+import { EMPTY, NEEDS_URL, type FormState } from './shared'
 
 export { ProxyConfig } from './ProxyConfig'
 
@@ -63,8 +63,16 @@ export function SourceManager() {
 
   const save = async () => {
     if (!form.name.trim()) return
+    // 这类 Provider 没有地址就抓不到任何东西；当场说清，别等保存后每次抓取都失败
+    if (NEEDS_URL.includes(form.provider) && !form.url.trim()) {
+      toast('这个类型的来源必须填写抓取地址', 'danger')
+      return
+    }
     const now = nowISO()
-    await useSourceStore.getState().save({
+    // 换 Provider 等于换了一条抓取链路：旧的成败状态不再可信
+    // （典型：把已下线的 AI 源改成 RSS 后，卡片上还挂着「AI 已下线」）
+    const providerChanged = editing != null && editing.provider !== form.provider
+    const ok = await useSourceStore.getState().save({
       id: editing?.id ?? createId(),
       name: form.name.trim(),
       provider: form.provider,
@@ -74,18 +82,21 @@ export function SourceManager() {
       config: form.config.trim() || undefined,
       // 本机抓取状态原样带过：编辑名称/分类不应把「上次成功时间」「连续失败次数」清空
       lastFetchedAt: editing?.lastFetchedAt,
-      lastSuccessAt: editing?.lastSuccessAt,
-      lastError: editing?.lastError,
-      failCount: editing?.failCount,
+      lastSuccessAt: providerChanged ? undefined : editing?.lastSuccessAt,
+      lastError: providerChanged ? undefined : editing?.lastError,
+      failCount: providerChanged ? 0 : editing?.failCount,
       createdAt: editing?.createdAt ?? now,
       updatedAt: now,
     })
+    // store 失败时自己已弹过原因；这里不能再关弹窗、再报一次"已保存"
+    if (!ok) return
     setOpen(false)
     toast('情报源已保存', 'success')
   }
 
   const remove = async (s: IntelligenceSource) => {
-    await useSourceStore.getState().remove(s.id)
+    const ok = await useSourceStore.getState().remove(s.id)
+    if (!ok) return
     toast('已删除')
   }
   const toggleEnabled = async (s: IntelligenceSource) => {

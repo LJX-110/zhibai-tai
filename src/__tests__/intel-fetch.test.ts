@@ -25,6 +25,7 @@ let run: typeof import('../services/intelligence/run')
 let sourceStore: typeof import('../stores/useSourceStore')['useSourceStore']
 let providers: Record<string, IntelligenceProvider>
 let classifyFetchError: typeof import('../services/intelligence/errors')['classifyFetchError']
+let isRetryable: typeof import('../services/intelligence/errors')['isRetryable']
 
 beforeEach(async () => {
   vi.resetModules()
@@ -35,6 +36,7 @@ beforeEach(async () => {
   run = await import('../services/intelligence/run')
   providers = (await import('../services/intelligence/providers/registry')).PROVIDERS
   classifyFetchError = (await import('../services/intelligence/errors')).classifyFetchError
+  isRetryable = (await import('../services/intelligence/errors')).isRetryable
 })
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -115,6 +117,22 @@ describe('classifyFetchError', () => {
     expect(classifyFetchError(new Error('parse: 不是合法 JSON（试试 RSS/Web Provider）')).kind).toBe('parse')
   })
 
+  it('config: 前缀=来源配置问题，不可重试（别劝用户反复点重试）', () => {
+    const info = classifyFetchError(new Error('config: 该来源需要抓取地址（url）'))
+    expect(info.kind).toBe('config')
+    expect(info.message).toBe('该来源需要抓取地址（url）')
+    expect(isRetryable(info.kind)).toBe(false)
+  })
+
+  it('CSS 选择器写错也是配置问题（不是网络抖动）', () => {
+    const info = classifyFetchError(
+      new Error(`Failed to execute 'querySelectorAll' on 'Document': 'x[' is not a valid selector.`),
+    )
+    expect(info.kind).toBe('config')
+    expect(info.message).toContain('选择器')
+    expect(isRetryable(info.kind)).toBe(false)
+  })
+
   it('拿到状态码说明链路通、是目标自身报错：404 单独成类（该换地址）', () => {
     expect(classifyFetchError(new Error('目标返回 HTTP 404（直连 HTTP 404）')).kind).toBe('not_found')
     expect(classifyFetchError(new Error('404 Not Found')).kind).toBe('not_found')
@@ -134,7 +152,7 @@ describe('classifyFetchError', () => {
     expect(classifyFetchError(new Error('invalid api key')).kind).toBe('auth')
   })
 
-  // ── Step 5-1 · C3 回归：这一条以前是错的 ──
+  // ──  回归：这一条以前是错的 ──
   it('**HTML 错误页 / 非法 JSON → parse，不是 auth**（旧版被 `unexpected token` 里的 token 骗了）', () => {
     const jsonParse = new SyntaxError(`Unexpected token '<', "<!DOCTYPE "... is not valid JSON`)
     const info = classifyFetchError(jsonParse)
@@ -292,7 +310,7 @@ describe('refreshAll', () => {
     expect(calls).not.toHaveBeenCalled()
   })
 
-  it('**一个源 504 不会拖垮整轮**：其他源照常抓、失败单独记（Step 5-1 · C4）', async () => {
+  it('**一个源 504 不会拖垮整轮**：其他源照常抓、失败单独记', async () => {
     useProvider(async (source) => {
       if (source.name === '坏源') throw new Error('目标返回 HTTP 504（直连 HTTP 504）')
       return [itemOf({ id: `ok-${source.id}`, source: source.name })]
@@ -313,7 +331,7 @@ describe('refreshAll', () => {
     expect(badRow?.lastSuccessAt).toBeUndefined()
   })
 
-  it('**抓取失败不清空旧数据**（Step 5-1 · C7）：旧条目原样保留', async () => {
+  it('**抓取失败不清空旧数据**：旧条目原样保留', async () => {
     // 先成功抓一轮，库里有数据
     useProvider(async () => [itemOf({ id: 'keep-1', source: '反复源', url: 'https://example.com/1' })])
     const s = sourceOf('反复源')

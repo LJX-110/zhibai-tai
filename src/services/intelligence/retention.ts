@@ -8,8 +8,8 @@
  * 裁剪方式对齐 `services/activity.ts` 已验证过的模式：
  * 删除**必须写墓碑**，否则下次同步会被远端快照原样加回，上限形同虚设。
  *
- * 取舍：优先保留未读。用户主动收藏/未读的更可能还要看，
- * 而「已读且最旧」的那批留着只是占体积。
+ * 取舍：优先保留**收藏**，其次保留**未读** —— 用户主动收藏或还没看过的更可能还要看，
+ * 而「已读且未收藏、又最旧」的那批留着只是占体积。
  */
 import { db } from '../../db/db'
 import { markTombstones } from '../../repositories/repo'
@@ -28,15 +28,19 @@ export interface RetentionResult {
 
 /**
  * 按上限裁剪。
- * 排序规则：已读优先删、同组内更旧的优先删 —— 保证留下的是「未读 + 较新」。
+ * 删除优先级：已读未收藏 → 未读未收藏 → 已读收藏 → 未读收藏；
+ * 同组内更旧的先删 —— 收藏与未读被尽量留到最后。
  */
 export async function pruneIntelligence(limit: number): Promise<RetentionResult> {
   if (limit <= 0) return { removed: 0 }
   const all = await db.intelligenceItems.toArray()
   if (all.length <= limit) return { removed: 0 }
 
+  /** 越小越先删：收藏加 2、未读加 1，于是「已读未收藏」永远排在最前 */
+  const deleteRank = (x: IntelligenceItem) => (x.favorite ? 2 : 0) + (x.read ? 0 : 1)
   const ordered = [...all].sort((a, b) => {
-    if (a.read !== b.read) return a.read ? -1 : 1
+    const byRank = deleteRank(a) - deleteRank(b)
+    if (byRank !== 0) return byRank
     return (a.publishedAt ?? a.createdAt).localeCompare(b.publishedAt ?? b.createdAt)
   })
   const doomed = ordered.slice(0, all.length - limit).map((x) => x.id)
@@ -46,6 +50,9 @@ export async function pruneIntelligence(limit: number): Promise<RetentionResult>
     await markTombstones('intelligenceItems', doomed)
     await db.intelligenceItems.bulkDelete(doomed)
   })
+  // 裁剪同样是本地改动，必须置脏：否则墓碑要等下一次无关写入才传播，
+  // 上限内删掉的条目会被远端快照加回，「上限」形同虚设。
+  notifyDataChanged()
   return { removed: doomed.length }
 }
 
@@ -68,12 +75,14 @@ export async function saveFetchedItems(
 
 /**
  * 清理已读情报（用户显式操作）。
+ * **收藏项不动** —— 收藏是用户明确说"这个还要留着"的唯一信号，
+ * 清理已读却把它删掉等于绕过用户的意愿。
  * @param before 可选：只清理这个日期（yyyy-mm-dd）之前发布的
  */
 export async function clearReadIntelligence(before?: string): Promise<RetentionResult> {
   const all = await db.intelligenceItems.toArray()
   const doomed = all
-    .filter((x) => x.read)
+    .filter((x) => x.read && !x.favorite)
     .filter((x) => !before || (x.publishedAt ?? x.createdAt).slice(0, 10) < before)
     .map((x) => x.id)
   if (doomed.length === 0) return { removed: 0 }

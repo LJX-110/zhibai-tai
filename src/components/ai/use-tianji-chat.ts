@@ -1,23 +1,12 @@
 /**
- * 天机 · 会话编排（**组件之外的那一半**；Step 4-3 · 二/三/五）
+ * 天机 · 会话编排（**组件之外的那一半**）
  *
- * ## 为什么从面板里搬出来
- * Step 4-3 给面板加了确认门的两端（提案上屏 + 确认后续跑），`AiChatPanel.tsx`
- * 因此顶到 483 行 —— 超过单文件 400 行上限。而"会话怎么进行"（发问 / 续跑 /
- * 落库 / 换新）与"面板怎么画"本来就是两件事：前者是状态机，后者是布局。
+ * 面板只负责取状态并画出来；发问 / 续跑 / 落库 / 换新这四条流程在这里 ——
+ * 它们与渲染无关，而面板曾因两者混在一起顶到 483 行（单文件上限 400）。
  *
- * ## 它管什么
- *  · 会话状态：messages / input / busy / streamText / 待确认的动作与提案；
- *  · 会话动作：send / stop / newChat / confirmAction / skipAction /
- *    confirmProposal / cancelProposal / runCap。
- *
- * 面板只负责取这些状态、把它们画出来，并把滚动与快捷键留给自己。
- *
- * ## 两条纪律（沿用旧面板，不是新规矩）
- *  · **只在收齐后解析**：流式过程中的增量 JSON 不完整，动作与工具都必须等回答完整；
- *  · **中止 ≠ 出错**：用户点停止不该让桌宠黑脸（与 `services/ai/health.ts` 同一口径）。
+ * 两条纪律：流式增量**收齐后**才解析动作；**中止 ≠ 出错**（用户点停止不该让桌宠黑脸）。
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTodayStats } from '../../hooks/useTodayStats'
 import { createId } from '../../utils/id'
 import { playSound } from '../../services/sound'
@@ -26,13 +15,12 @@ import { resumeWithResult, type AgentResume } from '../../services/agent/loop'
 import { withStreamSink } from '../../services/ai/stream-sink'
 import { createStreamThrottle, type StreamThrottle } from './stream-throttle'
 import { useToastStore } from '../ui/toast-store'
-import { actionDefFor, actionSpecs, agentToolById } from './plugins'
+import { actionSpecs, agentToolById } from './plugins'
 import { loadHistory, saveHistory, type ChatMessage, type ChatTrace } from './chat-history'
 import { runTianjiAgent } from './agent-run'
 import { TIANJI_CAPABILITIES, runTianjiCapability, type TianjiCapabilityKey } from './tianji-capability'
 import { parseTianjiActions, type TianjiActionPayload } from './action-protocol'
-import { applyTianjiAction } from './action-runner'
-import { actionTitle } from './action-text'
+import { useTianjiActions } from './use-tianji-actions'
 import type { ToolConfirmState } from './tool-confirm'
 
 /** 面板渲染提案需要的最小形状（内部账不外泄） */
@@ -89,13 +77,26 @@ export function useTianjiChat(): TianjiChat {
   const [busy, setBusy] = useState(false)
   const [streamText, setStreamText] = useState('')
   const [pendingActions, setPendingActions] = useState<Record<number, TianjiActionPayload[]>>({})
-  const [resolved, setResolved] = useState<Record<string, 'done' | 'skip'>>({})
+  /** 动作提议的裁决状态（确认 / 忽略）与对应动作，独立成 hook */
+  const { resolved, resetResolved, confirmAction, skipAction } = useTianjiActions()
   /** 待裁决的工具提案：同时最多一个 —— 一次只让用户决定一件事 */
   const [proposal, setProposal] = useState<ProposalState | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  /**
+   * 会话代次。开新一轮 / 清空会话时 +1；上一轮的异步收尾据此静默退出。
+   * 没有它的话，「新对话」之后在途请求返回的正文、busy、proposal 会写进新会话。
+   */
+  const runIdRef = useRef(0)
+  const beginRun = () => ++runIdRef.current
+  const isCurrentRun = (id: number) => id === runIdRef.current
   /** 当前这一轮的流式节流器（一次运行一个；收尾时清掉挂起的刷新） */
   const flushRef = useRef<StreamThrottle | null>(null)
   const stats = useTodayStats()
+
+  // 会话一有变化就落本地存档（localStorage，刻意不进业务表 / 不同步）
+  useEffect(() => {
+    saveHistory(messages)
+  }, [messages])
 
   /** 追加一条天机回答（带本轮真实工具轨迹，供下一轮会话历史使用） */
   const appendAi = (content: string, trace: ChatTrace[] = []) => {
@@ -106,8 +107,8 @@ export function useTianjiChat(): TianjiChat {
   const withNote = (answer: string, note?: string) => [answer, note ? `（${note}）` : ''].filter(Boolean).join('\n\n')
 
   /**
-   * 开一次新的流式节流器（**每次运行一个**：自带装配器与定时器，互不串味）。
-   * 具体节流与装配在 `stream-throttle.ts` / `stream-assembly.ts`，这里只管接线。
+   * 开一次新的流式节流器（**每次运行一个**，避免两轮串味）；
+   * 具体节流与装配在 `stream-throttle.ts`，这里只管接线。
    */
   const throttled = () => {
     const s = createStreamThrottle(setStreamText, FLUSH_MS)
@@ -124,6 +125,7 @@ export function useTianjiChat(): TianjiChat {
   const send = async (text?: string) => {
     const q = (text ?? input).trim()
     if (!q || busy) return
+    const runId = beginRun()
     if (!text) setInput('')
     // 换了话题就等于放弃上一个待裁决的提案（不让它悬着）
     if (proposal?.state === 'pending') cancelProposal()
@@ -148,6 +150,8 @@ export function useTianjiChat(): TianjiChat {
           truncated = info.reason === 'length'
         },
       })
+      // 新对话已经把这一轮作废：正文、提案、状态都不许再写进新会话
+      if (!isCurrentRun(runId)) return
 
       // ① 停在「需要你确认」的工具上：出卡片、等裁决（**此刻什么都没写入**）
       if (result.reason === 'needs-confirmation' && result.proposal && result.resume) {
@@ -171,8 +175,7 @@ export function useTianjiChat(): TianjiChat {
       }
 
       const answer = withNote(result.answer, result.note)
-      // 回答收齐后再解析动作：流式过程中的增量 JSON 不完整、不可校验，绝不中途解析
-      // 规格表来自插件注册表 —— 协议本身不认识任何具体动作
+      // 回答收齐后再解析动作：流式增量里的 JSON 不完整；动作规格来自插件注册表
       const proposed = parseTianjiActions(answer, actionSpecs())
       if (proposed.length > 0) {
         const aiIndex = messages.length + 1
@@ -189,19 +192,22 @@ export function useTianjiChat(): TianjiChat {
         ? `${answer}\n\n（回答超出长度上限被截断，可让我"接着说"）`
         : answer || '天机这次没有给出内容 —— 可以换个说法再问一次。'
       appendAi(content, result.trace)
-      // 回答到货提示一声：长回答要等十几秒，人往往已经切去别的板块，
-      // 没有声音就只能一直盯着 —— 这是 tap 族"轻通知"的标准场景
+      // 回答到货提示一声：长回答要等十几秒，人往往已切去别的板块
       playSound('notification')
     } catch {
+      if (!isCurrentRun(runId)) return
       appendAi(ctrl.signal.aborted ? '（已中止）' : '天机暂时没有回应，请稍后再试。')
       // 中止是用户动作（不是故障）；真失败才进 error —— 桌宠据此黑脸，而不是冲用户
       if (ctrl.signal.aborted) endAgentRun()
       else finishAgentRun('error', { errorMessage: '天机暂时没有回应' })
     } finally {
-      clearFlush()
-      abortRef.current = null
-      setStreamText('')
-      setBusy(false)
+      // 旧一轮的收尾不能碰新一轮的状态（节流器、abortRef、busy 都已归新一轮）
+      if (isCurrentRun(runId)) {
+        clearFlush()
+        abortRef.current = null
+        setStreamText('')
+        setBusy(false)
+      }
     }
   }
 
@@ -235,6 +241,7 @@ export function useTianjiChat(): TianjiChat {
   const confirmProposal = async () => {
     const p = proposal
     if (!p || p.state !== 'pending' || busy) return
+    const runId = beginRun()
     setBusy(true)
     const tool = agentToolById(p.toolId)
     let ok = false
@@ -250,6 +257,8 @@ export function useTianjiChat(): TianjiChat {
         text = `执行失败：${e instanceof Error ? e.message : String(e)}`
       }
     }
+    // 执行期间用户开了新对话：写入已经发生，但回执不该出现在清空后的会话里
+    if (!isCurrentRun(runId)) return
     setProposal({ ...p, state: ok ? 'done' : 'cancelled' })
     appendAi('', [{ toolId: p.toolId, toolName: p.toolName, ok, summary: text }])
     if (!ok) {
@@ -275,6 +284,7 @@ export function useTianjiChat(): TianjiChat {
         signal: ctrl.signal,
         onToken: stream.push,
       })
+      if (!isCurrentRun(runId)) return
       const content = withNote(r2.answer, r2.note)
       if (content) {
         appendAi(content, [{ toolId: p.toolId, toolName: p.toolName, ok: true, summary: text }, ...r2.trace])
@@ -285,61 +295,49 @@ export function useTianjiChat(): TianjiChat {
         finishAgentRun('success', { currentTask: '完成' })
       }
     } catch (e) {
+      if (!isCurrentRun(runId)) return
       // 写入已经成功，只是"收尾那句话"没说出来 —— 如实区分，别让用户以为白记了
       finishAgentRun('error', {
         errorMessage: ctrl.signal.aborted ? '已中止（写入本身已完成）' : e instanceof Error ? e.message : String(e),
       })
     } finally {
-      clearFlush()
-      abortRef.current = null
-      setStreamText('')
-      setBusy(false)
+      if (isCurrentRun(runId)) {
+        clearFlush()
+        abortRef.current = null
+        setStreamText('')
+        setBusy(false)
+      }
     }
   }
 
-  /** 新对话：清空当前会话（连同本地存档），回到看板 */
+  /** 新对话：中止在途请求、清空当前会话（连同本地存档），回到看板 */
   const newChat = () => {
+    // 先作废在途请求：abort 只让请求停下，代次才让它**不再写入**新会话
+    abortRef.current?.abort()
+    abortRef.current = null
+    runIdRef.current++
+    clearFlush()
     saveHistory([])
     setMessages([])
     setInput('')
     setPendingActions({})
-    setResolved({})
+    resetResolved()
     setProposal(null)
+    setStreamText('')
+    setBusy(false)
     // 会话清空 = 这轮结束了：桌宠回 idle（否则会一直停在"等你确认"）
-    endAgentRun()
-  }
-
-  /** 用户点「确认」才真正落库；成功后置为 done 显示已加入，失败则由 store 内部已提示错误 */
-  const confirmAction = async (i: number, j: number, a: TianjiActionPayload) => {
-    const ok = await applyTianjiAction(a)
-    setResolved((r) => ({ ...r, [`${i}-${j}`]: ok ? 'done' : 'skip' }))
-    // 确认这一下就是 Agent 的"等待"结束：落库成功 → 收工；失败 → 进 error（桌宠黑脸）
-    if (ok) finishAgentRun('success', { currentTask: '已落库' })
-    else finishAgentRun('error', { errorMessage: '落库失败' })
-    if (ok) {
-      // 中文名取自归属插件（**不在这里硬编码具体动作名** —— 那正是 P2 开放化要消除的）
-      const label = actionDefFor(a.action)?.label ?? a.action
-      useToastStore.getState().push(`已加入${label}：${actionTitle(a)}`, 'success')
-    }
-  }
-
-  /** 用户点「忽略」：丢弃该提议，不写入任何数据 */
-  const skipAction = (i: number, j: number) => {
-    setResolved((r) => ({ ...r, [`${i}-${j}`]: 'skip' }))
-    // 忽略 ≠ 出错，也不是成功：直接回到待命（桌宠不再等）
     endAgentRun()
   }
 
   /**
    * 快捷能力：以「能力名 + 结果」的对话形式入流。
-   *
-   * 与自由问答共用同一条流式通道（withStreamSink + 同一个装配器 + 同一个预览区），
-   * 所以能力卡片现在也是边生成边显示 —— 这是此前"点了等一次性出"的四张卡片。
+   * 与自由问答共用同一条流式通道，所以能力卡片也是边生成边显示。
    */
   const runCap = async (key: TianjiCapabilityKey) => {
     if (busy) return
     const cap = TIANJI_CAPABILITIES.find((c) => c.key === key)
     if (!cap) return
+    const runId = beginRun()
     setMessages((m) => [...m, { id: createId(), role: 'user', content: `${cap.label}（天机一键运行）` }])
     setBusy(true)
     setStreamText('')
@@ -351,18 +349,22 @@ export function useTianjiChat(): TianjiChat {
       const { title, body } = await withStreamSink({ onDelta: stream.push, signal: ctrl.signal }, () =>
         runTianjiCapability(key, stats),
       )
+      if (!isCurrentRun(runId)) return
       appendAi(`【${title}】\n\n${body}`)
       finishAgentRun('success', { currentTask: '完成' })
       playSound('notification')
     } catch {
+      if (!isCurrentRun(runId)) return
       appendAi(ctrl.signal.aborted ? '（已中止）' : `${cap.label} 生成失败，请检查远程 AI 配置后重试。`)
       if (ctrl.signal.aborted) endAgentRun()
       else finishAgentRun('error', { errorMessage: `${cap.label} 生成失败` })
     } finally {
-      clearFlush()
-      abortRef.current = null
-      setStreamText('')
-      setBusy(false)
+      if (isCurrentRun(runId)) {
+        clearFlush()
+        abortRef.current = null
+        setStreamText('')
+        setBusy(false)
+      }
     }
   }
 

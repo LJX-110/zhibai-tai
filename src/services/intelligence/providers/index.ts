@@ -15,15 +15,27 @@ export interface IntelligenceProvider {
 
 /**
  * 解析源的自定义配置（`source.config` 存 JSON 字符串）。
- * 配置写坏时回落到空对象，不因一条源的配置错误拖垮整次抓取。
+ * 没写 → 空对象；**写了但不是合法 JSON → 报 config 错**。
+ * 静默回落会让来源带着默认参数空跑，用户只看到「成功但 0 条」，问题被藏起来。
  */
 export function cfgOf<T = Record<string, unknown>>(source: IntelligenceSource): T {
   if (!source.config) return {} as T
   try {
     return JSON.parse(source.config) as T
   } catch {
-    return {} as T
+    throw new Error('config: 源配置不是合法 JSON（检查 config 字段）')
   }
+}
+
+/**
+ * 上游日期 → ISO 字符串；解析不了返回 undefined。
+ * RSS 的 pubDate、JSON 的 date 都不保证合法（"昨天"、空时区、"Q4 2024"…），
+ * 直接 `toISOString()` 会抛 RangeError —— **一条坏数据就会让整个源失败**。
+ */
+export function toIsoDate(raw: unknown): string | undefined {
+  if (raw == null || raw === '') return undefined
+  const d = new Date(raw as string | number)
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
 }
 
 /** 情报分类（供筛选） */

@@ -10,7 +10,7 @@ export const customProvider: IntelligenceProvider = {
   id: 'custom',
   name: '自定义',
   fetch: async (source, signal) => {
-    if (!source.url) return []
+    if (!source.url) throw new Error('config: 该来源需要抓取地址（url）')
     const text = await fetchViaProxy(source.url, signal)
     const entries = parseFeed(text)
     if (entries.length > 0) {

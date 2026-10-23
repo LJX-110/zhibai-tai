@@ -29,17 +29,25 @@ export interface ProxyCandidate {
  *  · `<base>/?url=…`      —— Cloudflare Worker 原始形态、Netlify 根路径重定向
  *  · `<base>/proxy?url=…` —— Netlify / Cloudflare Pages Functions 的显式路径
  * 先试根路径（覆盖多数情况），失败再试 /proxy，避免让用户去记该填哪种。
+ *
+ * 用户完全可能照着界面/README 直接填 `<站点>/proxy`。此时它已经是完整端点，
+ * **不能再往后拼 `/proxy`** —— 此前会生成 `/proxy/proxy?url=…` 的 404 候选，
+ * 白白多等 8 秒，还会把失败原因报成"自建代理不可达"。
  */
 function proxyCandidates(selfProxyUrl?: string): ProxyCandidate[] {
   const base = selfProxyUrl?.trim().replace(/\/+$/, '')
   if (!base) {
     return [{ label: '直连', build: (t) => t, timeoutMs: DIRECT_TIMEOUT_MS, self: false }]
   }
-  const candidates: ProxyCandidate[] = [
+  if (/\/proxy$/i.test(base)) {
+    return [
+      { label: '自建代理', build: (t) => `${base}?url=${encodeURIComponent(t)}`, timeoutMs: SELF_TIMEOUT_MS, self: true },
+    ]
+  }
+  return [
     { label: '自建代理', build: (t) => `${base}/?url=${encodeURIComponent(t)}`, timeoutMs: SELF_TIMEOUT_MS, self: true },
     { label: '自建代理 /proxy', build: (t) => `${base}/proxy?url=${encodeURIComponent(t)}`, timeoutMs: SELF_TIMEOUT_MS, self: true },
   ]
-  return candidates
 }
 
 /** 未配置代理时的统一提示：要能直接照着做 */
@@ -47,7 +55,7 @@ export const NEEDS_PROXY_MESSAGE =
   '跨域抓取需要自建代理（公共代理在国内已全部不可用）。部署见仓库 proxy/README.md（从零步骤），约 5 分钟'
 
 /**
- * 校验并规整用户填的代理地址（Step 5-1 · B3）。
+ * 校验并规整用户填的代理地址。
  *
  * 返回规范化后的**基址**（去掉结尾 `/`），非法返回 `null`。
  *
@@ -75,22 +83,6 @@ export function normalizeProxyUrl(raw: string): string | null {
   return `${u.origin}${u.pathname.replace(/\/+$/, '')}`
 }
 
-/** 目标自带 CORS 头时无需代理 —— 命中这些主机就直接连，省一次转发 */
-const DIRECT_HOSTS = [
-  'api.github.com',
-  'api.jikan.moe',
-  'sspai.com',
-  'www.sspai.com',
-]
-
-function isDirectFriendly(target: string): boolean {
-  try {
-    return DIRECT_HOSTS.includes(new URL(target).hostname)
-  } catch {
-    return false
-  }
-}
-
 function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(ms)
   return outer ? AbortSignal.any([outer, timeout]) : timeout
@@ -99,7 +91,8 @@ function timeoutSignal(ms: number, outer?: AbortSignal): AbortSignal {
 /**
  * 按候选链逐个尝试：命中首个 ok 响应即返回；非 ok 继续下一个候选，
  * 全部失败抛出**可读**错误（区分「没配代理」与「配了但连不上」）。
- * 目标自带 CORS 时直连优先，其余走自建代理（先根路径后 /proxy）。
+ * 配了自建代理就**全程走代理**：国内直连 api.github.com 等常被阻断，
+ * 先试直连只会白等一个超时；代理对本来就放 CORS 的主机也只是一次纯转发。
  * 不做公共代理兜底：直连不行就快速失败，明确提示去配自建代理。
  */
 async function runThroughChain(
@@ -108,11 +101,7 @@ async function runThroughChain(
   init: RequestInit,
   outerSignal?: AbortSignal,
 ): Promise<Response> {
-  const configured = proxyCandidates(selfProxyUrl)
-  // 目标自带 CORS 时直连优先，避免绕一圈
-  const chain = isDirectFriendly(url)
-    ? configured.filter((c) => !c.self).concat(configured.filter((c) => c.self))
-    : configured
+  const chain = proxyCandidates(selfProxyUrl)
 
   const problems: string[] = []
   /** 最近一次「拿到了响应但状态码不是 2xx」的候选 —— 用于区分「链路不通」与「目标本身报错」 */

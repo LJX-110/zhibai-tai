@@ -15,7 +15,7 @@ export const PROVIDER_LABEL: Record<IntelligenceProviderId, string> = {
   rawg: 'RAWG',
   jikan: 'Jikan',
   bilibili: 'B 站',
-  ai: 'AI',
+  ai: 'AI（已下线）',
 }
 
 export const PROVIDER_ORDER: IntelligenceProviderId[] = [

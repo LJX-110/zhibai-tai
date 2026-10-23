@@ -38,6 +38,9 @@ export function SourceFormDialog({
         <Input autoFocus placeholder="名称" value={form.name} onChange={(e) => onForm({ ...form, name: e.target.value })} />
         <div className="grid grid-cols-2 gap-3">
           <Select value={form.provider} onChange={(e) => onForm({ ...form, provider: e.target.value as IntelligenceProviderId })}>
+            {/* 存量 AI 源已下线但仍可能被编辑：把当前值显式列出来，
+                否则 select 会显示第一个选项（bilibili），与真实 provider 不符 */}
+            {form.provider === 'ai' && <option value="ai">{PROVIDER_LABEL.ai}</option>}
             {PROVIDER_ORDER.map((p) => (
               <option key={p} value={p}>{PROVIDER_LABEL[p]}</option>
             ))}
@@ -61,8 +64,13 @@ export function SourceFormDialog({
             className="font-mono !text-xs"
           />
         )}
+        {form.provider === 'ai' && (
+          <p className="text-xs leading-relaxed text-cinnabar">
+            该类型已下线：改为 RSS / JSON 并填抓取地址，或删除此源。
+          </p>
+        )}
         <p className="text-xs text-ink-faint">
-          Steam/Jikan 无需 Key（Steam 需 App ID）；RAWG 需在配置填 key（绝不写源码）。GitHub 用公共搜索 API；B 站须先配置上方「自建代理」。
+          Steam 需 App ID · RAWG 需在配置填 key · GitHub 用公共搜索 · B 站需先配代理
         </p>
       </div>
     </Dialog>

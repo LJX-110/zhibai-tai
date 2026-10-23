@@ -93,6 +93,23 @@ describe('pruneIntelligence', () => {
     expect(alive).toEqual(['unread-new', 'unread-old'])
   })
 
+  it('收藏优先保留：先删已读未收藏，再删未读未收藏', async () => {
+    await db.intelligenceItems.bulkPut([
+      itemOf({ id: 'read', read: true, favorite: false, publishedAt: '2026-08-01T00:00:00.000Z' }),
+      itemOf({ id: 'unread', read: false, favorite: false, publishedAt: '2026-08-02T00:00:00.000Z' }),
+      itemOf({ id: 'read-fav', read: true, favorite: true, publishedAt: '2026-08-03T00:00:00.000Z' }),
+      itemOf({ id: 'unread-fav', read: false, favorite: true, publishedAt: '2026-08-04T00:00:00.000Z' }),
+    ])
+
+    const { removed } = await pruneIntelligence(2)
+
+    expect(removed).toBe(2)
+    expect((await db.intelligenceItems.toArray()).map((x) => x.id).sort()).toEqual([
+      'read-fav',
+      'unread-fav',
+    ])
+  })
+
   it('同为已读时先删更旧的', async () => {
     await db.intelligenceItems.bulkPut([
       itemOf({ id: 'a', read: true, publishedAt: '2026-08-01T00:00:00.000Z' }),
@@ -119,6 +136,18 @@ describe('clearReadIntelligence', () => {
     expect(removed).toBe(2)
     expect((await db.intelligenceItems.toArray()).map((x) => x.id)).toEqual(['u1'])
     expect(await db.tombstones.count()).toBe(2)
+  })
+
+  it('已读但收藏的不清（收藏是用户要求保留的信号）', async () => {
+    await db.intelligenceItems.bulkPut([
+      itemOf({ id: 'fav', read: true, favorite: true }),
+      itemOf({ id: 'plain', read: true, favorite: false }),
+    ])
+
+    const { removed } = await clearReadIntelligence()
+
+    expect(removed).toBe(1)
+    expect((await db.intelligenceItems.toArray()).map((x) => x.id)).toEqual(['fav'])
   })
 
   it('可按日期下界过滤（只清这个日期之前发布的）', async () => {

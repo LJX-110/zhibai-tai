@@ -12,7 +12,7 @@
  * 两者分开是因为 UI 需要按 kind 决定入口（如 config 类要给「去配代理」按钮），
  * 按 message 做字符串匹配太脆弱。
  *
- * ## Step 5-1 · C3：修掉一处真实的误判（顺序问题）
+ * ## 修掉一处真实的误判（顺序问题）
  * 上一版 `auth` 分支的判据里有 `m.includes('token')`，而它**排在 `parse` 之前**；
  * `JSON.parse` 对 HTML 错误页抛出的正是 `Unexpected token '<'…` ——
  * 那句里含 `token`，于是被归成 **「认证失败：该源需要 API Key」**，
@@ -45,7 +45,7 @@ export interface FetchErrorInfo {
 
 /** 界面上给 kind 一个短标签；比裸的英文枚举可读，又不占宽度 */
 export const KIND_LABEL: Record<FetchErrorKind, string> = {
-  config: '需配代理',
+  config: '配置问题',
   cors: '跨域被拦',
   blocked: '被反爬拦截',
   auth: '需认证',
@@ -80,10 +80,11 @@ export function isRetryable(kind: FetchErrorKind): boolean {
   return RETRYABLE.has(kind)
 }
 
-/** Provider 内部约定：错误消息以 `empty:` / `parse:` 开头即可被准确归类，无需额外通道 */
+/** Provider 内部约定：错误消息以 `empty:` / `parse:` / `config:` 开头即可被准确归类，无需额外通道 */
 function prefixOf(msg: string): FetchErrorKind | null {
   if (msg.startsWith('empty:')) return 'empty'
   if (msg.startsWith('parse:')) return 'parse'
+  if (msg.startsWith('config:')) return 'config'
   return null
 }
 
@@ -140,6 +141,15 @@ export function classifyFetchError(e: unknown): FetchErrorInfo {
   }
   if (byPrefix === 'parse') {
     return { kind: 'parse', message: '返回内容与所选 Provider 不匹配：确认源地址类型（RSS / JSON / HTML）与字段映射' }
+  }
+  if (byPrefix === 'config') {
+    // 来源自身缺配置（未填地址 / 能力已下线）：**不可重试**，消息就是给用户看的改法
+    return { kind: 'config', message: msg.replace(/^config:\s*/, '') }
+  }
+
+  // 选择器写错是配置问题，重试不会变好；浏览器原文里看不出该改哪一项
+  if (m.includes('not a valid selector') || m.includes('选择器无效')) {
+    return { kind: 'config', message: '来源配置里的 CSS 选择器无效：检查 itemSel / titleSel 等字段' }
   }
 
   // ② **明确的"被拒绝"状态码优先于结构证据**。

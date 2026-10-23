@@ -5,7 +5,7 @@
 import { createId } from '../../../utils/id'
 import { useSettingsStore } from '../../../stores/useSettingsStore'
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
-import type { IntelligenceProvider } from './index'
+import { toIsoDate, type IntelligenceProvider } from './index'
 import { proxyFetch } from './proxy'
 
 /**
@@ -46,7 +46,7 @@ export function rssEntriesToItems(
     tags: [source.category],
     url: e.link,
     summary: e.description,
-    publishedAt: e.pubDate ? new Date(e.pubDate).toISOString() : undefined,
+    publishedAt: toIsoDate(e.pubDate),
     read: false,
     favorite: false,
     createdAt: now,
@@ -60,7 +60,7 @@ export const rssProvider: IntelligenceProvider = {
   id: 'rss',
   name: 'RSS',
   fetch: async (source, signal) => {
-    if (!source.url) return []
+    if (!source.url) throw new Error('config: 该来源需要抓取地址（url）')
     const xml = await fetchViaProxy(source.url, signal)
     const entries = parseFeed(xml)
     // 解析出 0 条不能算「成功但没有更新」：站点被 CDN 换成验证页、地址失效后

@@ -13,7 +13,7 @@ import { useBootStore } from './boot-store'
 import { useSyncStore } from '../stores/useSyncStore'
 import { useConflictStore } from '../stores/useConflictStore'
 import { useSourceStore } from '../stores/useSourceStore'
-import { defaultSources, duplicateSourceIds, migrateBilibiliSources, retireUnreliableDefaults, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
+import { defaultSources, duplicateSourceIds, migrateBilibiliSources, retireAiSources, retireUnreliableDefaults, reviveDisabledDefaults } from '../services/intelligence/providers/registry'
 import { resolveAIProvider } from '../services/ai/ai-service'
 import { initIntelAutoFetch } from '../services/intelligence/auto'
 import { useAIResourceStore } from '../stores/useAIStore'
@@ -95,7 +95,7 @@ async function tidyFixedTasks(): Promise<void> {
 const MIN_BOOT_MS = 900
 
 /** 情报源：修复历史重复（按 name 去重）+ 幂等播种默认源 + 补启用历史停用的默认源
- *  + 降级实测不可靠的候选源（Step 5-1 · C1） */
+ * + 降级实测不可靠的候选源 */
 async function seedSources(): Promise<void> {
   if (sourcesSeeded) return
   sourcesSeeded = true
@@ -124,6 +124,9 @@ async function seedSources(): Promise<void> {
   // B 站源改写：老的 rsshub.app 地址国内必然拉不到，就地换成本地签名 provider
   const migrated = await migrateBilibiliSources(useSourceStore.getState().items)
   if (migrated.length > 0) await useSourceStore.getState().load()
+  // AI 生成情报已下线：存量源停用并写明原因（不删除用户配置）
+  const retiredAi = await retireAiSources(useSourceStore.getState().items)
+  if (retiredAi.length > 0) await useSourceStore.getState().load()
 }
 
 export function Bootstrap() {

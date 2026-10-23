@@ -1,5 +1,5 @@
 /**
- * 情报默认源与「不得伪造情报」（Step 5-1 · C1 / C2 / C5）
+ * 情报默认源与「不得伪造情报」
  *
  * 三件事必须被钉住，因为它们都是**开箱体验与数据可信度**级别的约定：
  *  1. `日漫新番`（jikan）**不得默认启用** —— 实测该端点连续 504，
@@ -110,6 +110,25 @@ describe('存量降级：retireUnreliableDefaults（C1）', () => {
     await db.intelligenceSources.put(s)
     const changed = await registry.retireUnreliableDefaults(await db.intelligenceSources.toArray())
     expect(changed).toEqual([])
+  })
+})
+
+describe('AI 生成情报已下线（红线：情报只来自真实来源）', () => {
+  it('存量 AI 源在启动迁移里被停用，并写明原因', async () => {
+    const s = sourceOf('AI 情报', { provider: 'ai' })
+    await db.intelligenceSources.put(s)
+
+    const changed = await registry.retireAiSources(await db.intelligenceSources.toArray())
+
+    expect(changed).toEqual([s.id])
+    const row = await db.intelligenceSources.get(s.id)
+    expect(row?.enabled).toBe(false)
+    expect(row?.lastError).toContain('已下线')
+  })
+
+  it('即使被重新启用，抓取也只报错 —— 绝不生成条目', async () => {
+    const s = sourceOf('AI 情报', { provider: 'ai' })
+    await expect(registry.fetchFromSource(s)).rejects.toThrow(/已下线/)
   })
 })
 

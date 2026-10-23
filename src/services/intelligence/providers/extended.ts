@@ -9,7 +9,7 @@
 import { createId } from '../../../utils/id'
 import type { IntelligenceItem, IntelligenceSource } from '../../../types/entities'
 import { fetchViaProxy } from './rss'
-import { cfgOf, type IntelligenceProvider } from './index'
+import { cfgOf, toIsoDate, type IntelligenceProvider } from './index'
 
 /**
  * 上游被风控或路由写错时会返回 HTML 错误页，
@@ -60,7 +60,7 @@ export const steamProvider: IntelligenceProvider = {
       title: n.title,
       url: n.url,
       summary: n.contents?.slice(0, 200),
-      publishedAt: new Date(n.date * 1000).toISOString(),
+      publishedAt: toIsoDate(n.date > 0 ? n.date * 1000 : undefined),
       tags: ['Steam', `App${appid}`],
     }))
   },
@@ -75,7 +75,7 @@ export const rawgProvider: IntelligenceProvider = {
     const key = String(cfg.key ?? '')
     // 缺 key 时报错而不是安静返回空：源卡片上要能直接看出是「少配了 key」，
     // 否则用户看到的是「抓取成功但 0 条」，会去怀疑网络
-    if (!key) throw new Error('缺少 RAWG key：请在源配置里填 {"key":"你的 key"}')
+    if (!key) throw new Error('config: 缺少 RAWG key：请在源配置里填 {"key":"你的 key"}')
     const date = new Date()
     const from = new Date(date.getFullYear(), date.getMonth() - 1, 1)
       .toISOString()
@@ -101,7 +101,7 @@ export const rawgProvider: IntelligenceProvider = {
       url: `https://rawg.io/games/${g.slug}`,
       image: g.background_image,
       summary: `发行：${g.released ?? '未知'} · 平台：${(g.platforms ?? []).map((p) => p.platform.name).slice(0, 4).join('/')}`,
-      publishedAt: g.released ? new Date(g.released).toISOString() : undefined,
+      publishedAt: toIsoDate(g.released),
       tags: [...(g.genres ?? []).map((x) => x.name)],
     }))
   },
@@ -118,7 +118,7 @@ export const jikanProvider: IntelligenceProvider = {
     let url: string
     if (mode === 'search') {
       const q = String(cfg.q ?? '')
-      if (!q.trim()) throw new Error('缺少搜索关键词：请在源配置里填 {"mode":"search","q":"关键词"}')
+      if (!q.trim()) throw new Error('config: 缺少搜索关键词：请在源配置里填 {"mode":"search","q":"关键词"}')
       url = `https://api.jikan.moe/v4/${type}?q=${encodeURIComponent(q)}&limit=12&order_by=score&sort=desc`
     } else if (mode === 'top') {
       url = `https://api.jikan.moe/v4/top/${type}?limit=12`
@@ -149,7 +149,7 @@ export const jikanProvider: IntelligenceProvider = {
       url: d.url,
       image: d.images?.jpg?.large_image_url,
       summary: d.synopsis?.slice(0, 180),
-      publishedAt: d.aired?.from ?? undefined,
+      publishedAt: toIsoDate(d.aired?.from),
       tags: [...(d.genres ?? []).map((g) => g.name)],
       ...(d.status ? { aiSummary: `状态：${d.status}` } : {}),
       ...(d.score != null ? { author: `评分 ${d.score}` } : {}),

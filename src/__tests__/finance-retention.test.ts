@@ -93,10 +93,10 @@ describe('清理已读 clearReadIntelligence', () => {
     await useIntelligenceStore.getState().add(mk('c_fav', true, true))
 
     const { removed } = await clearReadIntelligence()
-    expect(removed).toBe(2) // 已读的两条（含收藏的那条也读过了）
+    expect(removed).toBe(1) // 只删「已读且未收藏」；收藏过的不动
 
-    const left = (await db.intelligenceItems.toArray()).map((x) => x.id)
-    expect(left).toEqual(['c_unread'])
+    const left = (await db.intelligenceItems.toArray()).map((x) => x.id).sort()
+    expect(left).toEqual(['c_fav', 'c_unread'])
     await useIntelligenceStore.getState().remove('c_unread')
   })
 })
