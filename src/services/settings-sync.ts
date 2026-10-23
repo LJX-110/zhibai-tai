@@ -47,7 +47,7 @@ const ROW_ID = 'settings'
  * ⚠️ 它是**真实等待**，所以做成可注入（`__setWriteDebounceForTest`）：
  * 单测里有 4 个用例各等一次，900ms × 4 = 3.6 秒的真实耗时；
  * 全量并行跑时这段等待会被 CPU 竞争摊到十几秒，逼近 `testTimeout`
- * —— 这正是 Step 5-0 那次"偶发红"最可能的成因（vitest.config 的注释记了同一现象）。
+ * —— 这正是 那次"偶发红"最可能的成因（vitest.config 的注释记了同一现象）。
  * 注入后等的是**同一段代码路径**（仍是 window.setTimeout 驱动的去抖），只是不必等真实时间。
  */
 let writeDebounceMs = 800
@@ -75,7 +75,7 @@ let started = false
 let timer: number | null = null
 
 /**
- * 偏好设置落盘 / 读取失败的**唯一出口**（Step 5-1 · A2）。
+ * 偏好设置落盘 / 读取失败的**唯一出口**。
  *
  * 上一版只 `console.warn` —— 存储满 / 隐私模式 / 配额受限时，用户改了目标学分、
  * 代理地址、模型名，以为存住了，其实下次打开就没了；故障流水里也查不到痕迹。

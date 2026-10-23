@@ -7,11 +7,11 @@
  *  · 白名单外的键（主题/布局等**设备级偏好**）不能写进去 —— 不该让一台设备的主题
  *    把另一台覆盖掉；
  *  · **密钥 / Token 绝不在同步范围内**（注释里明确写了，得有测试守住）；
- *  · **落盘失败必须让用户知道**（Step 5-1 · A2：上一版只 `console.warn`）。
+ *  · **落盘失败必须让用户知道**（上一版只 `console.warn`）。
  *
- * ## Step 5-1 · A1：去抖窗口改成可注入
+ * ## 去抖窗口改成可注入
  * 原先是 4 个用例各等 900ms 真实时间（≈3.6s）。全量并行跑时这段等待会被 CPU 竞争
- * 摊到十几秒、逼近 `testTimeout` —— Step 5-0 那次"偶发红"最可能的成因。
+ * 摊到十几秒、逼近 `testTimeout` —— 那次"偶发红"最可能的成因。
  * 现在用 `__setWriteDebounceForTest` 把窗口调到 10ms：**走的是同一段去抖代码路径**
  * （仍是 `window.setTimeout` 驱动），只是不必等真实时间。
  */
@@ -126,7 +126,7 @@ describe('去抖', () => {
   })
 })
 
-describe('落盘失败必须用户可见（Step 5-1 · A2）', () => {
+describe('落盘失败必须用户可见', () => {
   it('写库失败 → 故障流水 + 一条提醒；且**同一次故障只弹一次**', async () => {
     const { repo, store, sync, toast, log } = await fresh()
     sync.initSyncedSettings()

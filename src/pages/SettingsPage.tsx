@@ -21,7 +21,7 @@ import { ProxyConfig, SourceManager } from '../components/source/SourceManager'
 import { onSettingsGroupRequest, type SettingsGroup } from '../services/settings-intent'
 
 /**
- * 设置分组（Step 5-2 重整）
+ * 设置分组
  *
  * ## 归组原则：按「它管什么」，不按「当初写在哪个文件」
  *   · **外观** —— 长相与我的参数：昵称 / 主题 / 布局 / 目标 / 番茄钟 / 安装
@@ -113,7 +113,7 @@ export function SettingsPage() {
       {group === 'ai' && <AiGroup />}
       {group === 'data' && (
         <>
-          {/* 顺序即优先级（Step 5-3C）：同步是这一组的主题（"我的数据在不在"），
+          {/* 顺序即优先级：同步是这一组的主题（"我的数据在不在"），
               情报 / 备份 / 修复都是它的下游 —— 先摆最常被问的那件事 */}
           <SyncGroup />
           {/* 抓取与代理（2026-10-01 从 AI 组移入）：代理同时服务同步与情报抓取，

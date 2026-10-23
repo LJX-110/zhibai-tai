@@ -1,5 +1,5 @@
 /**
- * Agent · 工具调用协议（文本协议，**纯函数**；Step 4-2 · C5）
+ * Agent · 工具调用协议（文本协议，**纯函数**）
  *
  * ## 为什么是文本协议而不是 `tools` 参数
  * 本项目的 Provider 是**纯文本进出**（`complete` / `completeStream`，见 provider.ts 与

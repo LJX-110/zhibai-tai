@@ -1,7 +1,7 @@
 /**
- * Agent Loop（Step 4-2 · C5 / Step 4-3 · 二）—— **依赖全部注入**，因此多步 / 上限 /
+ * Agent Loop —— **依赖全部注入**，因此多步 / 上限 /
  * 中止 / 工具异常 / **确认门 / 续跑** 都能确定化跑出来。这组用例钉住规格 §C5 的六条硬约束，
- * 外加 Step 4-3 新增的两条：
+ * 外加新增的两条：
  *  · `requires-confirmation` 的工具**不被执行**，而是返回 proposal + resume；
  *  · 确认后带 `seed` 续跑时，回答**只含续跑之后产生的正文**（否则面板会重复显示一遍）。
  */
@@ -125,7 +125,7 @@ describe('多轮工具调用与结果回传（C5 核心）', () => {
   })
 })
 
-describe('确认门（Step 4-3 · requires-confirmation）', () => {
+describe('确认门（requires-confirmation）', () => {
   it('碰到需确认的工具 → **不执行**，返回 proposal 与 resume', async () => {
     const executed = { value: false }
     const t = confirmTool(executed)

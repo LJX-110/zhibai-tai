@@ -50,7 +50,7 @@ export interface UsePetLoopResult {
   getBounds: () => PetBounds
   /** **恢复默认位置**：强制回角落锚点（忽略本机存档）；由设置页经 `commands` 触发 */
   resetPosition: () => void
-  /** 立刻播指定动作（Step 5-3E；设置页「动作」列表 / 菜单的命令出口） */
+  /** 立刻播指定动作（设置页「动作」列表 / 菜单的命令出口） */
   playOnce: (name: string) => void
   /**
    * 渲染层把它挂到宠物**根节点**上。运动与抛掷阶段都由 hook 直接写它的 `transform`。
@@ -58,7 +58,7 @@ export interface UsePetLoopResult {
   spriteRef: RefObject<HTMLDivElement | null>
   drag: PetDragHandlers
   /**
-   * **首屏要预热的素材名**（待机池 + 点击应答池，从配置派生 —— Step 4-3 · 九）。
+   * **首屏要预热的素材名**（待机池 + 点击应答池，从配置派生 —— · 九）。
    * 名单与 `config.json` 同源（由 hook 给出，渲染层不写死）；⚠️ 只拉这几张，不是全部。
    */
   warmup: string[]
@@ -77,7 +77,7 @@ export function usePetLoop(
   /** 庆祝窗口截止时刻（ms）—— 由「重要完成」点亮，见 `services/completion.ts` */
   celebrateUntil = 0,
 ): UsePetLoopResult {
-  // 配置载入 + 派生（cfg / cfgRef / 首屏预热名单）——Step 5-1 · E5 拆出独立模块
+  // 配置载入 + 派生（cfg / cfgRef / 首屏预热名单）—— 拆出独立模块
   const { cfg, cfgRef, warmup } = usePetConfig()
   // 视图帧（素材 / 朝向 / 重播序号）—— 见 usePetView；重播规则只有那一处
   const { view, show, init, setDrag } = usePetView()
@@ -120,7 +120,7 @@ export function usePetLoop(
   /** 运行时实际尺寸（effectiveSize）—— 几何与拖拽那两路共用 */
   const sizeRef = useRef(0)
   /**
-   * 本会话**已加载过的 idle 闲暇素材**（Step 5-1 · E1）。只作只读视图交给状态机"缩小候选池"，
+   * 本会话**已加载过的 idle 闲暇素材**。只作只读视图交给状态机"缩小候选池"，
    * **不拦 `resolveAsset`**（拦了会出现"想播的动画播不出来"＝静默定帧）；
    * 到 20 个之后状态机只会从这批里挑，"不再新增下载"因此是构造出来的。
    */
@@ -342,7 +342,7 @@ export function usePetLoop(
     step(next.until - t)
   }, [apply, consumeClickSuppression, step, settle, cfgRef])
 
-  /** **立刻播一个指定动作**（Step 5-3E）：抢断当前段插播 `action` 相位、播完回状态机；
+  /** **立刻播一个指定动作**：抢断当前段插播 `action` 相位、播完回状态机；
    *  不改 `state`（"等确认"期间点动作不会演丢）。名字走 `findPlayable` 白名单；拖拽期间让位。 */
   const playOnce = useCallback(
     (name: string) => {

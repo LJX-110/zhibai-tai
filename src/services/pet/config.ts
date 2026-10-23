@@ -129,7 +129,7 @@ export function validatePetConfig(raw: unknown): PetConfig {
       })
     : []
 
-  // 旧配置里的 `physics` 段（重力 / 抛掷）**直接忽略**：那两个行为已在 Step 4-2 移除，
+ // 旧配置里的 `physics` 段（重力 / 抛掷）**直接忽略**：那两个行为已在 移除，
   // 多出来的字段本来就不参与校验（只读已知键）。
   return {
     name: r.name,

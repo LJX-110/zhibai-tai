@@ -1,5 +1,5 @@
 /**
- * 桌宠 · idle 闲暇素材的会话上限（Step 5-1 · E1）
+ * 桌宠 · idle 闲暇素材的会话上限
  *
  * 产品约定：**每个应用会话最多加载 20 个不同的 idle 素材**，到顶后只从已加载的那批里挑；
  * 素材本身**不删**。这组用例钉住三件事：
@@ -109,7 +109,7 @@ describe('候选池收敛 idlePoolWithin', () => {
     expect(idlePoolWithin(['x', 'y'], loadedOf(20), 20)).toEqual(['x', 'y'])
   })
 
-  it('到顶且本池整池未加载 → 先用 fallback 里**已加载过**的名字（Step 5-3E，不引入新下载）', () => {
+  it('到顶且本池整池未加载 → 先用 fallback 里**已加载过**的名字（不引入新下载）', () => {
     const full = loadedOf(20)
     const loadedName = [...full][0]!
     const pool = ['从未加载过 A']

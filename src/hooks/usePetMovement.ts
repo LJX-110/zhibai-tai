@@ -178,12 +178,14 @@ export function usePetMovement(host: PetHost): PetMovement {
   )
 
   /**
-   * **恢复默认位置**（Step 5-2C F 批）：强制回到 `cfg.position.corner` 的角落锚点，
+   * **恢复默认位置**（用户拍板）：强制回到 `cfg.position.corner` 的角落锚点，
    * **忽略本机存档与旧字段** —— 这正是它与 `placeInitial` 的区别（后者优先用存档）。
    * 之后仍走 `clampToBounds`，保证落在合法活动区域内；并写一次本机存档（**不进同步**）。
    */
   const resetPosition = useCallback(
     (cfg: PetConfig, size: number) => {
+      // 先停掉进行中的移动：否则 rAF 的下一帧会把刚摆好的角落位置覆盖回终点
+      settle()
       const vp = host.getViewport()
       const anchor = anchorOf({
         rect: vp,
@@ -196,7 +198,7 @@ export function usePetMovement(host: PetHost): PetMovement {
       paint(posRef.current.x, posRef.current.y)
       host.persistLocalPosition(posRef.current)
     },
-    [host, paint],
+    [host, settle, paint],
   )
 
   return { posRef, spriteRef, paint, settle, start, stop, placeInitial, resetPosition, settleAt, clampInto }

@@ -141,7 +141,7 @@ describe('recordError —— 写入、去重、上限', () => {
   })
 })
 
-describe('redactSecrets —— 凭据不得进入本机故障流水（Step 5-1 · A3）', () => {
+describe('redactSecrets —— 凭据不得进入本机故障流水', () => {
   it('OpenAI 风格 key 被抹掉', () => {
     expect(redactSecrets('HTTP 401: Incorrect API key sk-proj-AbCdEf1234567890 provided')).toContain('sk-***')
     expect(redactSecrets('key=sk-abcdefghijklmn')).not.toContain('abcdefghijklmn')

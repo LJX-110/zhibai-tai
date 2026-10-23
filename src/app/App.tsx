@@ -44,7 +44,7 @@ export function App() {
         <PomodoroTicker />
         <ReminderEngine />
         <AiChatPanel />
-        {/* 通知中心：顶栏铃铛 / 桌面侧栏两处入口共用的全局弹层（Step 5-3D） */}
+        {/* 通知中心：顶栏铃铛 / 桌面侧栏两处入口共用的全局弹层 */}
         <NoticeCenterHost />
         {/* 桌宠：petEnabled 为 false 时返回 null（零 DOM、零定时器、零素材请求） */}
         <PetStage />

@@ -1,5 +1,5 @@
 /**
- * 桌宠 · 动作状态机（Step 4-2 重做后）
+ * 桌宠 · 动作状态机（重做后）
  *
  * 时间是注入的、掷骰是注入的 → 可以精确断言"走到哪一档、下一拍安排在何时"。
  * 这一版钉住的是**状态驱动**的五条不变式：
@@ -234,12 +234,12 @@ describe('idle 的闲暇表现（随机只在这一层）', () => {
     const r = decide(cfg, initialRuntime(cfg, 0), ctx({ now: 1000, roll: 0.17, cx: 500, cy: 300, viewport: shifted, wander: true }))
     expect(r.phase).toBe('move')
     expect(r.move!.from).toBeCloseTo(500 / 1000, 5)
-    // Step 5-3E：move **只描述水平移动** —— 不再带 yRatio（那会把"身体中心"当左上角用，
+// move **只描述水平移动** —— 不再带 yRatio（那会把"身体中心"当左上角用，
     // 每次移动把宠物往下推半个身高，几段之后贴底"看起来再也不动"）
     expect('yRatio' in (r.move as object)).toBe(false)
   })
 
-  it('手机窄视口也能真的走出一步（Step 5-3E 修"开了漫游也不动"）', () => {
+  it('手机窄视口也能真的走出一步（修"开了漫游也不动"）', () => {
     // 390 宽：旧实现步长固定 size*1.5~size*5（240~800px），目标必然越界 → 永远回退转向
     const phone = { x: 0, y: 0, width: 390, height: 700 }
     const r = decide(cfg, initialRuntime(cfg, 0), ctx({ now: 1000, roll: 0.17, cx: 195, viewport: phone, wander: true }))

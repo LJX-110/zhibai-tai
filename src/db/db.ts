@@ -230,7 +230,7 @@ export class WorkbenchDB extends Dexie {
       coursePlanMeta: 'id',
     })
     /* 新增「天机人设」与「天机长期记忆」两张表（仅新增，不动既有结构）。
-     * Step 4-2 让天机从"聊天框"变成 Agent：人设（她是谁、怎么说话）与
+     * 让天机从"聊天框"变成 Agent：人设（她是谁、怎么说话）与
      * 长期记忆（用户明确保存的事实）是**用户资产** —— 只存 localStorage 换设备即丢，
      * 故注册进 BUSINESS_TABLES 走快照同步（瞬时状态如 streaming / 当前步骤绝不进表）。 */
     this.version(15).stores({

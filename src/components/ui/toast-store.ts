@@ -68,7 +68,7 @@ export const useToastStore = create<ToastStore>((set) => ({
     /* **去重**：同一个 `message + tone` 已经在屏上，就不再叠一条，只把它的存活时间续上。
        为什么按这对组合去重而不是只按 message：同一条文案的 success 与 danger 是两回事
        （"同步失败"和"同步完成"若共用文案，必须都能看见）。
-       Step 5-2B 实测过观页两条提醒同时叠出、遮住罗盘 —— 这里从源头堵住。 */
+       实测过观页两条提醒同时叠出、遮住罗盘 —— 这里从源头堵住。 */
     const dup = useToastStore.getState().toasts.find((x) => x.message === message && x.tone === tone)
     if (dup) {
       arm(dup.id)

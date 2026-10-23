@@ -67,7 +67,7 @@ describe('isDragSession：松手之后唯一还要区分的事', () => {
     expect(isDragSession(true, false)).toBe(true)
   })
 
-  it('Step 4-2 起"松手即停"：模块里不再有速度判定（甩抛已被移除）', async () => {
+  it('"松手即停"：模块里不再有速度判定（甩抛已被移除）', async () => {
     // 防回归：若有人把甩抛加回来，会先在这里失败，再要求他同步改本文件的说明
     const mod: Record<string, unknown> = await import('../services/pet/interaction')
     expect('resolveDragEnd' in mod).toBe(false)

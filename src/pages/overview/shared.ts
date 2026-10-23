@@ -20,7 +20,7 @@ export const DIM_COLOR: Record<QiDim['tone'], string> = {
   plain: 'var(--color-ink-muted)',
 }
 
-/* ---------------- 今日任务时间轴（Step 5-1 · E3） ---------------- */
+/* ---------------- 今日任务时间轴 ---------------- */
 
 /** 时间轴的三段：越靠前越急 */
 export type TimelineBucket = 'overdue' | 'today' | 'soon'

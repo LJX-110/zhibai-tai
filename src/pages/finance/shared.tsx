@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 财 · 共享**子组件**（记账 / 购买 / 统计共用，从 FinancePage 拆出）
  *
  * ⚠️ 本文件**只导出组件**：金额格式化、台账筛选、月度汇总这些非组件已迁到 `./summary`
@@ -73,7 +73,7 @@ export function FinanceRow({
       <span className={cn('tabular text-sm font-medium', r.kind === 'income' ? 'text-teal' : 'text-ink')}>
         {r.kind === 'income' ? '+' : '-'}{money(r.amount)}
       </span>
-      {/* 操作区走共用 `RowActions`（Step 5-2C C 批 · 用户拍板并入）。
+      {/* 操作区走共用 `RowActions`（用户拍板并入）。
           改前这里是"compact ? More : inline"两套写法各写一遍，而情报源那边又写了第三套、
           还多出一个只服务情报源的 MobileActionDialog —— 同一件事四份实现。
           业务逻辑（详情开 Inspector / 编辑 / 删除）**一个字没改**，只统一了交互实现。 */}

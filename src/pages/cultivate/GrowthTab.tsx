@@ -62,7 +62,7 @@ export function GrowthTab() {
   const setMode = usePomodoroTimerStore((s) => s.setMode)
   const startTimer = usePomodoroTimerStore((s) => s.start)
   const resetTimer = usePomodoroTimerStore((s) => s.reset)
-  /** 闭关内容改成**自由输入**（Step 5-3C）：不再只能从待办里认领 */
+  /** 闭关内容改成**自由输入**：不再只能从待办里认领 */
   const setAssocLabel = usePomodoroTimerStore((s) => s.setAssocLabel)
   const assocLabel = usePomodoroTimerStore((s) => s.assocLabel)
 

@@ -43,7 +43,7 @@ export const BUSINESS_TABLES: readonly TableMeta[] = [
   { key: 'follows', label: '关注' },
   { key: 'petState', label: '桌宠状态' },
   { key: 'cultivation', label: '修行境界' },
-  // Step 4-2（天机 Agent）：人设与长期记忆都是**用户资产**，必须跨设备一致
+  // （天机 Agent）：人设与长期记忆都是**用户资产**，必须跨设备一致
   { key: 'personas', label: '天机人设' },
   { key: 'memories', label: '天机记忆' },
 ]

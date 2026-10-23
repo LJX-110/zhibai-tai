@@ -70,7 +70,7 @@ export interface TianjiPlugin {
   /**
    * 归属板块。
    *
-   * `'core'` 是 Step 4-3 新增的**核心插件**位（人设 / 记忆这类"属于天机本身、
+   * `'core'` 是 新增的**核心插件**位（人设 / 记忆这类"属于天机本身、
    * 不属于任何一个业务板块"的能力）。它没有 `detail`、没有 `capability`，
    * 只申报工具；放在注册表**末尾**，因此不影响明细区的注入次序。
    */
@@ -85,7 +85,7 @@ export interface TianjiPlugin {
   /** 本板块可被 AI 提议的动作（键即模型要写的 action name） */
   actions?: Record<string, TianjiActionDef>
   /**
-   * 本板块的工具（Step 4-2 · C4）：Agent Loop **可自动执行**的查询 / 低风险新建。
+   * 本板块的工具：Agent Loop **可自动执行**的查询 / 低风险新建。
    * 与 `actions` 的分工见 `services/agent/tools.ts` 的分工表 ——
    * **高风险写入不许做成工具**（那会绕过"用户确认"这条安全边界）。
    */
@@ -151,7 +151,7 @@ export function actionDefFor(name: string): TianjiActionDef | undefined {
 }
 
 /**
- * Agent 可用的工具清单（Step 4-2 · C4）—— **唯一注册表**，与 TIANJI_PLUGINS 同序。
+ * Agent 可用的工具清单—— **唯一注册表**，与 TIANJI_PLUGINS 同序。
  * 加一个工具只改归属插件的 `tools`，中心文件与协议都不用动。
  *
  * ⚠️ 含 `mode: 'requires-confirmation'` 的工具：它们**不会**被 Agent Loop 自动执行，

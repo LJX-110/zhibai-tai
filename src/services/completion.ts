@@ -1,7 +1,7 @@
 /**
  * 完成反馈（Completion Feedback）—— **完成事件 + 反馈策略**
  *
- * ## 问题（Step 5-2C · D 批）
+ * ## 问题
  * 「做成一件事」的反馈原本由各模块自己决定：
  *   · 待办：`useTaskActions` 里直接 `playSound('task-done')` + `toast('完成待办 · 功行有进')`
  *   · 作业：`HomeworkTab` 里直接 `playSound('seal')` + 自己那套 720ms 落印动画（`stampId`）
@@ -107,7 +107,7 @@ const listeners = new Set<CompletionListener>()
  *
  * 为什么用订阅而不是让本模块去写宠物 store：**服务层不该反向驱动业务状态**。
  * 服务只负责"宣布发生了一次完成 + 该用什么反馈"，谁来表现（桌宠、Toast、动画）
- * 由视图自己订阅决定 —— 于是 D-4 的庆祝通道不需要给任何 store 加字段。
+ * 由视图自己订阅决定 —— 于是庆祝通道不需要给任何 store 加字段。
  *
  * @returns 退订函数（在 effect 清理里调用）
  */

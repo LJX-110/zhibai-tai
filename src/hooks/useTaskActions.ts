@@ -86,7 +86,7 @@ export function useTaskActions() {
   const toggle = async (task: Task) => {
     const { done, createdNext } = await toggleTaskCore(task)
     if (done) {
-      // 完成反馈统一走策略（Step 5-2C · D 批）：档位 = 来源 + 优先级，
+      // 完成反馈统一走策略：档位 = 来源 + 优先级，
       // 由 `decideFeedback` 决定"落印 / 发声 / 弹条"，这里不再硬写。
       emitCompletion(
         {

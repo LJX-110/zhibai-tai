@@ -1,5 +1,5 @@
 /**
- * 人设（Persona）与长期记忆（Step 4-2 · C1/C2/C3/C9）
+ * 人设（Persona）与长期记忆
  *
  * 规格 §十 要求的四件事逐条钉住：
  *  · 默认 Persona 能加载；
@@ -176,7 +176,7 @@ describe('桌宠语气来自人设（D3：人格决定"怎么表现"）', () => 
   })
 })
 
-describe('人设生效链路（Step 4-3 · 四：六个检查点）', () => {
+describe('人设生效链路（四：六个检查点）', () => {
   const whale = defaultWhaleGirlPersona(now)
   const work: Persona = { ...emptyPersona('工作人格'), id: 'work-persona', selfClaim: '在下', userName: '同事' }
 

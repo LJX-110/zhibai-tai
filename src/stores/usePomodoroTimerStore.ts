@@ -24,7 +24,7 @@ export interface PomodoroTimerState {
   assoc: PomodoroAssoc
   assocId: string
   /**
-   * 本次专注/闭关的**自由文本内容**（Step 5-3C）。
+   * 本次专注/闭关的**自由文本内容**。
    *
    * 此前闭关只能从待办里认领 —— "今天练两小时 Python""读完某篇资料"这类
    * **没有对应待办的事**就无从下手，而它们恰恰是最常见的形式。
@@ -145,7 +145,7 @@ export const usePomodoroTimerStore = create<PomodoroTimerState>((set, get) => ({
       }
       void usePomodoroStore.getState().add(session)
       /**
-       * **一次专注跑完 = 一次完成事件**（Step 5-2C D 批）。
+       * **一次专注跑完 = 一次完成事件**。
        *
        * 只在这里发：`reset()` 里那条 session 打的是「·中断」标签，
        * 是**放弃**而不是完成 —— 在那里发事件就等于"中途放弃也庆祝"。
@@ -164,7 +164,7 @@ export const usePomodoroTimerStore = create<PomodoroTimerState>((set, get) => ({
       // 日常行为是"不修就退"，闭关才是主动精进、把境界推上去的主路径
       // （计分见 services/cultivation.ts 的 seclusionReward）。
       // 普通专注（未绑定待办）不给 —— 否则"坐着发呆 25 分钟"也能刷功行。
-      // ⚠️ 判据含 `label`（Step 5-3C）：闭关内容改成**自由输入**之后，
+      // ⚠️ 判据含 `label`：闭关内容改成**自由输入**之后，
       // "练两小时 Python"这类没有对应待办的事也必须算一次闭关 ——
       // 只认 taskId 会让新入口变成一条"填了也不算"的死路。
       if (session.taskId || session.label) {

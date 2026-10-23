@@ -149,7 +149,7 @@ describe('真实配置文件 public/pet/config.json', () => {
     for (const name of used) expect(files).toContain(name)
     // ② 登记在 reserve 的素材也必须真存在（登记不能凭空写）
     for (const name of reserved) expect(files).toContain(name)
-    // ③ 孤儿检查：既没接线、也没登记的素材 = 忘了归置（Step 4-2 · B5 的"14 个未使用"）
+    // ③ 孤儿检查：既没接线、也没登记的素材 = 忘了归置（的"14 个未使用"）
     const orphans = files.filter((f) => !used.has(f) && !reserved.has(f))
     expect(orphans).toEqual([])
   })

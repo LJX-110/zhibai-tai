@@ -1,5 +1,5 @@
 /**
- * 桌宠 · **状态 → 动画策略**（纯函数，可单测；Step 4-3 · 七）
+ * 桌宠 · **状态 → 动画策略**（纯函数，可单测； · 七）
  *
  * ## 它补的是什么
  * 状态机直接 `pool[floor(roll * len)]` 抽动画，有两个问题：
@@ -67,7 +67,7 @@ export function pickStateAnim(cfg: PetConfig, state: PetState, roll: number, avo
 }
 
 /**
- * **首屏要预热的动画**（Step 4-3 · 九）：待机池 + 点击回应池 + 「被拎起来」池。
+ * **首屏要预热的动画**：待机池 + 点击回应池 + 「被拎起来」池。
  *
  * 为什么是这三个：它们对应"用户什么都没做""用户第一次戳它""用户第一次拖它"
  * 这三种**必然发生**的情形；其余状态（thinking / working / waiting / success / error / sleep）

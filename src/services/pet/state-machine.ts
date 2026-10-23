@@ -1,7 +1,7 @@
 /**
  * 桌宠 · 动作状态机（纯逻辑；时间与随机源可注入，便于单测）
  *
- * ## Step 4-2 重做：从"随机决定"改成"状态驱动"
+ * ## 重做：从"随机决定"改成"状态驱动"
  * 旧版把一个 idle 之后的动作**整个交给骰子**（`rollKind`），于是天机正在跑工具、
  * 番茄钟正在专注时，它照样随机摸鱼 —— 用户看到的就是"它根本不理解发生了什么"。
  * 现在分成两层：
@@ -181,7 +181,7 @@ export function decide(cfg: PetConfig, prev: PetRuntime, ctx: DecideContext): Pe
   // ⑥ 空闲：**这时才轮到随机**（低优先级的闲暇表现）
   //    reduced-motion 下更要克制：只留待机与动作，停位移与转向
   //
-  //    ⚠️ 闲暇素材的**会话上限**（Step 5-1 · E1）就落在这里：把候选池先收敛到
+ // ⚠️ 闲暇素材的**会话上限**就落在这里：把候选池先收敛到
   //    "本次允许挑的范围"（还有额度 → 原池；到顶 → 只留已加载过的），
   //    然后照旧走随机的权重/去重逻辑。**不做拦截、不碰 resolveAsset**，
   //    所以最坏情况只是"重复播已加载过的动作"，不会出现定帧。
@@ -189,7 +189,7 @@ export function decide(cfg: PetConfig, prev: PetRuntime, ctx: DecideContext): Pe
   const limit = ctx.idleLimit ?? IDLE_SESSION_LIMIT
   const idlePool = idlePoolWithin(cfg.animations.idle, loaded, limit)
   // turn / move 是**小池**（1~3 个名字）：到顶后若整池都没加载过，拿 idle 池兜底 ——
-  // 既不引入新下载，也不会"没有动画可播"（Step 5-3E 起 idle-pool 支持 fallback）
+  // 既不引入新下载，也不会"没有动画可播"（现在 idle-pool 支持 fallback）
   const turnPool = idlePoolWithin(cfg.animations.turn, loaded, limit, idlePool)
   const movePool = idlePoolWithin(
     cfg.animations.moves.actions.map((a) => a.name),
@@ -236,12 +236,12 @@ export function decide(cfg: PetConfig, prev: PetRuntime, ctx: DecideContext): Pe
       const halfW = size / 2
       // 水平安全距 = `marginX`（那是它的语义）。此前取 max(marginX, marginY) ——
       // 手机上 marginY 是 96（底边距），横向也被当成 96，可走窗口被压到几十像素，
-      // 连自适应步长也放不下（Step 5-3E 一并修正）
+      // 连自适应步长也放不下（一并修正）
       const margin = cfg.position.marginX
       // 比例一律在**活动矩形内**算：cx 换算成局部坐标后才能与 W 同基准
       const localCx = ctx.cx - viewport.x
       /**
-       * 步长按**活动区宽度**自适应（Step 5-3E 修"开了漫游也不动"）：
+       * 步长按**活动区宽度**自适应（修「开了漫游也不动」）：
        * 此前固定 `size*1.5 ~ size*5`（160px 宠物 = 240~800px 一步），
        * 在手机上活动区总宽才两三百像素 —— 目标必然越界、`planMove` 返回 null、
        * 回退成"转向"，表现就是"它从不移动"。现在上下限同时受视口约束。

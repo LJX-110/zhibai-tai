@@ -59,7 +59,7 @@ export interface PetSpriteProps extends PetView {
   reducedMotion: boolean
   onClick: () => void
   /**
-   * 打开菜单（Step 5-3D）：桌面**右键**与移动**长按**共用同一个入口。
+   * 打开菜单：桌面**右键**与移动**长按**共用同一个入口。
    * 此前只有长按接了线，右键点它没有任何反应 —— 而 `PetMenu` 的文件头一直写着
    * "桌面 contextmenu"，行为与声明不符（用户报"菜单看不到了"）。
    */

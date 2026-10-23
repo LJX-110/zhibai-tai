@@ -72,7 +72,7 @@ export function NoteItem({ note, onOpen, onEdit, onDelete, onTogglePin }: NoteIt
         </div>
         {/* 操作区走共用的 `RowActions`（2026-09-29 · 批 B）：
             窄屏收进一个「更多」，宽屏直显三个图标。
-            改前是三个 ~26×26 的图标按钮挤在一排 —— Step 5-2B 实测触控不足，
+ 改前是三个 ~26×26 的图标按钮挤在一排 —— 实测触控不足，
             且一排补到 44px 会把卡片正文挤没（touch-target 会真实改布局）。
             hover-reveal 仍保留：鼠标悬停才显现，触屏常显（触屏没有 hover）。 */}
         <div

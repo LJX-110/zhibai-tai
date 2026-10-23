@@ -14,7 +14,7 @@ import type { Saying } from '../../services/pet/sayings'
 
 export interface PetBubbleProps {
   saying: Saying
-  /** 说话人（对话框的名字行；Step 5-3E 起气泡升级为"对话"形态） */
+  /** 说话人（对话框的名字行；现在气泡升级为"对话"形态） */
   name: string
   /** 宠物包围盒左上角（视口 px） */
   x: number
@@ -45,7 +45,7 @@ export function PetBubble({ saying, name, x, y, size, reducedMotion, onGo }: Pet
       }}
       aria-live="polite"
     >
-      {/* 名字行（Step 5-3E）：气泡升级为"对话框" —— 谁在说话一眼可见。
+      {/* 名字行：气泡升级为"对话框" —— 谁在说话一眼可见。
           字号例外：名字是标签不是正文，必须明显小于台词本身 */}
       <span className="mb-0.5 block text-[10px] tracking-label text-ink-faint">{name}</span>
       {saying.text}

@@ -186,7 +186,7 @@ export function isQuietNow(from: string, to: string, now = new Date()): boolean 
  * 操作回执（"待办已保存"）走默认的 `'app'` —— 两类混在一起的话
  * 通知中心会退化成操作日志，翻不到真正错过的提醒。
  *
- * ## 与 Toast 的分工（Step 5-3C 定稿）
+ * ## 与 Toast 的分工（已定稿）
  * ```
  * 事件发生 → Notification Service ┬─ 持久通知（本文件，可查看/已读/追踪）
  *                                └─ Toast 即时反馈（2.6s 后消失）
@@ -249,7 +249,7 @@ function save(list: NoticeRecord[]): void {
 }
 
 /**
- * 变更订阅（Step 5-3D）：未读角标要跨组件更新，而通知此前只有"读一次"的 API。
+ * 变更订阅：未读角标要跨组件更新，而通知此前只有"读一次"的 API。
  * 订阅者拿到的是"列表变了"这一事实，值本身仍走 `unreadNoticeCountCached`。
  */
 const listeners = new Set<() => void>()

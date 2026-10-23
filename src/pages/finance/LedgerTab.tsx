@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 财 · LedgerTab（从 FinancePage 拆出，见 docs/编码规范.md 路线图第 4 步）
  */
 /**

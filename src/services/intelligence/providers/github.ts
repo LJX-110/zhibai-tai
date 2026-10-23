@@ -1,12 +1,12 @@
 /**
  * GitHub Provider —— 真实数据（公共搜索 API，无需 Token）
  *
- * 通道选择沿用全站统一的 proxyFetch 双通道：
- *  · api.github.com 属于 DIRECT_HOSTS（自带 CORS），直连优先；
- *  · 国内网络直连不通时，若已配置自建代理则自动经代理转发兜底。
+ * 通道选择沿用全站统一的 fetchViaProxy：
+ *  · 未配置自建代理时直连（api.github.com 自带 CORS）；
+ *  · 配了代理则全程经代理转发 —— 国内直连常被阻断，先试直连只会白等一个超时。
  * 搜索词从源 config 读取（JSON：{ queries: string[] }），不硬编码。
  *
- * ## Step 5-1 · C2：删除了「AI 兜底生成热门仓库」
+ * ## 删除了「AI 兜底生成热门仓库」
  * 上一版在"直连与代理全失败、且配了远程 AI"时，会让模型**编出**一批热门仓库并
  * 当成该源的情报返回（`sourceType: 'github'`、URL 与 star 数都不校验，
  * 只靠一个 `AI 补足` 标签区分）。这与"情报只来自真实来源"直接冲突：

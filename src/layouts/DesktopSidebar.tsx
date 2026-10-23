@@ -143,7 +143,7 @@ export function DesktopSidebar() {
           active={section === SYSTEM_SECTION.id}
           onClick={() => go(SYSTEM_SECTION.id)}
         />
-        {/* 通知中心入口（Step 5-3D）：未读条数与顶栏铃铛同源（`useUnreadNotices`） */}
+        {/* 通知中心入口：未读条数与顶栏铃铛同源（`useUnreadNotices`） */}
         <button
           type="button"
           onClick={() => setNoticeOpen(true)}

@@ -168,7 +168,7 @@ describe('anchorOf：四角落位', () => {
   })
 })
 
-describe('尺寸档位（Step 5-2C E-2）：老连续值自动吸附到最近档', () => {
+describe('尺寸档位：老连续值自动吸附到最近档', () => {
   it('三档定义齐备且互不相同', () => {
     expect(PET_SCALE_STEPS.map((s) => s.key)).toEqual(['small', 'standard', 'large'])
     expect(new Set(PET_SCALE_STEPS.map((s) => s.value)).size).toBe(3)

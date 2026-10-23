@@ -83,7 +83,7 @@ const ctxOf = (over: Partial<PetContext> = {}): PetContext => ({
   ...over,
 })
 
-describe('庆祝窗口 celebrateUntil（Step 5-2C D-4）', () => {
+describe('庆祝窗口 celebrateUntil', () => {
   it('窗口内 → success（复用既有状态，不新增 PetState 枚举值）', () => {
     expect(resolvePetState(ctxOf({ now: 1000, celebrateUntil: 2000 }))).toBe('success')
   })

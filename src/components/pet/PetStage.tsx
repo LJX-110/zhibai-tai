@@ -42,7 +42,7 @@ import { requestPetLine } from '../../services/pet/ai-speech'
 import { getAiRemoteHealth } from '../../services/ai/health'
 import { requestSettingsGroup } from '../../services/settings-intent'
 
-/** 预热上限：别一次把 107 张（约 63MB）都拉下来。当前配置下待机 1 张 + 点击 5 张 + 拖动 1 张 = 7 张 */
+/** 预热上限：别一次把 106 张（约 62MB）都拉下来。当前配置下待机 1 张 + 点击 5 张 + 拖动 1 张 = 7 张 */
 const WARMUP_LIMIT = 8
 /** 菜单里「安静一小时」的时长 */
 const HUSH_MS = 60 * 60 * 1000
@@ -70,7 +70,7 @@ function PetStageInner() {
   // 只用于「相识天数」：小时级刷新足够，别为一行字每分钟重渲染整只宠物
   const now = useNow(60 * 60_000)
   /**
-   * 庆祝窗口（截止时刻，ms）。**D-4 拍板方案 B**：给状态机的输入加一个有时限的标记，
+   * 庆祝窗口（截止时刻，ms）。**拍板方案 B**：给状态机的输入加一个有时限的标记，
    * 对外仍只返回已有的 `success` —— 不新增 `PetState` 枚举值、不新增宠物状态。
    *
    * 用**订阅**而不是让完成服务去写宠物 store：服务层不该反向驱动业务状态；
@@ -106,7 +106,7 @@ function PetStageInner() {
 
   // 「恢复默认位置」命令：设置页发出 → 这里执行（宠物侧才知道怎么落位）
   useEffect(() => onResetPosition(resetPosition), [resetPosition])
-  // 「动作」列表 / 菜单发来的播放命令：立刻播那个动作（Step 5-3E）
+  // 「动作」列表 / 菜单发来的播放命令：立刻播那个动作
   useEffect(() => onPlayAnim(playOnce), [playOnce])
   const { bubble, refresh, dismiss } = usePetSaying()
   const toast = useToast().toast
@@ -124,7 +124,7 @@ function PetStageInner() {
    */
   const stateSpeech = usePetStateSpeech()
   /**
-   * 台词开关（Step 5-2C F 批 · 用户拍板）：关掉后**不显示常驻台词**
+   * 台词开关（用户拍板）：关掉后**不显示常驻台词**
    * （状态台词 + 自主搭话），但**动画 / 状态 / 点击 / 拖动 / Agent / 好感全部照常**。
    *
    * 为什么 `poke` 不受它管：那是"**你主动戳它**"的回应，属于**互动**而不是常驻表现 ——
@@ -183,7 +183,7 @@ function PetStageInner() {
       setMenuOpen(false)
       switch (a) {
         case 'say':
-          // 显式的「让它说句话」（Step 5-3E 菜单重设计）：与点它一下同一条路
+          // 显式的「让它说句话」（菜单重设计）：与点它一下同一条路
           longPressedRef.current = false
           onInteracted()
           pokeBackRef.current()

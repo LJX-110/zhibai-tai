@@ -1,5 +1,5 @@
 /**
- * 天机 · Agent 运行装配（**把纯逻辑的循环接上真实世界**；Step 4-2 · C3/C5/D1 / Step 4-3 · 二）
+ * 天机 · Agent 运行装配（**把纯逻辑的循环接上真实世界**）
  *
  * ## 这一层负责什么（也是它必须存在的理由）
  * `services/agent/loop.ts` 是纯逻辑（依赖注入），这里做五件它不该知道的事：
@@ -100,7 +100,7 @@ export async function runTianjiAgent(o: TianjiAgentOptions): Promise<AgentRunRes
        *
        * ⚠️ `currentTask` **必须与阶段名不同**：进度行的排版是
        * `阶段名 · currentTask`，两处都写"推演中"就会显示成"推演中 · 推演中"
-       * （Step 4-2 的实际显示效果）。所以这里给的永远是**具体在做什么**。
+       * （这就是「推演中 · 推演中」的实际显示效果）。所以这里给的永远是**具体在做什么**。
        */
       switch (e.type) {
         case 'thinking':

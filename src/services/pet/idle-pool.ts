@@ -1,5 +1,5 @@
 /**
- * 桌宠 · idle 闲暇素材的**会话上限**（Step 5-1 · E1）
+ * 桌宠 · idle 闲暇素材的**会话上限**
  *
  * ## 为什么要有它
  * idle 能抽到的闲暇素材共 82 张 / 约 49MB（小动作 / 玩耍 / 吃什么 / 时节 / 文字 /
@@ -44,7 +44,7 @@ export function canLoadMoreIdle(loaded: IdleLoaded, limit = IDLE_SESSION_LIMIT):
  * · 收敛后为空 → 先用 `fallback`（**已收敛过的别的池**，如 idle）里的已加载名字顶上；
  *   连它也没有 → 退回原池（宁可多下载一次，也不能让池空 —— 空池 = 宠物定帧/消失）。
  *
- * ⚠️ `fallback` 是 Step 5-3E 加的：把 turn / move 这类**小池**（1~3 个名字）
+ * ⚠️ `fallback` 是 加的：把 turn / move 这类**小池**（1~3 个名字）
  * 在到顶后容易整池落空 —— 那时退回原池会引入新下载，与"到顶后不再有新名字"冲突。
  */
 export function idlePoolWithin(

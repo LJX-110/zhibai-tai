@@ -62,7 +62,7 @@ export function HabitTab() {
     void recordActivity({ entityType: 'habit', entityId: h.id, title: `斩三尸 +1：${h.name}` })
 
     /**
-     * **只有"跨过今日目标"的那一刻才算一次完成**（Step 5-2C D 批）。
+     * **只有"跨过今日目标"的那一刻才算一次完成**。
      *
      * `bump` 的语义是"再来一次"—— 每敲一下都发事件就等于"敲一下庆祝一次"。
      * 所以判据是 `nextCount === target`（**等于**而不是 `>=`：再次点击不该重复庆祝）。

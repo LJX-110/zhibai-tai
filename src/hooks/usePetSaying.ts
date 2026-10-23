@@ -68,7 +68,7 @@ function awayDays(now: Date): number {
 }
 
 /**
- * 「AI 台词」的**场景提示**（Step 5-3E）：把当前上下文压成一句话喂给模型 ——
+ * 「AI 台词」的**场景提示**：把当前上下文压成一句话喂给模型 ——
  * 它是"该说什么"的依据，比扔一堆结构化数据更省 token、也更像人话。
  */
 function sceneOf(ctx: SayingContext): string {
@@ -108,7 +108,7 @@ export function usePetSaying(): UsePetSaying {
   const reschedules = useCourseRescheduleStore((s) => s.items)
   const termStartDate = useSettingsStore((s) => s.termStartDate)
   const petEnabled = useSettingsStore((s) => s.petEnabled)
-  /** 「AI 台词」开关（Step 5-3E）：开且远程已配 → 优先用 AI 生成的那句 */
+  /** 「AI 台词」开关：开且远程已配 → 优先用 AI 生成的那句 */
   const aiSpeech = useSettingsStore((s) => s.petAiSpeech)
   /** 语气参数来自当前人设（自称 / 称呼 / 主食）—— 人格决定"怎么说"，见 voice.ts */
   const voice = usePetVoice()
@@ -179,7 +179,7 @@ export function usePetSaying(): UsePetSaying {
     if (!canSay(saying.key, now)) return
     markSaid(saying.key, now)
     /**
-     * AI 台词（Step 5-3E）：**取"上一轮预取好的"那句**，没有就用本地台词 ——
+     * AI 台词：**取"上一轮预取好的"那句**，没有就用本地台词 ——
      * 气泡不能为一个网络请求干等（8 秒后才冒泡是坏体验）。
      * 取走后立刻在后台备下一条（页面可见 + 远程已配时才发请求）。
      */

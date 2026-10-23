@@ -73,7 +73,7 @@ export function HomeworkTab() {
     // 只在「未交 → 已交」这一瞬间落印；取消勾选不落印
     if (!willDone) return
     // 本地那套 720ms 落印动画保留（它是这一行自己的表现），
-    // 但"发不发声"改由完成策略统一决定（Step 5-2C · D 批）。
+    // 但"发不发声"改由完成策略统一决定。
     setStampId(h.id)
     emitCompletion({
       source: 'homework',

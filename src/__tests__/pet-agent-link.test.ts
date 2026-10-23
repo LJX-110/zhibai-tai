@@ -1,5 +1,5 @@
 /**
- * 天机 × 桌宠 联动（Step 4-2 · D1/D2/D3）—— **单向数据流的端到端断言**
+ * 天机 × 桌宠 联动 —— **单向数据流的端到端断言**
  *
  * ```
  * AgentStatus ──► PetContext ──► resolvePetState ──► decide ──► 动画 + 台词
@@ -140,7 +140,7 @@ describe('人格只决定"怎么说"，不决定"发生了什么"（D3）', () =
   })
 })
 
-describe('台词不写成话痨（Step 4-3 · 八）', () => {
+describe('台词不写成话痨', () => {
   const voice = voiceFromPersona(defaultWhaleGirlPersona('2026-09-28T10:00:00.000Z'))
   const lines = (['thinking', 'working', 'waiting', 'success', 'error'] as const).map((p) => ({
     phase: p,

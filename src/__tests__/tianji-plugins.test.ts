@@ -83,7 +83,7 @@ describe('动作归属', () => {
     expect(actionDefFor('create_finance')).toBeTruthy()
   })
 
-  it('**建任务 / 建笔记不再是动作** —— 它们已改为可直接执行的工具（Step 4-3 · 二）', () => {
+  it('**建任务 / 建笔记不再是动作** —— 它们已改为可直接执行的工具', () => {
     // 上一版两条路并存，模型经常选到"请主人自己确认"那条；现在只保留工具这条路
     expect(actionDefFor('create_task')).toBeUndefined()
     expect(actionDefFor('create_note')).toBeUndefined()
@@ -94,7 +94,7 @@ describe('动作归属', () => {
   })
 })
 
-describe('工具注册表（Step 4-3 · 一）', () => {
+describe('工具注册表', () => {
   it('每个工具都声明齐八项，且 mode 与 requiresConfirmation 不矛盾', () => {
     const tools = agentTools()
     expect(tools.length).toBeGreaterThan(5)

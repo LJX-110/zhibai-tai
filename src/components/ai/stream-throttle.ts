@@ -1,5 +1,5 @@
 /**
- * 天机 · 流式增量的节流装配（Step 5-1 · E5 从 `use-tianji-chat.ts` 拆出）
+ * 天机 · 流式增量的节流装配（从 `use-tianji-chat.ts` 拆出）
  *
  * ## 它解决什么
  * 模型是按 token 吐的，一段长回答会有几百次 `onToken`。每次都 `setState` 会让面板

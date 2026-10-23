@@ -51,7 +51,7 @@ const PAGE_MAP: Record<SectionId, React.LazyExoticComponent<() => React.ReactNod
   system: SettingsPage,
 }
 
-/** 页面加载占位 —— 走全站统一的 `Loading`（Step 5-3 §十五：页面级加载只有一种形态） */
+/** 页面加载占位 —— 走全站统一的 `Loading`（规范 §十五：页面级加载只有一种形态） */
 function PageFallback() {
   return <Loading variant="page" />
 }
