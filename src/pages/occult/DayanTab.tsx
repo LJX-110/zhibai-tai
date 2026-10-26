@@ -185,7 +185,6 @@ export function DayanTab() {
                   icon={Wand2}
                   title="尚未建局"
                   desc="大衍之数五十，其用四十九"
-                  step="点击「建局」开始十八变"
                 />
               )
             }

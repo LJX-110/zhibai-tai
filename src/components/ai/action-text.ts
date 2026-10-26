@@ -1,36 +1,16 @@
 /**
- * 天机 · 动作**文本层**工具 —— 围绕模型回答里那段动作 JSON 的两件事
+ * 天机 · 气泡正文的呈现逻辑（纯函数，无 React）
  *
- * 为什么单独成文件（2026-09-23）：这两个函数此前和预览卡片同住 `action-cards.tsx`，
- * 于是那个文件既导出组件又导出普通函数 —— Fast Refresh 因此失去完整性
- * （改一次卡片布局，整个对话面板的状态被重置）。分成两个文件后各司其职：
- *  · 本文件：**纯文本层面**的处理（剥围栏、生成摘要），不渲染任何东西；
- *  · `action-cards.tsx`：只导出组件。
- *
- * ⚠️ 与 `action-protocol.ts` 的边界：那边是**不认识具体动作**的通用解析引擎，
- * 而 `actionTitle` 要问"这件事叫什么"，必须查插件注册表 —— 所以它属于这一侧，
- * **不要**为了"看起来更内聚"把它塞回协议文件（那会让协议依赖插件注册表）。
+ * 动作块与工具块的剥离统一收在 `services/agent/protocol-text.ts`：
+ * 气泡、复制、落库前的历史三处共用同一份清洗结果，避免"预览干净、历史脏"。
  */
+import { stripProtocolBlocks } from '../../services/agent/protocol-text'
 import type { TianjiActionPayload } from './action-protocol'
 import { actionDefFor } from './plugins'
 
-/** 把气泡里「动作块」剥掉：动作已由下方预览卡片呈现，气泡里不该再露原始 JSON。 */
+/** 把气泡里「协议块」剥掉：动作交给下方预览卡片，工具交给 Agent Loop，气泡只留自然语言。 */
 export function stripActionFences(text: string): string {
-  return text
-    .replace(/```(?:[a-zA-Z0-9_-]*)?\s*\n?([\s\S]*?)```/gi, (whole, body: string) => {
-      const t = body.trim()
-      try {
-        const v = JSON.parse(t)
-        const arr = Array.isArray(v) ? v : [v]
-        if (arr.some((x) => x && typeof x === 'object' && typeof (x as Record<string, unknown>).action === 'string')) {
-          return '' // 是动作块 → 交给预览卡片，气泡里不显示
-        }
-      } catch {
-        /* 非动作块（如代码样例）原样保留 */
-      }
-      return whole
-    })
-    .trim()
+  return stripProtocolBlocks(text)
 }
 
 /**

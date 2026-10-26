@@ -256,7 +256,7 @@ export function BuyTab() {
           <EmptyState
             icon={ShoppingCart}
             title={status === 'all' ? '还没有购买记录' : '该状态暂无记录'}
-            desc="记录想买的东西，下单后标记待取，到了不会忘"
+            desc="下单后标记待取，到了不会忘"
             action={<Button variant="primary" onClick={openNew}><Plus size={13} /> 添加</Button>}
           />
         )}

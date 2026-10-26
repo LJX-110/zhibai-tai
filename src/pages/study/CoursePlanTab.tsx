@@ -245,7 +245,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
         {items.length === 0 ? (
           <EmptyState
             title="还没有课程"
-            desc="记下想选的课，标成「已选」后计入学分进度"
+            desc="标成「已选」后计入学分进度"
             action={
               <Button variant="primary" onClick={() => openNew('limited')}>
                 <Plus size={14} /> 加一门
@@ -313,7 +313,7 @@ export function CoursePlanTab({ onBack }: { onBack: () => void }) {
       </Section>
 
       {/* ③ 选课事项 —— 低频，折叠；内容不减（自由文本，不做规则引擎） */}
-      <Collapse title="选课事项" hint={notes.length > 0 ? `${notes.length} 条` : '随时记'}>
+      <Collapse title="选课事项" hint={notes.length > 0 ? `${notes.length} 条` : undefined}>
         <div className="space-y-2">
           {notes.map((n, i) => (
             <div key={`${n}-${i}`} className="row group">

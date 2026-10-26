@@ -14,7 +14,8 @@ import { useSettingsStore } from '../../stores/useSettingsStore'
 import { encryptor } from '../../sync/encryption/encryption'
 import type { IntelligenceItem } from '../../types/entities'
 import { aiService } from './capabilities'
-import { markAiRemoteReady, markAiUnconfigured } from './health'
+import { markAiRemoteDegraded, markAiRemoteReady, markAiUnconfigured } from './health'
+import { describeAiFailure, recordAiFailure } from './errors'
 import { localProvider, openAICompatibleProvider } from './provider'
 import type { AIProvider } from './provider'
 
@@ -41,8 +42,12 @@ export async function resolveAIProvider(): Promise<AIProvider> {
         markAiRemoteReady()
         return p
       }
-    } catch {
-      /* 解密失败 → 回退本地（此时确实等于没配好，按未配置处理） */
+    } catch (e) {
+      // 解密失败 ≠ 没配：静默按「未配置」处理会让用户以为自己白配了
+      aiService.use(localProvider)
+      markAiRemoteDegraded('API Key 解密失败 —— 请重新填写并加密保存')
+      recordAiFailure('ai:resolve-provider', e)
+      return localProvider
     }
   }
   aiService.use(localProvider)
@@ -68,7 +73,7 @@ export async function testAIProvider(): Promise<{ ok: boolean; message: string }
     else await p.complete('用一句话确认连接成功。')
     return { ok: true, message: `连接成功：${hostOf(s.aiBaseUrl)} · ${s.aiModel}` }
   } catch (e) {
-    return { ok: false, message: explainConnectFailure(e) }
+    return { ok: false, message: describeAiFailure(e) }
   }
 }
 
@@ -99,7 +104,7 @@ export async function listAIModels(): Promise<{
     }
     return { ok: true, models, baseUrl, fatal: false, message: `拉到 ${models.length} 个模型` }
   } catch (e) {
-    return { ok: false, models: [], baseUrl, fatal: true, message: explainConnectFailure(e) }
+    return { ok: false, models: [], baseUrl, fatal: true, message: describeAiFailure(e) }
   }
 }
 
@@ -110,28 +115,6 @@ function hostOf(baseUrl: string): string {
   } catch {
     return baseUrl
   }
-}
-
-/**
- * 连接失败 → 人话。分两类：
- *  · 能拿到 HTTP 状态码的（provider 里包成 "AI 请求失败 HTTP 401：…"）→ 按状态码给动作；
- *  · 拿不到的（fetch 直接抛）→ 看 error.name 判断是超时还是跨域/网络。
- *    ⚠️ 浏览器无法区分「跨域被拦」与「断网」（都表现为 TypeError: Failed to fetch），
- *    所以文案把两种可能都写出来，不假装知道是哪一种。
- */
-function explainConnectFailure(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e)
-  const status = Number(raw.match(/HTTP (\d{3})/)?.[1])
-
-  if (status === 401 || status === 403) return `Key 无效或无权限（HTTP ${status}）—— 检查 Key 是否填错、是否已过期`
-  if (status === 402) return '账户额度不足（HTTP 402）—— 去服务商控制台充值或换免费端点'
-  if (status === 404) return '接口地址或模型名不存在（HTTP 404）—— 检查 Base URL 是否以 /v1 结尾、模型名是否正确'
-  if (status === 429) return '触发限流（HTTP 429）—— 稍后重试，或换用免费端点的其他模型'
-  if (status && status >= 500) return `服务端异常（HTTP ${status}）—— 多为服务商临时故障，稍后重试`
-
-  if (e instanceof Error && e.name === 'AbortError') return '请求超时（30 秒无响应）—— 检查网络，或换一个允许浏览器直连的服务'
-
-  return `连不上：${raw}。大概率是跨域被拦 —— 当前浏览器无法直接连接此服务（服务端未开放跨域），或只是网络不通；浏览器区分不了这两种，请先确认网络，再改用 DeepSeek / Kimi 这类支持浏览器直连的服务`
 }
 
 /** 兼容早期导出格式（原 localAIService） */

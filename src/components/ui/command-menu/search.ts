@@ -12,6 +12,7 @@ import { useIntelligenceStore } from '../../../stores/useIntelligenceStore'
 import { useCourseStore } from '../../../stores/useStudyStore'
 import { useFinanceStore } from '../../../stores/useFinanceStore'
 import { effectiveDone, liveFixedTasks } from '../../../utils/id'
+import { noteTitle } from '../../../utils/note'
 
 export interface SearchResult {
   id: string
@@ -43,7 +44,10 @@ export function searchAll(query: string): SearchResult[] {
 
   // 副标与列表口径一致：先取在世记录（隐藏的旧副本不该出现在搜索里），再按「本期」判完成
   push('任务', 'action', liveFixedTasks(useTaskStore.getState().items).map((t) => ({ id: t.id, title: t.title, sub: effectiveDone(t) ? '已完成' : '未完成', inspector: 'task' as const })))
-  push('笔记', 'action', useNoteStore.getState().items.map((n) => ({ id: n.id, title: n.title || '（无题）', sub: n.kind === 'inspiration' ? '灵感' : '笔记' })))
+  // 速记与记事本共用一张表，搜索里**分组**呈现：守墨回首页，其余回「行」
+  const noteItems = useNoteStore.getState().items
+  push('守墨', 'overview', noteItems.filter((n) => n.kind === 'memo').map((n) => ({ id: n.id, title: noteTitle(n), sub: '速记' })))
+  push('笔记', 'action', noteItems.filter((n) => n.kind !== 'memo').map((n) => ({ id: n.id, title: noteTitle(n), sub: n.kind === 'inspiration' ? '灵感' : '笔记' })))
   push('收藏', 'collection', useCollectionStore.getState().items.map((c) => ({ id: c.id, title: c.title, sub: c.category, inspector: 'collection' as const })))
   push('项目', 'collection', useProjectStore.getState().items.map((p) => ({ id: p.id, title: p.name, sub: p.status, inspector: 'project' as const })))
   push('情报', 'intelligence', useIntelligenceStore.getState().items.map((i) => ({ id: i.id, title: i.title, sub: i.source, inspector: 'intelligence' as const })))

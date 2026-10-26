@@ -13,6 +13,7 @@
  * 聊天会话是本地设备数据，长期记忆才是可同步的 `memories` 表（规格 §C9）。
  */
 import { createId } from '../../utils/id'
+import { stripProtocolBlocks } from '../../services/agent/protocol-text'
 
 /** 一轮里真实发生过的一次工具调用（摘要已截断，不是开发者格式） */
 export interface ChatTrace {
@@ -34,16 +35,66 @@ export interface ChatMessage {
 
 const HISTORY_KEY = 'zbt:ai-chat:v1'
 const HISTORY_MAX = 60
+/**
+ * 存档字符预算。长会话 + 旧版存下来的原始动作 JSON 会把上下文顶爆，
+ * 表现是模型侧 400 / 超时（用户只看到"偶发报错"）。截到末尾这段够维持指代。
+ */
+const HISTORY_CHARS_MAX = 24_000
+
+function normalizeTrace(raw: unknown): ChatTrace[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: ChatTrace[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const t = item as Partial<ChatTrace>
+    if (typeof t.toolId !== 'string' || typeof t.toolName !== 'string') continue
+    if (typeof t.summary !== 'string') continue
+    out.push({ toolId: t.toolId, toolName: t.toolName, ok: t.ok === true, summary: t.summary })
+  }
+  return out.length > 0 ? out : undefined
+}
+
+/** 旧存档校验：坏条目丢弃，不让 `undefined.content` 在后面的清洗里炸掉整条链路 */
+function normalizeMessage(raw: unknown): ChatMessage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Partial<ChatMessage>
+  if (m.role !== 'user' && m.role !== 'ai') return null
+  if (typeof m.content !== 'string') return null
+  const trace = normalizeTrace(m.trace)
+  const content = m.role === 'ai' ? stripProtocolBlocks(m.content) : m.content
+  if (!content.trim() && !trace) return null
+  return {
+    id: typeof m.id === 'string' && m.id ? m.id : createId(),
+    role: m.role,
+    content,
+    ...(trace ? { trace } : {}),
+  }
+}
+
+/** 从末尾往前保留，直到超预算（最后一条无论多长都留，否则会话会空掉） */
+function withinBudget(messages: ChatMessage[]): ChatMessage[] {
+  let total = 0
+  const out: ChatMessage[] = []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]
+    if (out.length > 0 && total + m.content.length > HISTORY_CHARS_MAX) break
+    total += m.content.length
+    out.unshift(m)
+  }
+  return out
+}
 
 export function loadHistory(): ChatMessage[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
     const parsed = raw ? JSON.parse(raw) : null
     if (Array.isArray(parsed)) {
-      // 旧存档的 ChatMessage 没有 id 字段（历史兼容）：补齐稳定 id，保证列表 key 稳定、不重复
-      return (parsed as Array<Partial<ChatMessage>>)
-        .slice(-HISTORY_MAX)
-        .map((m) => ({ ...m, id: m.id ?? createId() }) as ChatMessage)
+      return withinBudget(
+        parsed
+          .slice(-HISTORY_MAX)
+          .map(normalizeMessage)
+          .filter((m): m is ChatMessage => m !== null),
+      )
     }
   } catch {
     /* 存档损坏视为空会话 */
@@ -53,7 +104,13 @@ export function loadHistory(): ChatMessage[] {
 
 export function saveHistory(messages: ChatMessage[]): void {
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-HISTORY_MAX)))
+    const clean = messages
+      .map((m) =>
+        m.role === 'ai' ? { ...m, content: stripProtocolBlocks(m.content) } : m,
+      )
+      .filter((m) => m.content.trim().length > 0 || (m.trace?.length ?? 0) > 0)
+      .slice(-HISTORY_MAX)
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(withinBudget(clean)))
   } catch {
     /* 存储满/隐私模式下写不进去就放弃存档，不影响对话 */
   }
@@ -83,15 +140,21 @@ export function formatHistory(messages: readonly ChatMessage[]): string {
     const head = messages.slice(0, messages.length - MAX_HISTORY_TURNS)
     const tail = messages.slice(-MAX_HISTORY_TURNS)
     const digest = head
-      .map((m) => `${m.role === 'user' ? '问' : '答'}：${m.content.replace(/\s+/g, ' ').slice(0, 40)}`)
+      .map((m) => {
+        const text = m.role === 'ai' ? stripProtocolBlocks(m.content) : m.content
+        return `${m.role === 'user' ? '问' : '答'}：${text.replace(/\s+/g, ' ').slice(0, 40)}`
+      })
       .join('；')
     usable = [{ id: 'digest', role: 'ai', content: `（更早的对话已压缩）${digest}…` }, ...tail]
   }
   return usable
     .map((m) => {
+      // 落库前已清洗过；这里再兜一次，保证旧消息 / 手工构造的消息也不会把 JSON 喂回模型
+      const content = m.role === 'ai' ? stripProtocolBlocks(m.content) : m.content
       const trace = formatTrace(m.trace ?? [])
-      const head = `${m.role === 'user' ? '用户' : '天机'}：${m.content}`
+      const head = `${m.role === 'user' ? '用户' : '天机'}：${content}`
       return trace ? `${head}\n${trace}` : head
     })
+    .filter((line) => line.trim() !== '天机：' && line.trim() !== '用户：')
     .join('\n')
 }

@@ -91,6 +91,9 @@ node ../scripts/proxy-security-test.mjs      # 代理安全回归（ALLOWED_HOST
   关掉行内分隔线（AI / 数据两页与外观 / 桌宠 / 通知统一）——改版式前先读 `settings/SettingsRow.tsx` 文件头。
 - **列表操作按钮用 `.hover-reveal`，其祖先必须带 `group`**（触屏无 hover；禁写 `opacity-0 group-hover:opacity-100`）。
 - **金额唯一实现** `utils/money.ts` 的 `money(n)`；**动画只动 `transform`/`opacity`**（尊重 `prefers-reduced-motion`；禁补间 width/height）。
+- **守墨 = `notes` 表的 `kind: 'memo'`**（首页罗盘下方、今日上方）：不是第 33 张表，也不与「行 · 记事本」同屏 ——
+  两边互相过滤是 `MemoBlock` 与 `NotesTab` 的责任；不转待办、无完成态、不计入今日炁象与今日轨迹。
+  首屏 5 条 / 展开每次 +10 条的口径收在 `components/memo/memo-list.ts`。
 - 筛选药丸只有一种形制（`components/ui/Chip`）；`Section.title` 嵌在折叠层里时**可省略**。
 - **删除能力要留出口**（Inspector 详情面板 / 行内 `.hover-reveal` / 「系统 · 数据」的清理入口）。
 
@@ -110,6 +113,8 @@ node ../scripts/proxy-security-test.mjs      # 代理安全回归（ALLOWED_HOST
 - **人设与记忆是数据不是提示词**（`personas` / `memories` 两张业务表）：人设经 `buildAgentSystemPrompt(persona, memories)` 进**每轮**；**UNKNOWN 字段不得当作事实**；记忆只在用户明确保存时写入；`activePersonaId` 进同步白名单。
 - **AI Key 不进同步**（只 AES-GCM 加密存本地）；聊天记录 / streaming / loading 等 UI 状态一律不同步。
 - **输出已全部流式**：自由问答与能力卡共用 `stream-assembly` + `stream-sink`（预览与落库同源；动作 JSON 收齐后才解析）；⚠️ `withStreamSink` 是模块级状态，**无 busy 守卫不得并发**。
+- **协议文本清洗只有一个入口 `services/agent/protocol-text.ts`**（围栏 / 裸 JSON / 未闭合围栏）：气泡、流式预览、历史、动作解析都读它 —— **别再各写一套正则**（三套容错范围不同，曾出现"气泡露 JSON、解析却没抽到"）。动作解析读**未清洗原文**，正文展示才清洗。
+- **首发与确认续跑共用一套结算**（`tianji-outcome.ts` + `tianji-stream.ts`）：续跑回喂本轮正文；`truncated` 与会话结束原因都要让用户看见；**中止保留已流出文字、不播完成音、不降级出本地回答**（远程模式下别写"已改用本地规则"）。
 - **AI 端点必须能浏览器直连**（纯前端没有转发）：DeepSeek / Kimi / **Agnes**（5-4B 复测 `ACAO: *`）可直连；**NVIDIA 不返回任何 `Access-Control-*`，必失败**（预设置灰并在界面写明原因）；模型列表/连通性走 Provider 可选接口（`listModels`/`testConnection`，`/models` 10s 探测 + 超时/网络失败回退一次极短补全，401/403/429/5xx 原样抛）——**别把 `fetch('/models')` 写回设置页组件**。
 
 ### 桌宠

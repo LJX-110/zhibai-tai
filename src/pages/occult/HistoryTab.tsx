@@ -89,7 +89,6 @@ export function HistoryTab() {
           <EmptyState
             icon={History}
             title="暂无占卜记录"
-            desc="起卦、记签后会自动留档"
             step="先起一卦或记一签"
           />
         )}

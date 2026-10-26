@@ -278,7 +278,7 @@ export function CollectionPage() {
             ) : (
               <EmptyState
                 title="还没有藏品"
-                desc="收藏小说、动漫、游戏、GitHub 项目、UI 参考…"
+                desc="小说、动漫、游戏、项目与 UI 参考"
                 action={
                   <Button variant="primary" onClick={openNew}>
                     <Plus size={14} /> 添加第一件

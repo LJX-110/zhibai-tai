@@ -16,6 +16,7 @@
  * ⚠️ 本文件不认识任何具体动作名。**别把"待办/笔记/收支"这类字样加回来** ——
  * 那正是这次重写要消除的东西。
  */
+import { collectJsonBlocks } from '../../services/agent/protocol-text'
 
 /** 规整后的字段值（已通过校验） */
 export type ActionValue = string | number | string[] | null
@@ -162,7 +163,10 @@ function normalizeAction(
 }
 
 /**
- * 从模型回答抽出动作候选。只认 ``` 围栏里的 JSON（单条或数组皆可）。
+ * 从模型回答抽出动作候选。围栏块（单条或数组皆可）与**末尾裸 JSON**都认。
+ *
+ * 扫描交给 `services/agent/protocol-text.ts` —— 与气泡清洗共用同一套容错，
+ * 不会出现"界面剥掉了、协议没抽到"。
  *
  * @param specs 动作名 → 规格；**只解析已申报的动作**，未申报的静默跳过
  */
@@ -172,18 +176,11 @@ export function parseTianjiActions(
 ): TianjiActionPayload[] {
   if (typeof text !== 'string') return []
   const out: TianjiActionPayload[] = []
-  const fence = /```(?:[a-zA-Z0-9_-]*)?\s*\n?([\s\S]*?)```/gi
-  let m: RegExpExecArray | null
-  while ((m = fence.exec(text)) !== null) {
-    const body = m[1].trim()
-    if (!body) continue
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(body)
-    } catch {
-      continue // 非 JSON 围栏（如代码样例）跳过
-    }
-    const items = Array.isArray(parsed) ? parsed : [parsed]
+  for (const block of collectJsonBlocks(text)) {
+    if (block.value === undefined) continue
+    // 裸 JSON 只认回答末尾那一块：正文里引用的示例不该变成待确认卡片
+    if (!block.fenced && text.slice(block.end).trim().length > 0) continue
+    const items = Array.isArray(block.value) ? block.value : [block.value]
     for (const it of items) {
       if (!isObj(it) || typeof it.action !== 'string') continue
       const spec = specs[it.action]

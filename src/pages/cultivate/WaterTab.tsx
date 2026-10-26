@@ -71,7 +71,7 @@ export function WaterTab() {
             ))}
           </div>
         ) : (
-          <EmptyState title="今日尚未饮水" desc="点上方按钮记录一杯" />
+          <EmptyState title="今日尚未饮水" />
         )}
       </div>
     </Section>

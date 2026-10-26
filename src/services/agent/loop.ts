@@ -105,6 +105,8 @@ export interface AgentRunResult {
   errorMessage?: string
   /** 本轮真实调用过的工具（含失败；**这不等于"回答里提到过"**） */
   trace: AgentTraceStep[]
+  /** 模型输出被 max_tokens 截断（任一轮出现即算；界面必须告诉用户） */
+  truncated?: boolean
   /** `needs-confirmation` 时的提案 */
   proposal?: AgentProposal
   /** `needs-confirmation` 时的续跑凭据 */
@@ -169,11 +171,16 @@ function turnInput(o: {
   toolBlock: string
   extra: string
   feedback: string[]
+  /** 本轮已经说过的话（含确认门之前那段）—— 续跑时必须回喂，否则模型会"忘了自己刚说过什么" */
+  prose: string[]
 }): string {
   const parts = [
     o.personaBlock,
     o.dataContext ? `以下是知白台用户今日的真实数据（可引用，但不要逐条复述）：\n${o.dataContext}` : '',
     o.history ? `对话历史：\n${o.history}` : '（本会话第一条提问）',
+    o.prose.length > 0
+      ? `你刚才已经对主人说过下面这些话（不要重复，直接接着说）：\n${o.prose.join('\n\n')}`
+      : '',
     o.toolBlock,
     o.extra,
     o.feedback.length > 0 ? `工具结果（按时间顺序，最新在最后）：\n${o.feedback.join('\n\n')}` : '',
@@ -217,6 +224,7 @@ export async function runAgent(deps: AgentRunDeps): Promise<AgentRunResult> {
       toolBlock,
       extra: deps.extraInstructions ?? '',
       feedback,
+      prose,
     })
 
     let text: string

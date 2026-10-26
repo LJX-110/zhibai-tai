@@ -208,7 +208,7 @@ export function LedgerTab() {
               ))}
             </div>
           ) : (
-            <EmptyState title="该范围内无流水" desc="记下第一笔收支" action={<Button variant="primary" onClick={openNew}><Plus size={13} /> 记一笔</Button>} />
+            <EmptyState title="该范围内无流水" action={<Button variant="primary" onClick={openNew}><Plus size={13} /> 记一笔</Button>} />
           )}
 
           {listLimit < list.length && (

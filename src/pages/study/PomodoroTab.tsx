@@ -149,7 +149,7 @@ export function PomodoroTab() {
             ))}
           </div>
         ) : (
-          <EmptyState title="今日尚无专注记录" desc="开始一段番茄钟吧" />
+          <EmptyState title="今日尚无专注记录" />
         )}
       </div>
     </Section>

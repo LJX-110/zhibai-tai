@@ -20,6 +20,7 @@
  *  · **本地模式仍然回答**：那是既有能力（把本机数据念给你听），只是标注清楚来源。
  */
 import { aiService } from '../../services/ai/ai-service'
+import { recordAiFailure } from '../../services/ai/errors'
 import { markAiRemoteDegraded, markAiRemoteReady } from '../../services/ai/health'
 import { finishAgentRun, setAgentStatus } from '../../services/agent/status'
 import { runAgent, MAX_ITERATIONS, type AgentResume, type AgentRunResult } from '../../services/agent/loop'
@@ -72,6 +73,8 @@ export async function runTianjiAgent(o: TianjiAgentOptions): Promise<AgentRunRes
 
   const persona = activePersona()
   const memories = selectMemories(useMemoryStore.getState().items, o.question)
+  /** 任一轮被截断都算：后一轮的 'stop' 不能把前一轮的 'length' 盖掉 */
+  let truncated = false
 
   const result = await runAgent({
     question: o.question,
@@ -92,7 +95,10 @@ export async function runTianjiAgent(o: TianjiAgentOptions): Promise<AgentRunRes
      */
     complete: (input, onToken, signal) =>
       provider.completeStream
-        ? provider.completeStream(input, onToken, signal, o.onFinish)
+        ? provider.completeStream(input, onToken, signal, (info) => {
+            if (info.reason === 'length') truncated = true
+            o.onFinish?.(info)
+          })
         : provider.complete(input),
     onEvent: (e) => {
       /**
@@ -129,8 +135,12 @@ export async function runTianjiAgent(o: TianjiAgentOptions): Promise<AgentRunRes
   })
 
   // 远程健康三态（与旧链路同一口径）：成功 → ready；失败 → degraded（面板显示"远程异常"）
-  if (result.reason === 'error') markAiRemoteDegraded(result.errorMessage ?? '模型调用失败')
-  else if (result.reason !== 'aborted') markAiRemoteReady()
+  if (result.reason === 'error') {
+    markAiRemoteDegraded(result.errorMessage ?? '模型调用失败')
+    recordAiFailure('tianji:agent', new Error(result.errorMessage ?? '模型调用失败'))
+  } else if (result.reason !== 'aborted') {
+    markAiRemoteReady()
+  }
 
-  return result
+  return { ...result, truncated }
 }

@@ -191,7 +191,6 @@ export function MeihuaTab() {
                 icon={Wand2}
                 title="尚未起卦"
                 desc="四种起卦方式：年月日时、报两数、默念字占、抽签"
-                step="左侧选择起卦方式后点击「起卦」"
               />
             )}
           </Section>

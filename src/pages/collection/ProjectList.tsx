@@ -296,7 +296,6 @@ export function ProjectList() {
       ) : (
         <EmptyState
           title={projects.length === 0 ? '还没有项目' : '没有该状态的项目'}
-          desc="管理你的作品、开源项目与长期工程"
           action={
             projects.length === 0 ? (
               <Button variant="primary" onClick={openNew}>

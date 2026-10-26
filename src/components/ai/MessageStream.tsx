@@ -12,6 +12,7 @@ import { WelcomeBoard } from './WelcomeBoard'
 import { ActionConfirmCard } from './action-cards'
 import { ToolConfirmCard, type ToolConfirmState } from './tool-confirm'
 import { stripActionFences } from './action-text'
+import { stripProtocolBlocks } from '../../services/agent/protocol-text'
 import type { AiRemoteHealth } from '../../services/ai/health'
 import type { ChatMessage } from './chat-history'
 import type { TianjiActionPayload } from './action-protocol'
@@ -39,6 +40,7 @@ export function MessageStream({
   messages,
   pendingActions,
   resolved,
+  settling,
   streamText,
   busy,
   stats,
@@ -51,22 +53,27 @@ export function MessageStream({
   onCancelProposal,
 }: {
   messages: ChatMessage[]
-  /** 每条 AI 消息提议的动作（按消息下标索引） */
-  pendingActions: Record<number, TianjiActionPayload[]>
+  /** 每条 AI 消息提议的动作（**按消息 id 索引**；下标会在插入/续跑时错位） */
+  pendingActions: Record<string, TianjiActionPayload[]>
   /** 已处理的动作：done=已确认落库，skip=已忽略（隐藏卡片，避免重复写入） */
   resolved: Record<string, 'done' | 'skip'>
+  /** 正在落库的卡片（`messageId-j`）—— 禁用按钮，挡住双击 */
+  settling: Record<string, true>
   streamText: string
   busy: boolean
   stats: ReturnType<typeof useTodayStats>
   remote: AiRemoteHealth
-  onConfirm: (i: number, j: number, a: TianjiActionPayload) => void
-  onSkip: (i: number, j: number) => void
+  onConfirm: (messageId: string, j: number, a: TianjiActionPayload) => void
+  onSkip: (messageId: string, j: number, a: TianjiActionPayload) => void
   onRunCap: (key: TianjiCapabilityKey) => void
   /** 待确认的工具提案（没有则为 null） */
   proposal: PendingToolProposal | null
   onConfirmProposal: () => void
   onCancelProposal: () => void
 }) {
+  // 流式预览也要清洗：模型吐到一半的 `{"action":…}` 绝不能上屏。
+  // 未闭合围栏由清洗器从开围栏处裁到末尾，所以生成期间文字是稳定的，不会闪一下再消失。
+  const streamDisplay = stripProtocolBlocks(streamText)
   return (
     <>
       {/* 系统能力（定位/剪贴板）—— 放在**消息流顶部**而不是欢迎页：
@@ -79,7 +86,7 @@ export function MessageStream({
       {messages.length === 0 ? (
         <WelcomeBoard stats={stats} remote={remote} onRunCap={onRunCap} />
       ) : (
-        messages.map((m, i) => {
+        messages.map((m) => {
           if (m.role === 'user') {
             return (
               <div key={m.id} className="mt-2 flex justify-end first:mt-0">
@@ -89,10 +96,10 @@ export function MessageStream({
               </div>
             )
           }
-          // AI 回答里的动作块剥掉，交给下方预览卡片呈现；纯自然语言才进气泡
+          // AI 回答里的协议块剥掉，交给下方预览卡片 / Agent Loop；纯自然语言才进气泡
           const display = stripActionFences(m.content)
           const showBubble = display.trim().length > 0
-          const acts = pendingActions[i] ?? []
+          const acts = pendingActions[m.id] ?? []
           return (
             <Fragment key={m.id}>
               {showBubble && (
@@ -107,7 +114,7 @@ export function MessageStream({
                 </div>
               )}
               {acts.map((a, j) => {
-                const key = `${i}-${j}`
+                const key = `${m.id}-${j}`
                 const status = resolved[key]
                 if (status === 'skip') return null
                 return (
@@ -117,8 +124,9 @@ export function MessageStream({
                       <ActionConfirmCard
                         a={a}
                         done={status === 'done'}
-                        onConfirm={() => onConfirm(i, j, a)}
-                        onSkip={() => onSkip(i, j)}
+                        busy={Boolean(settling[key])}
+                        onConfirm={() => onConfirm(m.id, j, a)}
+                        onSkip={() => onSkip(m.id, j, a)}
                       />
                     </div>
                   </div>
@@ -146,15 +154,15 @@ export function MessageStream({
       )}
       {/* 流式生成中：已有增量就按**与定稿完全相同的样式**先显示（否则生成完会"跳变"），
           还没收到首字节时才显示等待指示 */}
-      {busy && streamText && (
+      {busy && streamDisplay && (
         <div className="flex justify-start">
           <div className={AI_BUBBLE}>
-            {streamText}
+            {streamDisplay}
             <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 animate-pulse bg-skill-indigo" />
           </div>
         </div>
       )}
-      {busy && !streamText && (
+      {busy && !streamDisplay && (
         <div className="flex items-center gap-1.5 px-1 text-xs text-ink-faint">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-skill-indigo" />
           天机推演中…

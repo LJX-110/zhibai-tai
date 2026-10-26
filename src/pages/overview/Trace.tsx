@@ -30,7 +30,7 @@ export function TodayTraceSection({
       ) : (
         <EmptyState
           title="今日尚无轨迹"
-          desc="完成待办、专注或记录后自动出现在这里"
+          desc="完成待办、专注后自动记录"
         />
       )}
     </Section>
@@ -63,7 +63,7 @@ export function AllTraceSheet({
             ))}
         </div>
       ) : (
-        <EmptyState title="还没有轨迹" desc="使用待办、番茄钟、喝水、收藏等会自动记录" />
+        <EmptyState title="还没有轨迹" />
       )}
     </Sheet>
   )

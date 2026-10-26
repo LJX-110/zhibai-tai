@@ -158,7 +158,7 @@ export function SourceManager() {
     <Section
       // 不写 title：这一块嵌在「抓取与代理」折叠层里，折叠头已说明来意，
       // 内层再写一遍就是同屏两行一样的字（用户截图反馈过）
-      hint={`${sources.length} 个 · 启停/测试/抓取`}
+      hint={`${sources.length} 个`}
       action={
         <Button size="sm" variant="primary" onClick={() => openNew()}>
           <Plus size={13} /> 新增源

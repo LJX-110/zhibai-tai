@@ -15,6 +15,7 @@
  *  ③ **未知工具不执行**：解析出没申报的名字时，把"工具不存在"如实回喂给模型，
  *     而不是猜一个相近的 —— 猜测会让它在幻觉上继续幻觉。
  */
+import { collectJsonBlocks, stripProtocolBlocks } from './protocol-text'
 import type { AgentTool } from './tools'
 
 /** 解析出的工具调用 */
@@ -45,40 +46,40 @@ export const TOOL_PROTOCOL = `【工具协议】
    不要只在回答里说"我可以帮你记"却不调用工具。`
 
 /**
- * 从回答里剥掉工具调用围栏（用于把"给用户看的文字"与"给宿主看的指令"分开）。
- * 与 `action-text.stripActionFences` 同一思路：**渲染层看到的永远是干净的正文**。
+ * 从回答里剥掉协议围栏（工具 / 动作都算）。
+ *
+ * 具体容错在 `protocol-text.ts`：大小写、无语言、裸 JSON、未闭合围栏都在那里收口。
+ * 这里保留旧名字，是因为调用方（Agent Loop）读的是"工具围栏"这个语义。
  */
 export function stripToolFences(text: string): string {
-  return text.replace(/```json\s*\{[\s\S]*?"tool"[\s\S]*?\}\s*```/g, '').trim()
+  return stripProtocolBlocks(text)
 }
 
 /**
  * 解析回答末尾的工具调用。
  *
- * 采取"**最后一个**匹配的围栏块"：模型有时会在解释里举例，最后一个才是它真正要执行的。
+ * 采取"**最后一个**匹配的块"：模型有时会在解释里举例，最后一个才是它真正要执行的。
+ * 围栏块可以在任意位置；裸 JSON 只认**正文之后**（忽略尾部空白）的那一块 ——
+ * 否则正文里引用的示例会被误当成调用。
  * 解析失败 / 没有 `tool` 字段 → 返回 null（此时这段话就是最终回答）。
  */
 export function parseToolCall(text: string, tools: readonly AgentTool[]): ToolCall | null {
-  const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)]
+  const blocks = collectJsonBlocks(text)
   for (let i = blocks.length - 1; i >= 0; i--) {
-    const raw = blocks[i][1]?.trim()
-    if (!raw || !raw.includes('"tool"')) continue
-    try {
-      const parsed = JSON.parse(raw) as { tool?: unknown; args?: unknown }
-      if (typeof parsed.tool !== 'string' || !parsed.tool.trim()) continue
-      const id = parsed.tool.trim()
-      // 未申报的工具**不执行**：回喂"工具不存在"，让模型改用已申报的或如实回答
-      const known = tools.some((t) => t.id === id)
-      if (!known) return { id: `__unknown__:${id}`, args: {} }
-      const args =
-        parsed.args && typeof parsed.args === 'object' && !Array.isArray(parsed.args)
-          ? (parsed.args as Record<string, unknown>)
-          : {}
-      return { id, args }
-    } catch {
-      // 这一个块不是合法 JSON：继续往前找（可能是正文里的示例）
-      continue
-    }
+    const b = blocks[i]
+    if (!b.value || typeof b.value !== 'object' || Array.isArray(b.value)) continue
+    if (!b.fenced && text.slice(b.end).trim().length > 0) continue
+    const parsed = b.value as { tool?: unknown; args?: unknown }
+    if (typeof parsed.tool !== 'string' || !parsed.tool.trim()) continue
+    const id = parsed.tool.trim()
+    // 未申报的工具**不执行**：回喂"工具不存在"，让模型改用已申报的或如实回答
+    const known = tools.some((t) => t.id === id)
+    if (!known) return { id: `__unknown__:${id}`, args: {} }
+    const args =
+      parsed.args && typeof parsed.args === 'object' && !Array.isArray(parsed.args)
+        ? (parsed.args as Record<string, unknown>)
+        : {}
+    return { id, args }
   }
   return null
 }

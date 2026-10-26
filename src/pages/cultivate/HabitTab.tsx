@@ -159,7 +159,6 @@ export function HabitTab() {
       ) : (
         <EmptyState
           title="尚未立誓"
-          desc="把想斩掉的坏习惯列出来，逐日计数，斩断旧习"
           action={
             <Button variant="ritual" onClick={() => setOpen(true)}>
               <Plus size={14} /> 立第一个誓

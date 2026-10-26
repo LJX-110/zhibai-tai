@@ -25,13 +25,16 @@ import { createStreamAssembler } from '../../services/ai/stream-assembly'
 const STREAM_FLUSH_MS = 60
 
 /**
- * 刻意只有两个方法：**接口面越小越不容易腐坏**。
- * 全文由 Agent 的返回值给出（不是从装配器里取），所以"取全文 / 立刻刷新"这两个
- * 曾经设想过的方法在实际链路上没有消费者 —— 不留没人用的接口。
+ * 刻意保持小接口：**接口面越小越不容易腐坏**。
+ * `text()` 是后加的：用户点「停止」时，Agent Loop 拿不到那一轮未完成的增量
+ * （`complete` 会 reject），已流到屏幕上的字只存在于装配器里 ——
+ * 没有这个出口，中止就会把用户已经读到的内容整段抹掉。
  */
 export interface StreamThrottle {
   /** 收到一段增量（高频；内部按间隔合并） */
   push(delta: string): void
+  /** 当前已累计的全文（不触发刷新；中止收尾用） */
+  text(): string
   /** 丢弃挂起的定时器（一次运行结束 / 中止时调；不再刷界面） */
   clear(): void
 }
@@ -61,6 +64,7 @@ export function createStreamThrottle(
         }, ms)
       }
     },
+    text: () => asm.text(),
     clear: cancel,
   }
 }

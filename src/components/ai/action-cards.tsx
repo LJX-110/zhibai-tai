@@ -23,11 +23,14 @@ import { actionDefFor } from './plugins'
 export function ActionConfirmCard({
   a,
   done,
+  busy = false,
   onConfirm,
   onSkip,
 }: {
   a: TianjiActionPayload
   done: boolean
+  /** 执行中：两个按钮都禁用，避免双击写两条 */
+  busy?: boolean
   onConfirm: () => void
   onSkip: () => void
 }) {
@@ -52,13 +55,15 @@ export function ActionConfirmCard({
       <div className="mt-2 flex gap-2">
         <button
           onClick={onConfirm}
-          className="flex-1 rounded-control bg-teal py-1.5 text-sm font-medium text-on-teal transition-opacity active:opacity-80"
+          disabled={busy}
+          className="flex-1 rounded-control bg-teal py-1.5 text-sm font-medium text-on-teal transition-opacity active:opacity-80 disabled:opacity-40"
         >
-          确认添加
+          {busy ? '写入中…' : '确认添加'}
         </button>
         <button
           onClick={onSkip}
-          className="rounded-control border border-line-strong px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
+          disabled={busy}
+          className="rounded-control border border-line-strong px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-40"
         >
           忽略
         </button>

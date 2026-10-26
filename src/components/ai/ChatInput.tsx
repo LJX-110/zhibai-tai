@@ -38,7 +38,9 @@ export function ChatInput({
           value={input}
           onChange={(e) => onInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // 中文输入法选词时按 Enter 是「确认候选」——此时发送会把半截拼音发出去
+            const composing = e.nativeEvent.isComposing || e.keyCode === 229
+            if (e.key === 'Enter' && !e.shiftKey && !composing) {
               e.preventDefault()
               onSend()
             }

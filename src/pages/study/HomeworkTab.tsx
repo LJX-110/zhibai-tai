@@ -126,7 +126,7 @@ export function HomeworkTab() {
   return (
     <Section
       title="作业"
-      hint={homeworks.length > 0 ? `未交 ${undone.length} · 已完成 ${doneList.length}` : '暂无'}
+      hint={homeworks.length > 0 ? `未交 ${undone.length} · 已完成 ${doneList.length}` : undefined}
       action={
         <Button size="sm" variant="tertiary" onClick={() => openEditor(null)}>
           <Plus size={14} /> 作业

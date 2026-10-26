@@ -170,6 +170,27 @@ describe('确认门（requires-confirmation）', () => {
     expect(r.calls[1]).toContain('已记住')
   })
 
+  it('确认后续跑时，把上一段已说过的话一起回喂（模型不会"忘了自己刚说过什么"）', async () => {
+    const executed = { value: false }
+    const t = confirmTool(executed)
+    const r = recorder()
+    const m = {
+      complete: async (input: string) => {
+        r.push(input)
+        if (r.calls.length === 1) {
+          return '我建议记住。\n```json\n{"tool":"memory.save","args":{"text":"不吃香菜"}}\n```'
+        }
+        return '已经记好了。'
+      },
+    }
+    const first = await runAgent(deps({ tools: [t], complete: m.complete }))
+    const seed = resumeWithResult(first.resume!, 'memory.save', { text: '已记住' })
+    await runAgent(deps({ tools: [t], complete: m.complete, seed }))
+
+    expect(r.calls[1]).toContain('你刚才已经对主人说过')
+    expect(r.calls[1]).toContain('我建议记住。')
+  })
+
   it('取消（不续跑）不影响任何状态：proposal 只是被面板丢弃', async () => {
     const executed = { value: false }
     const t = confirmTool(executed)

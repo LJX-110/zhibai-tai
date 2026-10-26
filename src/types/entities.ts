@@ -73,8 +73,14 @@ export interface Task {
   completedAt?: string | null
 }
 
-/** 笔记类型：记录（内省）/ 灵感（创作） */
-export type NoteKind = 'note' | 'inspiration'
+/**
+ * 笔记类型：记录（内省）/ 灵感（创作）/ 速记（首页「守墨」）
+ *
+ * `memo` 与另外两类**共用 notes 表**，但界面互不相见：
+ * 守墨只读 `kind === 'memo'`，记事本只读其余两类。这样速记能直接吃到
+ * 现有的同步 / 导出 / 墓碑，不必再开一张表。
+ */
+export type NoteKind = 'note' | 'inspiration' | 'memo'
 
 /** 笔记 / 灵感（kind 区分） */
 export interface Note {

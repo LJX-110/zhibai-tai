@@ -27,6 +27,7 @@ import { formatHM, toISODate, todayISO } from '../utils/id'
 import { useNow } from '../hooks/useNow'
 import type { Task } from '../types/entities'
 import { FourSymbolsCompass } from './overview/Compass'
+import { MemoBlock } from '../components/memo/MemoBlock'
 import { WeekReview } from './overview/WeekReview'
 import { TodayTraceSection, AllTraceSheet } from './overview/Trace'
 import { TIMELINE_GROUPS, buildTodayTimeline, type QiDim } from './overview/shared'
@@ -217,6 +218,10 @@ export function OverviewPage() {
         <FourSymbolsCompass qiDims={qiDims} gradeTitle={realm.title} />
       </section>
 
+      {/* 守墨：首页速记。固定夹在罗盘与「今日」之间 ——
+          它是"想到什么写什么"，不是今天要做的事，所以不并进下面的今日案台 */}
+      <MemoBlock />
+
       {/* 今日案台 · **一个「今日」**
           「今日任务」与「今日课程」原本是两块（8/4 分栏）：两者回答的是同一个问题
           ——"今天要做什么"，却要用户在两处各看一遍，窄屏还要上下滚两次。
@@ -300,7 +305,6 @@ export function OverviewPage() {
             <EmptyState
               icon={CheckCircle2}
               title="今天没有课，也没有待办"
-              step="去「行」添加今天的重点"
               action={
                 <Button size="sm" variant="secondary" onClick={() => setSection('action')}>
                   前往「行」

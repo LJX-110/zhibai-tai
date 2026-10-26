@@ -23,9 +23,13 @@ export function NotesTab() {
   const [kindFilter, setKindFilter] = useState<'all' | 'note' | 'inspiration'>('all')
   const [query, setQuery] = useState('')
 
+  // 守墨速记共用 notes 表，但属于首页的另一套视图：记事本里必须看不见，
+  // 计数与空态也只能按"真正的笔记"算
+  const entries = notes.filter((n) => n.kind !== 'memo')
+
   // 搜索命中标题（含正文首行推导）/正文/标签
   const q = query.trim().toLowerCase()
-  const list = notes
+  const list = entries
     .filter((n) => kindFilter === 'all' || n.kind === kindFilter)
     .filter(
       (n) =>
@@ -81,7 +85,7 @@ export function NotesTab() {
   return (
     <Section
       title="记事本"
-      hint={`${list.length} / ${notes.length} 条`}
+      hint={`${list.length} / ${entries.length} 条`}
       action={
         <Button size="sm" variant="tertiary" onClick={() => openEditor(null)}>
           <Plus size={14} /> 添加
@@ -130,8 +134,8 @@ export function NotesTab() {
         </div>
       ) : (
         <EmptyState
-          title={notes.length === 0 ? '还没有记录' : '没有匹配的记录'}
-          desc={notes.length === 0 ? '随手记下想法、灵感或待整理内容' : '换个关键词或切回「全部」'}
+          title={entries.length === 0 ? '还没有记录' : '没有匹配的记录'}
+          desc={entries.length === 0 ? undefined : '换个关键词或切回「全部」'}
         />
       )}
 

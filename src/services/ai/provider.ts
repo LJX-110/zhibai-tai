@@ -8,6 +8,8 @@
  * Provider 接口与两套实现（本地规则 / OpenAI 兼容）整体搬到本文件；
  * ai-service.ts 仍从原路径 re-export，外部调用方无需改动。
  */
+import { sanitizeErrorBody } from './errors'
+
 export interface AIProvider {
   id: string
   name: string
@@ -36,7 +38,7 @@ export interface AIProvider {
    * 优先走 `/models`（不计费）；端点不支持该路由、或该路由超时/不可达时，
    * 回退一次极短的补全（对话路由才是应用真正要用的那条）。
    * 失败时抛出的错误与 `complete` 同形（`AI 请求失败 HTTP …`），
-   * 由 `ai-service` 的 `explainConnectFailure` 统一译成人话。
+   * 由 `ai-service` 的 `describeAiFailure` 统一译成人话。
    */
   testConnection?(): Promise<void>
   /** 是否可用 */
@@ -71,6 +73,17 @@ const SYSTEM_PROMPT =
  *  不能让一次探测拖满整个请求超时（30s）才轮到回退。 */
 const PROBE_TIMEOUT_MS = 10_000
 
+/** OpenAI 兼容响应体 → 正文（非流式调用、以及网关忽略 `stream:true` 时的兜底共用） */
+function contentOfJson(raw: string): string | undefined {
+  try {
+    const data = JSON.parse(raw) as { choices?: { message?: { content?: string } }[] }
+    const content = data.choices?.[0]?.message?.content
+    return typeof content === 'string' && content.trim() ? content : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** OpenAI 兼容 Provider 工厂（Agnes / DeepSeek / Kimi / OpenAI 等） */
 export function openAICompatibleProvider(opts: {
   baseUrl: string
@@ -93,7 +106,7 @@ export function openAICompatibleProvider(opts: {
       })
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
+        throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${sanitizeErrorBody(text)}` : ''}`)
       }
       const data = (await res.json()) as { data?: { id?: string }[] }
       return (data.data ?? []).map((m) => m.id).filter((x): x is string => Boolean(x))
@@ -141,7 +154,7 @@ export function openAICompatibleProvider(opts: {
           })
           if (!res.ok) {
             const text = await res.text().catch(() => '')
-            throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
+            throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${sanitizeErrorBody(text)}` : ''}`)
           }
         } finally {
           clearTimeout(timer)
@@ -170,10 +183,9 @@ export function openAICompatibleProvider(opts: {
         })
         if (!res.ok) {
           const text = await res.text().catch(() => '')
-          throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
+          throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${sanitizeErrorBody(text)}` : ''}`)
         }
-        const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-        const content = data.choices?.[0]?.message?.content
+        const content = contentOfJson(await res.text())
         if (!content) throw new Error('AI 响应为空')
         return content
       } finally {
@@ -216,45 +228,84 @@ export function openAICompatibleProvider(opts: {
         })
         if (!res.ok || !res.body) {
           const text = await res.text().catch(() => '')
-          throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${text.slice(0, 120)}` : ''}`)
+          throw new Error(`AI 请求失败 HTTP ${res.status}${text ? `：${sanitizeErrorBody(text)}` : ''}`)
+        }
+
+        const contentType = res.headers.get('content-type') ?? ''
+        // 网关忽略 stream:true 时会直接回一个普通 JSON 体：不能当成「空响应」。
+        if (contentType.includes('application/json')) {
+          const content = contentOfJson(await res.text())
+          if (!content) throw new Error('AI 响应为空')
+          onToken(content)
+          onFinish?.({})
+          return content
         }
 
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
         let acc = ''
+        let all = ''
         let finishReason: string | undefined
         let usage: unknown
+
+        /** 一个 SSE 行 → 增量；心跳与注释直接忽略，解析失败不抛错 */
+        const consume = (rawLine: string) => {
+          const line = rawLine.trim()
+          if (!line.startsWith('data:')) return
+          const payload = line.slice(5).trim()
+          if (!payload || payload === '[DONE]') return
+          try {
+            const chunk = JSON.parse(payload) as {
+              choices?: { delta?: { content?: string }; finish_reason?: string }[]
+              usage?: unknown
+            }
+            const choice = chunk.choices?.[0]
+            // 'length' 之后又来个 'stop' 也不能把截断信息盖掉（否则用户以为答完了）
+            if (
+              choice?.finish_reason &&
+              (finishReason === undefined || choice.finish_reason === 'length')
+            ) {
+              finishReason = choice.finish_reason
+            }
+            if (chunk.usage) usage = chunk.usage
+            const delta = choice?.delta?.content
+            if (delta) {
+              acc += delta
+              onToken(delta)
+            }
+          } catch {
+            /* 心跳/注释等非 JSON 行，忽略 */
+          }
+        }
+
         for (;;) {
           const { done, value } = await reader.read()
           if (done) break
           clearTimeout(firstByteTimer)
           armIdle()
-          buffer += decoder.decode(value, { stream: true })
+          const text = decoder.decode(value, { stream: true })
+          all += text
+          buffer += text
           // SSE 以空行分隔事件；按行扫描即可，残缺的最后一行留到下一轮
           const lines = buffer.split('\n')
           buffer = lines.pop() ?? ''
-          for (const raw of lines) {
-            const line = raw.trim()
-            if (!line.startsWith('data:')) continue
-            const payload = line.slice(5).trim()
-            if (!payload || payload === '[DONE]') continue
-            try {
-              const chunk = JSON.parse(payload) as {
-                choices?: { delta?: { content?: string }; finish_reason?: string }[]
-                usage?: unknown
-              }
-              const choice = chunk.choices?.[0]
-              if (choice?.finish_reason) finishReason = choice.finish_reason
-              if (chunk.usage) usage = chunk.usage
-              const delta = choice?.delta?.content
-              if (delta) {
-                acc += delta
-                onToken(delta)
-              }
-            } catch {
-              /* 心跳/注释等非 JSON 行，忽略 */
-            }
+          for (const raw of lines) consume(raw)
+        }
+        // 最后一行可能没有换行：EOF 前必须补处理，否则整段回答会被悄悄吞掉
+        const tail = decoder.decode()
+        if (tail) {
+          all += tail
+          buffer += tail
+        }
+        if (buffer) consume(buffer)
+
+        // 万一网关没标 content-type、又把整个 JSON 回了过来：兜最后一次
+        if (!acc) {
+          const content = contentOfJson(all)
+          if (content) {
+            acc = content
+            onToken(content)
           }
         }
         // 结束信息先于「空响应」校验：即使没吐一个字，调用方也该知道为什么结束

@@ -8,6 +8,7 @@
  */
 import { Bot, RotateCcw, X } from 'lucide-react'
 import { Badge } from '../ui'
+import { describeAiFailure } from '../../services/ai/errors'
 import type { AiRemoteHealth } from '../../services/ai/health'
 
 /** 三态 → 徽标外观与说法。reason 只进 title，不占标题行的宽度 */
@@ -45,10 +46,11 @@ export function ChatHeader({
   onClose: () => void
 }) {
   const p = PRESENTATION[remote.state]
-  // 降级时把具体原因摊开说：用户据此才知道该改 Key、查额度还是查网络
+  // 降级时把具体原因摊开说：用户据此才知道该改 Key、查额度还是查网络。
+  // ⚠️ 自由对话走 Agent Loop，**没有**本地规则兜底 —— 不能声称「已退回本地结果」。
   const title =
     remote.state === 'degraded'
-      ? `远程 AI 调用失败，已退回本地规则结果${remote.reason ? `：${remote.reason}` : ''}\n再问一次可重试；持续失败请检查「系统 · AI · 模型与连接」的 Key、额度与 Base URL`
+      ? `远程 AI 调用失败${remote.reason ? `：${describeAiFailure(remote.reason)}` : ''}\n自由对话不会退回本地规则；可再问一次重试，持续失败请检查「系统 · AI · 模型与连接」的 Key、额度与 Base URL`
       : p.title
 
   return (

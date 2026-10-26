@@ -144,6 +144,55 @@ describe('流式与非流式一致性（SSE 回放）', () => {
     await p.completeStream!('q', () => {}, undefined, (info) => infos.push(info))
     expect(infos[0].reason).toBe('stop')
   })
+
+  it('最后一帧没有换行也能读到（EOF 前的残行必须补处理）', async () => {
+    // 真实故障：网关最后一帧不带 \n，旧实现按行切分后把它留在 buffer 里丢掉了
+    const frame = `data: ${JSON.stringify({ choices: [{ delta: { content: '结尾' } }] })}`
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse([frame])))
+    const p = openAICompatibleProvider({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' })
+    await expect(p.completeStream!('q', () => {})).resolves.toBe('结尾')
+  })
+
+  it('网关忽略 stream:true、直接回 JSON 时照样出正文', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ choices: [{ message: { content: '非流式' } }] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+    const p = openAICompatibleProvider({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' })
+    const seen: string[] = []
+    await expect(p.completeStream!('q', (d) => seen.push(d))).resolves.toBe('非流式')
+    expect(seen.join('')).toBe('非流式')
+  })
+
+  it('length 之后又来个 stop：截断信息不能被盖掉', async () => {
+    const frames = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '半句' } }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+      'data: [DONE]\n\n',
+    ]
+    vi.stubGlobal('fetch', vi.fn(async () => sseResponse(frames)))
+    const p = openAICompatibleProvider({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' })
+    const infos: StreamFinishInfo[] = []
+    await p.completeStream!('q', () => {}, undefined, (info) => infos.push(info))
+    expect(infos[0].reason).toBe('length')
+  })
+
+  it('错误体只带可读说明出来（HTML 错误页不整段糊进回答）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html><body><h1>502 Bad Gateway</h1></body></html>', { status: 502 })),
+    )
+    const p = openAICompatibleProvider({ baseUrl: 'https://x/v1', apiKey: 'k', model: 'm' })
+    await expect(p.completeStream!('q', () => {})).rejects.toThrow(/502 Bad Gateway/)
+    await expect(p.completeStream!('q', () => {})).rejects.not.toThrow(/<html>/)
+  })
 })
 
 describe('withStreamSink —— 高层能力的流式通路', () => {

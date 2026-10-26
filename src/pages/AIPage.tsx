@@ -211,7 +211,6 @@ export function AIPage() {
           <EmptyState
             icon={Box}
             title="工具箱还是空的"
-            desc="模型、工具、提示词，登记后按类型归档。"
             action={
               <Button variant="primary" onClick={() => openNew()}>
                 <Plus size={13} /> 记一个
@@ -241,7 +240,6 @@ export function AIPage() {
             <EmptyState
               icon={Search}
               title="没有符合搜索的能力"
-              desc="换个关键词，或清空搜索"
               action={
                 <Button size="sm" variant="secondary" onClick={() => setQuery('')}>
                   清空搜索

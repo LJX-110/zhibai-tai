@@ -116,6 +116,7 @@ export function AiChatPanel() {
             messages={chat.messages}
             pendingActions={chat.pendingActions}
             resolved={chat.resolved}
+            settling={chat.settling}
             streamText={chat.streamText}
             busy={chat.busy}
             stats={chat.stats}
